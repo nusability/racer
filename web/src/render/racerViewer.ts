@@ -1,6 +1,6 @@
 // Dev-only page (racer-viewer.html) for judging the racers and effects in a browser. Not linked
 // from the game. URL parameters:
-//   mode=lineup|chase|showroom|stats   state=idle|race|boost|overheat|damaged
+//   mode=lineup|chase|showroom|stats   state=idle|race|boost|damaged
 //   view=rear|three|side|front|top     racer=0..5   detail=high|low   ui=0 hides the buttons
 import * as THREE from 'three';
 import { RACERS } from '../data/racers.ts';
@@ -10,7 +10,7 @@ import { SpeedLines } from './speedLines.ts';
 import { Showroom } from './showroom.ts';
 
 type Mode = 'lineup' | 'chase' | 'showroom' | 'stats';
-type State = 'idle' | 'race' | 'boost' | 'overheat' | 'damaged';
+type State = 'idle' | 'race' | 'boost' | 'damaged';
 type View = 'rear' | 'three' | 'side' | 'front' | 'top';
 
 const params = new URLSearchParams(location.search);
@@ -45,8 +45,7 @@ function viewState(top: number, time: number): RacerViewState {
     speed: state === 'idle' ? 0 : top * (boosting ? 1.3 : 1),
     topSpeed: top,
     boosting,
-    heat: state === 'overheat' ? 1 : boosting ? 0.6 : 0.2,
-    overheated: state === 'overheat',
+    heat: boosting ? 0.6 : 0.15,
     damage: state === 'damaged' ? 0.85 : 0,
     steer: Math.sin(time * 0.9) * 0.6,
     airborne: false,
@@ -69,7 +68,7 @@ function buildBar(): void {
     bar.appendChild(b);
   };
   for (const m of ['lineup', 'chase', 'showroom'] as const) link(m, 'mode', m, m === mode);
-  for (const s of ['idle', 'race', 'boost', 'overheat', 'damaged'] as const) link(s, 'state', s, s === state);
+  for (const s of ['idle', 'race', 'boost', 'damaged'] as const) link(s, 'state', s, s === state);
   if (mode === 'lineup') for (const v of ['three', 'rear', 'side', 'front', 'top'] as const) link(v, 'view', v, v === view);
   if (mode !== 'lineup') RACERS.forEach((r, i) => link(r.name, 'racer', String(i), i === racerIndex));
 }
@@ -195,7 +194,7 @@ function chase(): (dt: number, t: number) => void {
     model.root.position.copy(pos);
     model.root.rotation.set(0, -Math.atan2(dx, speed), -steer * 0.35, 'YXZ');
     model.update(dt, t, {
-      ...viewState(racer.base.topSpeed, t), speed, boosting, steer, heat: boosting ? 0.7 : state === 'overheat' ? 1 : 0.25,
+      ...viewState(racer.base.topSpeed, t), speed, boosting, steer, heat: boosting ? 0.6 : 0.15,
     });
     fwd.set(0, 0, -1).applyQuaternion(model.root.quaternion);
 
@@ -254,9 +253,9 @@ function stats(): (dt: number, t: number) => void {
       addLights(scene);
       const model = createRacerModel(r.visual, { detail });
       scene.add(model.root);
-      // Heat and damage on so the smoke pool is live, as in the worst case.
+      // Damage on so the smoke pool is live, as in the worst case.
       const v = viewState(r.base.topSpeed, 1);
-      for (let i = 0; i < 30; i++) model.update(1 / 60, i / 60, { ...v, overheated: true, damage: 0.9 });
+      for (let i = 0; i < 30; i++) model.update(1 / 60, i / 60, { ...v, damage: 0.9 });
       renderer.info.reset();
       renderer.render(scene, camera);
       rows[`${r.visual.style}/${detail}`] = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };

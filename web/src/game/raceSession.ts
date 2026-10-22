@@ -365,7 +365,6 @@ export class RaceSession {
         topSpeed: stats.topSpeed,
         boosting: r.boosting,
         heat: r.boosting ? SESSION_BOOST_NOZZLE_HEAT : SESSION_IDLE_NOZZLE_HEAT,
-        overheated: false,
         damage: r.damage,
         steer: r.steer,
         airborne: r.airborne,

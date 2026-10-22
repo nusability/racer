@@ -4,7 +4,8 @@
 import type { PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
 import type { Branch, Ribbon, Track } from './track.ts';
 import { AiDriver, driverSeed } from './ai.ts';
-import { Vehicle, jumpAround } from './vehicle.ts';
+import { Vehicle } from './vehicle.ts';
+import { jumpAround } from './jumps.ts';
 import { junctionBounds, type JunctionBounds } from './junction.ts';
 import {
   AUTOPILOT_SKILL,

@@ -1,6 +1,7 @@
 // A synthetic track for the headless sim check: wide open sand run-off, a walled canyon, a
 // tunnel, a jump, a boulder field and a pillar to choose a side of, boost pads and cells (on
-// and off the line), and one shortcut branch with its own boulders and cells. It exercises every simulation path without waiting for real tracks.
+// and off the line), and one shortcut branch with its own boulders and cells. It exercises
+// every simulation path without waiting for real tracks.
 
 import type { TrackDef } from '../src/core/types.ts';
 

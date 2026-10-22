@@ -138,11 +138,11 @@ export const ARCH_HALF_DEPTH = 3;
 /** Search distance for obstacles around a racer, metres (exceeds any radius sum). */
 export const OBSTACLE_QUERY_RANGE = 30;
 /** A hit closer to dead centre than this fraction of the combined radius can be a crash. */
-export const OBSTACLE_CRASH_OFFSET = 0.2;
+export const OBSTACLE_CRASH_OFFSET = 0.15;
 /** ...but only above this fraction of top speed. */
 export const OBSTACLE_CRASH_SPEED_FRACTION = 0.7;
 /** Forward speed lost by a glancing hit, as a fraction, at its most central. */
-export const OBSTACLE_SPEED_LOSS = 0.15;
+export const OBSTACLE_SPEED_LOSS = 0.1;
 /** Damage of a glancing hit at its most central (before armour). */
 export const OBSTACLE_DAMAGE = 0.12;
 /** Sideways speed a glancing hit throws the racer off with, m/s. */
@@ -196,7 +196,7 @@ export const MAX_LEAN = 0.6;
 
 // AI driver (src/core/ai.ts). Skill 0..1 interpolates the *_LO/_HI pairs.
 /** Skill is raised to this power before interpolating: early cups beatable, 0.9 still sharp. */
-export const AI_SKILL_CURVE = 2.2;
+export const AI_SKILL_CURVE = 2.8;
 /** Spacing of the AI's look-ahead samples, metres. */
 export const AI_SAMPLE_STEP = 10;
 /** Racing-line look-ahead in seconds of travel at current speed. */
@@ -213,6 +213,8 @@ export const AI_OBSTACLE_LOOK_TIME_LO = 0.8;
 export const AI_OBSTACLE_LOOK_TIME_HI = 1.5;
 /** Steps between path replans (40 Hz at SIM_DT): cheap enough for six AIs on a phone. */
 export const AI_PLAN_INTERVAL = 3;
+/** How far a replan's line is pulled toward the previous plan (0..1): commitment to a side. */
+export const AI_PLAN_STICKINESS = 0.6;
 /** Obstacle path planner: longitudinal step, metres. */
 export const AI_PLAN_STEP = 5;
 /** Obstacle path planner: lateral resolution, metres. */

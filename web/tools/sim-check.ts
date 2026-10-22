@@ -10,7 +10,7 @@ import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
 import { AiDriver } from '../src/core/ai.ts';
-import { minJumpSpeed } from '../src/core/vehicle.ts';
+import { minJumpSpeed } from '../src/core/jumps.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
 import { simTestTrack } from './sim-test-track.ts';
@@ -35,6 +35,8 @@ const NOVICE_DELAY = 0.25;
 /** The novice reads the road like a sloppy AI (wandering line; ignores shortcuts). */
 const NOVICE_SKILL = 0.4;
 const IDLE: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
+/** The novice holds boost from the start, so it gets the launch boost at GO. */
+const HOLD_BOOST: PlayerInput = { ...IDLE, boost: true };
 
 const args = process.argv.slice(2);
 const ladder = args.includes('--ladder');
@@ -193,7 +195,7 @@ function noviceVsCup1(track: Track, laps: number) {
         fail(`${track.def.id}: novice race timed out`);
         break;
       }
-      for (const e of race.step(race.phase === 'countdown' ? IDLE : drive(race))) {
+      for (const e of race.step(race.phase === 'countdown' ? HOLD_BOOST : drive(race))) {
         if (e.type === 'pickup') {
           if (e.id === race.player().id) cells++;
           else fieldCells++;

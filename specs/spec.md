@@ -50,8 +50,8 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track.
 2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
-   buttons), air-brakes into hairpins and boosts. Boost heats the engines; overheating locks
-   boost out for a moment. Open terrain is wide, with drivable sand beyond the road that is
+   buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
+   glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
    slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
    choices with a clear way round, and only a dead-centre hit at speed wrecks you. Chasms
    swallow a racer who leaves a jump too slow. Every track has a walled, risky shortcut that
@@ -74,14 +74,15 @@ the third cup, the Mirage Grand Prix, makes you Mirage Champion.
 | Simulation step | 1/120 s | Fixed step for physics and AI, seeded RNG |
 | Starter top speed | 150 m/s (540 km/h) | Dustwing; racers range 150–198 m/s, up to ~240 m/s upgraded |
 | Boost | ×(1 + 0.22–0.32) top speed | Racer's boostPower; thrusters add 0.03 per level |
-| Boost heat | 0.32 heat/s | About 3 s of boost from cold; cooling 0.2–0.3 heat/s |
-| Overheat | 2.5 s at 95% top speed | Boost locked out |
+| Boost tank | 4.5–6.5 s full (+12% per Boost tank upgrade) | Holding boost drains it; no heat, no penalty |
+| Tank fill | Start 40%; +2.5%/s passive; +22% per boost cell | Dry tank resumes at 10%; cells once per racer per lap |
+| Boost cells | 40–48 per track in lines of 3–8 | Easy lines before straights, most on risky lines and shortcuts |
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 80% top speed, no damage |
-| Obstacle wreck | Hit within 20% of dead centre above 70% top speed | Anything else deflects (≤ 15% speed) |
+| Obstacle wreck | Hit within 15% of dead centre above 70% top speed | Anything else deflects (≤ 10% speed) |
 | Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1.5–3 s when driven well |
-| Boost pad / launch boost | 1.2 s / 0.9 s free boost | No heat |
+| Boost pad / launch boost | 1.8 s / 0.9 s free boost | 7–10 pads per track, often in pairs |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |

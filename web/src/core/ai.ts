@@ -6,7 +6,8 @@ import type { Ribbon, Track } from './track.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { PathPlanner, type Blocker } from './aiPlanner.ts';
 import { junctionBounds } from './junction.ts';
-import { cornerPull, currentTopSpeed, minJumpSpeed, steerRate, type Vehicle } from './vehicle.ts';
+import { cornerPull, currentTopSpeed, steerRate, type Vehicle } from './vehicle.ts';
+import { minJumpSpeed } from './jumps.ts';
 import {
   AI_BOOST_CAUTION_HI,
   AI_BOOST_CAUTION_LO,
@@ -33,6 +34,7 @@ import {
   AI_PAD_DETOUR,
   AI_PATH_LAG,
   AI_PLAN_INTERVAL,
+  AI_PLAN_STICKINESS,
   AI_RACER_LOOK_TIME,
   AI_SAMPLE_STEP,
   AI_SHORTCUT_HI,
@@ -164,7 +166,8 @@ export class AiDriver {
             x: st.x,
             slope0: st.vx / v,
             lagDist: v * AI_PATH_LAG,
-            line: target,
+            // Lean toward the last plan, so a near tie doesn't flip sides every replan.
+            line: this.planAge === Infinity ? target : target + (this.planTarget - target) * AI_PLAN_STICKINESS,
             look: obsLook,
             clearance,
             blockers,

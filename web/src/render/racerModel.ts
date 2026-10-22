@@ -14,7 +14,6 @@ export interface RacerViewState {
   topSpeed: number;
   boosting: boolean;
   heat: number;
-  overheated: boolean;
   damage: number;
   steer: number;
   airborne: boolean;
@@ -43,7 +42,6 @@ const FLAME_BOOST_GAIN = 0.25;
 const FLAME_CORE_WHITE = 0.4;
 /** Exhaust/heat colours: hot engines drift toward HEAT_COLOR; boost toward white-hot. */
 const HEAT_COLOR = new THREE.Color(0xff3c12);
-const OVERHEAT_COLOR = new THREE.Color(0xb3200a);
 const HEAT_TINT_MAX = 0.85;
 const BOOST_WHITEN = 0.2;
 /** How quickly smoothed inputs follow the sim (1/s). */
@@ -61,15 +59,16 @@ const POD_BANK = 0.16;
 const HALO_SIZE = 4.2;
 const HALO_BOOST_GROW = 0.8;
 const EMITTER_HALO_SIZE = 0.7;
+const NOZZLE_HALO_ALPHA = 0.85;
+const EMITTER_HALO_ALPHA = 0.9;
 /** The pod's own thruster is a small trim jet: keep it from upstaging the engines. */
 const POD_HALO_SCALE = 0.55;
 /** Damage: hull darkens toward DAMAGE_TINT; smoke starts above DAMAGE_SMOKE_FROM. */
 const DAMAGE_TINT = new THREE.Color(0x2a2522);
 const DAMAGE_TINT_MAX = 0.75;
 const DAMAGE_SMOKE_FROM = 0.3;
-/** Smoke puffs per second at full damage / while overheated / while crashed. */
+/** Smoke puffs per second at full damage / while crashed. */
 const SMOKE_RATE_DAMAGE = 26;
-const SMOKE_RATE_OVERHEAT = 22;
 const SMOKE_RATE_CRASHED = 40;
 const SMOKE_LIFE = 0.9;
 const SMOKE_SIZE_START = 0.5;
@@ -77,6 +76,7 @@ const SMOKE_SIZE_END = 3.2;
 const SMOKE_POOL = { high: 40, low: 16 } as const;
 const SMOKE_DARK = new THREE.Color(0x1c1a19);
 const SMOKE_LIGHT = new THREE.Color(0x9a958e);
+const SMOKE_SHADE_VARIATION = 0.25;
 /** Share of forward speed a puff loses in craft space: 1 = left standing in the world, lower
  * keeps it entrained in the wake so the chase camera sees the trail. */
 const SMOKE_DRAG_BEHIND = 0.55;
@@ -209,7 +209,7 @@ class RacerModelImpl implements RacerModel {
     this.binder.mesh.visible = !v.crashed;
     if (!v.crashed) this.binder.update(dt, time, clamp01(0.3 + this.boost * 0.7 + speedFrac * 0.2));
     this.binderMat.color.copy(this.glowColor).multiplyScalar(0.85 + Math.sin(time * 37) * 0.15 + this.boost * 0.4);
-    this.updateHalos(thrust, v);
+    this.updateHalos(thrust, v.crashed);
     this.updateSmoke(dt, v);
 
     this.hullMat.color.copy(WHITE).lerp(DAMAGE_TINT, clamp01(v.damage) * DAMAGE_TINT_MAX);
@@ -248,10 +248,9 @@ class RacerModelImpl implements RacerModel {
       dst.pos.copy(src.pos).applyMatrix4(this.podGroup.matrix);
       dst.dir.copy(src.dir).transformDirection(this.podGroup.matrix);
     }
-    // Nozzle colour: glow → heat red → overheated dull red; boost pushes it toward white-hot.
+    // Nozzle colour: glow → heat red; boost pushes it toward white-hot.
     const heatTint = Math.pow(clamp01(v.heat), 2) * HEAT_TINT_MAX;
     tmpColor.copy(this.glowColor).lerp(HEAT_COLOR, heatTint);
-    if (v.overheated) tmpColor.copy(OVERHEAT_COLOR);
     tmpColor.lerp(WHITE, this.boost * BOOST_WHITEN);
     this.glowMat.color.copy(tmpColor).multiplyScalar(v.crashed ? 0.15 : 1);
     tmpCore.copy(tmpColor).lerp(WHITE, FLAME_CORE_WHITE).multiplyScalar(FLAME_CORE_GAIN + this.boost * FLAME_BOOST_GAIN);
@@ -264,10 +263,8 @@ class RacerModelImpl implements RacerModel {
       const n = this.allNozzles[i];
       const isPod = i >= engines;
       let gate = thrust;
-      if (v.overheated) {
-        // Sputter: mostly choked with brief coughs of flame.
-        gate *= Math.sin(time * 23 + i * 2.1) + Math.sin(time * 37 + i) > 0.9 ? 0.6 : 0.12;
-      } else if (v.damage > 0.6) {
+      if (v.damage > 0.6) {
+        // A wrecked engine coughs: brief dips in thrust.
         gate *= Math.sin(time * 17 + i * 3.3) + Math.sin(time * 29 + i) > 1.4 ? 0.35 : 1;
       }
       const shimmer = 1 + 0.08 * Math.sin(time * 47 + i * 1.7) + 0.05 * Math.sin(time * 73 + i)
@@ -289,7 +286,7 @@ class RacerModelImpl implements RacerModel {
     return thrust;
   }
 
-  private updateHalos(thrust: number, v: RacerViewState): void {
+  private updateHalos(thrust: number, crashed: boolean): void {
     const h = this.halos;
     const nozzles = this.allNozzles;
     const glow = this.glowMat.color;
@@ -303,14 +300,14 @@ class RacerModelImpl implements RacerModel {
       h.color[i * 3 + 1] = glow.g;
       h.color[i * 3 + 2] = glow.b;
       h.size[i] = n.radius * HALO_SIZE * (1 + this.boost * HALO_BOOST_GROW) * (i >= this.bp.nozzles.length ? POD_HALO_SCALE : 1);
-      h.alpha[i] = thrust * (v.overheated ? 0.45 : 0.85);
+      h.alpha[i] = thrust * NOZZLE_HALO_ALPHA;
     }
     for (let i = nozzles.length; i < h.alpha.length; i++) {
       h.color[i * 3] = this.glowColor.r;
       h.color[i * 3 + 1] = this.glowColor.g;
       h.color[i * 3 + 2] = this.glowColor.b;
       h.size[i] = EMITTER_HALO_SIZE * (1 + this.boost * 0.5);
-      h.alpha[i] = v.crashed ? 0 : 0.9;
+      h.alpha[i] = crashed ? 0 : EMITTER_HALO_ALPHA;
     }
     h.commit();
   }
@@ -318,7 +315,6 @@ class RacerModelImpl implements RacerModel {
   private updateSmoke(dt: number, v: RacerViewState): void {
     let rate = 0;
     if (v.damage > DAMAGE_SMOKE_FROM) rate += SMOKE_RATE_DAMAGE * (v.damage - DAMAGE_SMOKE_FROM) / (1 - DAMAGE_SMOKE_FROM);
-    if (v.overheated) rate += SMOKE_RATE_OVERHEAT;
     if (v.crashed) rate += SMOKE_RATE_CRASHED;
     const pool = this.smokeLife.length;
     this.smokeCarry += rate * dt;
@@ -336,8 +332,8 @@ class RacerModelImpl implements RacerModel {
       this.smokeVel[i * 3 + 1] = 1.2 + Math.random() * 1.5;
       this.smokeVel[i * 3 + 2] = tmpDir.z * 4 + behind;
       this.smokeLife[i] = SMOKE_LIFE * (0.7 + Math.random() * 0.6);
-      // Overheat smoke is pale steam-grey; damage smoke is oily black.
-      this.smokeTint[i] = v.overheated && !v.crashed && v.damage < 0.6 ? 1 : Math.random() * 0.25;
+      // Slight per-puff shade variation keeps the oily trail from reading as one flat blob.
+      this.smokeTint[i] = Math.random() * SMOKE_SHADE_VARIATION;
     }
     for (let i = 0; i < pool; i++) {
       const life = this.smokeLife[i];

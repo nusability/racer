@@ -34,7 +34,7 @@ export class Showroom implements ShowroomApi {
   private yaw = START_YAW;
   private isActive = false;
   private readonly view: RacerViewState = {
-    speed: 0, topSpeed: 1, boosting: false, heat: 0.1, overheated: false, damage: 0, steer: 0, airborne: false, crashed: false,
+    speed: 0, topSpeed: 1, boosting: false, heat: 0.1, damage: 0, steer: 0, airborne: false, crashed: false,
   };
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
