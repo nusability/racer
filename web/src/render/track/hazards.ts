@@ -40,7 +40,7 @@ export function decal(r: Ribbon, g: FlatBuilder, pts: [number, number][], color:
   quadFacing(g, w[0], w[1], w[2], w[3], UP, color);
 }
 
-/** A chevron painted on the road pointing forward (dir 1) or sideways toward +x (dir 'side'). */
+/** A forward-pointing chevron painted on the road, centred on lateral x, tip at s + depth. */
 export function chevron(r: Ribbon, g: FlatBuilder, s: number, halfWidth: number, depth: number, thick: number, color: THREE.Color, x = 0): void {
   decal(r, g, [[s, x - halfWidth], [s + thick, x - halfWidth], [s + depth + thick, x], [s + depth, x]], color);
   decal(r, g, [[s + depth, x], [s + depth + thick, x], [s + thick, x + halfWidth], [s, x + halfWidth]], color);

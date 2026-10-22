@@ -110,14 +110,3 @@ export class SmoothBuilder {
     return g;
   }
 }
-
-/** Shared scratch colour helpers: palette hex → linear colour, scaled. */
-export function tint(hex: number, k = 1, out = new THREE.Color()): THREE.Color {
-  out.setHex(hex);
-  return out.multiplyScalar(k);
-}
-
-export function mixHex(a: number, b: number, t: number, out = new THREE.Color()): THREE.Color {
-  const cb = new THREE.Color(b);
-  return out.setHex(a).lerp(cb, t);
-}

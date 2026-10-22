@@ -68,7 +68,8 @@ export function checkLandmarkClearance(placed: PlacedLandmark[], ground: Ground)
 export function updateLandmarks(placed: PlacedLandmark[], quality: Quality, time: number, dt: number, cameraPos: THREE.Vector3): void {
   const view = LANDMARK_VIEW[quality];
   for (const p of placed) {
-    const visible = p.centre.distanceTo(cameraPos) - p.radius < view;
+    // Horizon-sized pieces (a storm front kilometres wide) are always on; fog does the fading.
+    const visible = p.radius > view || p.centre.distanceTo(cameraPos) - p.radius < view;
     p.landmark.group.visible = visible;
     if (visible) p.landmark.update(time, dt);
   }

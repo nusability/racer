@@ -90,8 +90,8 @@ export const devilsteethScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },
     { kind: 'mine', at: 5.45, side: 1, distance: 40 },
-    { kind: 'wreck', at: 3.5, side: -1, distance: 100 },
-    { kind: 'cliffVillage', at: 9.0, side: 1, distance: 60 },
+    { kind: 'wreck', at: 3.5, side: -1, distance: 30 },
+    { kind: 'cliffVillage', at: 9.0, side: -1, distance: 60, scale: 1.3 },
     { kind: 'balloons', at: 12.5, side: -1, distance: 150 },
   ],
 };

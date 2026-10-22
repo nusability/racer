@@ -79,9 +79,9 @@ export const bonecanyonScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: -1, distance: 15 },
-    { kind: 'colossus', at: 5.5, side: -1, distance: 120 },
-    { kind: 'cliffVillage', at: 2.5, side: 1, distance: 40 },
-    { kind: 'wreck', at: 9.5, side: 1, distance: 80 },
+    { kind: 'colossus', at: 5.5, side: -1, distance: 40, scale: 1.5 },
+    { kind: 'cliffVillage', at: 2.5, side: 1, distance: 110, scale: 1.4 },
+    { kind: 'wreck', at: 9.5, side: 1, distance: 30 },
     { kind: 'mine', at: 3.4, side: -1, distance: 30 },
   ],
 };

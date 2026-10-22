@@ -73,9 +73,9 @@ export const glassseaScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },
-    { kind: 'sandbeast', at: 8.4, side: -1, distance: 120 },
+    { kind: 'sandbeast', at: 8.4, side: -1, distance: 60 },
     { kind: 'skyfleet', at: 4.8, side: 1, distance: 300 },
-    { kind: 'wreck', at: 12.2, side: -1, distance: 90 },
+    { kind: 'wreck', at: 12.2, side: -1, distance: 30 },
     { kind: 'balloons', at: 2.6, side: -1, distance: 200 },
   ],
 };

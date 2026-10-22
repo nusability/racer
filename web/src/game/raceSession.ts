@@ -330,6 +330,8 @@ export class RaceSession {
   }
 
   private burst(i: number) {
+    // The player's own shock ring spawns right in front of the lens and fills the screen.
+    if (i === this.playerIndex()) return;
     const root = this.views[i].model.root;
     this.tmpDir.set(0, 0, -1).applyQuaternion(root.quaternion);
     this.effects.boostBurst(root.position, this.tmpDir, racerById(this.request.entrants[i].racerId).visual.glow);

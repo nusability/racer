@@ -78,9 +78,9 @@ export const rattlesnakeScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.12, side: -1, distance: 15 },
-    { kind: 'mine', at: 8.2, side: -1, distance: 30 },
-    { kind: 'cliffVillage', at: 7.8, side: 1, distance: 30 },
-    { kind: 'wreck', at: 12.5, side: 1, distance: 90 },
+    { kind: 'mine', at: 7.9, side: -1, distance: 45 },
+    { kind: 'cliffVillage', at: 9.4, side: -1, distance: 40, scale: 1.4 },
+    { kind: 'wreck', at: 12.5, side: 1, distance: 30 },
     { kind: 'balloons', at: 4.5, side: 1, distance: 200 },
   ],
 };

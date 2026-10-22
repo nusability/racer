@@ -8,13 +8,13 @@ export type Quality = 'low' | 'high';
  * Corridor geometry is merged per chunk of this many metres: short enough for frustum culling
  * to bite, long enough that the three meshes per chunk stay inside the draw-call budget.
  */
-export const CHUNK_LENGTH = { low: 800, high: 600 } as const;
+export const CHUNK_LENGTH = { low: 1000, high: 600 } as const;
 /** Chunks whose bounds are farther than the fog's far edge plus this are hidden. */
 export const CULL_MARGIN = 150;
 
 // --- Fog (also the visible range: nothing past fogFar is drawn) ---
 export const FOG_NEAR = { low: 220, high: 320 } as const;
-export const FOG_FAR = { low: 1700, high: 2600 } as const;
+export const FOG_FAR = { low: 1500, high: 2600 } as const;
 
 // --- Corridor ---
 /** Every n-th sample becomes a cross-section station for walls and shoulders. */
@@ -63,7 +63,7 @@ export const TERRAIN_MARGIN = 1900;
 /** Terrain tile size; tiles near the course get fine cells, the rest one coarse mesh. */
 export const TERRAIN_TILE = 1000;
 /** Cells per tile edge. Far counts divide near counts so tile borders share vertices. */
-export const TERRAIN_CELLS_NEAR = { low: 40, high: 60 } as const;
+export const TERRAIN_CELLS_NEAR = { low: 30, high: 60 } as const;
 export const TERRAIN_CELLS_FAR = { low: 10, high: 12 } as const;
 /** A tile is "near" when the course passes within this of it. */
 export const TERRAIN_NEAR_DIST = 700;
@@ -101,6 +101,6 @@ export const HORIZON_MAX = 1700;
 
 // --- Landmarks ---
 /** Landmarks within this of the camera animate; past it they are hidden too. */
-export const LANDMARK_VIEW = { low: 1700, high: 2600 } as const;
+export const LANDMARK_VIEW = { low: 1500, high: 2600 } as const;
 /** Ground under a landmark is levelled out to this multiple of its radius. */
 export const LANDMARK_PAD = 1.1;

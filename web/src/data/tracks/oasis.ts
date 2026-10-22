@@ -78,8 +78,8 @@ export const oasisScenery: TrackScenery = {
   ],
   landmarks: [
     { kind: 'fair', at: 0.15, side: 1, distance: 30 },
-    { kind: 'oasisTown', at: 7.4, side: 1, distance: 40 },
-    { kind: 'bazaar', at: 9.8, side: -1, distance: 25 },
+    { kind: 'oasisTown', at: 7.4, side: 1, distance: 40, scale: 1.3 },
+    { kind: 'bazaar', at: 9.9, side: 1, distance: 330 },
     { kind: 'balloons', at: 3.2, side: 1, distance: 150 },
   ],
 };

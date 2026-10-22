@@ -89,8 +89,8 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     for (const c of cor.chunks) {
       for (const m of [
         add(c.road.build(true), ci === 0 ? mats.road : mats.branchRoad, `road${ci}:${c.k0}`),
-        add(c.sand.build(SAND_TILE), mats.sand, `sand${ci}:${c.k0}`),
-        add(c.rock.build(ROCK_TILE), mats.rock, `rock${ci}:${c.k0}`),
+        c.sand === c.rock ? null : add(c.sand.build(SAND_TILE), mats.sand, `sand${ci}:${c.k0}`),
+        add(c.rock.build(ROCK_TILE), quality === 'low' ? mats.plain : mats.rock, `rock${ci}:${c.k0}`),
       ]) {
         if (m) cullable.push(m);
       }

@@ -73,7 +73,7 @@ export const sunpanScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },
-    { kind: 'spaceport', at: 8.5, side: -1, distance: 60 },
+    { kind: 'spaceport', at: 8.5, side: -1, distance: 25 },
     { kind: 'skyfleet', at: 2.5, side: -1, distance: 250 },
     { kind: 'balloons', at: 12.5, side: 1, distance: 120 },
   ],

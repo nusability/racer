@@ -84,7 +84,9 @@ export class Corridor {
     const last = this.ribbon.closed ? this.n : this.n - 1;
     for (let k0 = 0; k0 < last; k0 += this.chunkSamples) {
       const k1 = Math.min(last, k0 + this.chunkSamples);
-      const chunk: Chunk = { k0, k1, road: new SmoothBuilder(), sand: new FlatBuilder(), rock: new FlatBuilder() };
+      // Low quality draws sand and rock untextured in one mesh: one draw call fewer per chunk.
+      const rock = new FlatBuilder();
+      const chunk: Chunk = { k0, k1, road: new SmoothBuilder(), sand: quality === 'low' ? rock : new FlatBuilder(), rock };
       this.chunks.push(chunk);
       this.buildRoad(chunk);
       this.buildSides(chunk);

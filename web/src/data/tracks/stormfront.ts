@@ -102,9 +102,9 @@ export const stormfrontScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },
-    { kind: 'invasion', at: 9.5, side: -1, distance: 80 },
+    { kind: 'invasion', at: 9.5, side: -1, distance: 30 },
     { kind: 'stormwall', at: 4.5, side: -1, distance: 400 },
-    { kind: 'wreck', at: 7.0, side: 1, distance: 60 },
-    { kind: 'spaceport', at: 13.0, side: 1, distance: 100 },
+    { kind: 'wreck', at: 7.0, side: 1, distance: 25 },
+    { kind: 'spaceport', at: 13.0, side: 1, distance: 40 },
   ],
 };
