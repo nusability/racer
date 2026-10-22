@@ -15,9 +15,10 @@ const SEAM_SPACING = 16;
 /** Maximum anisotropic filtering requested; three clamps to what the GPU offers. */
 const ANISOTROPY = 8;
 
+/** Palette hex (sRGB) scaled by k, as a canvas colour. Canvas paints in sRGB directly. */
 function css(hex: number, k = 1): string {
-  const c = new THREE.Color(hex);
-  return `rgb(${Math.round(Math.min(1, c.r * k) * 255)},${Math.round(Math.min(1, c.g * k) * 255)},${Math.round(Math.min(1, c.b * k) * 255)})`;
+  const ch = (shift: number) => Math.round(Math.min(255, ((hex >> shift) & 255) * k));
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {

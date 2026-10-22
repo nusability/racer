@@ -7,6 +7,10 @@ import { mulberry32, type Rng } from './rng.ts';
 import { PathPlanner, type Blocker } from './aiPlanner.ts';
 import { currentTopSpeed, minJumpSpeed, steerAuthority, type Vehicle } from './vehicle.ts';
 import {
+  AI_BOOST_CAUTION_HI,
+  AI_BOOST_CAUTION_LO,
+  AI_BOOST_REST_HI,
+  AI_BOOST_REST_LO,
   AI_BRAKE_REACTION_HI,
   AI_BRAKE_REACTION_LO,
   AI_CLEARANCE_HI,
@@ -61,9 +65,16 @@ export class AiDriver {
   readonly skill: number;
   private readonly rng: Rng;
   private readonly heatLimit: number;
+  private readonly boostRest: number;
   private noise = 0;
   private lapse = 0;
   private boostLatched = true;
+  /** Ignoring the heat limit this cycle. */
+  private pushing = false;
+  /** Seconds the engine has sat fully cooled. */
+  private coldTime = 0;
+  /** Steering held through a lapse. */
+  private frozenSteer = 0;
   private readonly obstacleBuf: Obstacle[] = [];
   private readonly planner = new PathPlanner();
   private readonly blockers: Blocker[] = [];
@@ -72,9 +83,9 @@ export class AiDriver {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
     this.skill = skill;
     this.rng = mulberry32(seed);
-    const gamble = this.rng() < AI_OVERHEAT_GAMBLE * (1 - skill);
-    // A gambler drives straight into overheat, the way a novice does.
-    this.heatLimit = gamble ? Infinity : this.bySkill(AI_HEAT_LIMIT_LO, AI_HEAT_LIMIT_HI);
+    this.heatLimit = this.bySkill(AI_HEAT_LIMIT_LO, AI_HEAT_LIMIT_HI);
+    // A rest only means something once the engine has fully cooled.
+    this.boostRest = this.bySkill(AI_BOOST_REST_LO, AI_BOOST_REST_HI);
   }
 
   private bySkill(lo: number, hi: number): number {
@@ -160,7 +171,9 @@ export class AiDriver {
     const cornerFactor = this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI);
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);
     const top = currentTopSpeed(stats, st, true);
-    const horizon = (top * top) / (2 * BRAKE_DECEL) + top * reaction;
+    // Cautious drivers want a longer straight ahead before they boost.
+    const caution = this.bySkill(AI_BOOST_CAUTION_LO, AI_BOOST_CAUTION_HI);
+    const horizon = ((top * top) / (2 * BRAKE_DECEL)) * caution + top * reaction;
     let brakeNeeded = false;
     let boostRoom = true;
     for (let d = 0; d <= horizon; d += AI_SAMPLE_STEP) {
@@ -170,7 +183,7 @@ export class AiDriver {
       const vAllow = h / (k + (h * STEER_SPEED_FADE) / STEER_FADE_SPEED);
       const room = vAllow * vAllow + 2 * BRAKE_DECEL * Math.max(0, d - v * reaction);
       if (v * v > room) brakeNeeded = true;
-      if (top * top > room) boostRoom = false;
+      if (top * top > vAllow * vAllow + (2 * BRAKE_DECEL * Math.max(0, d - v * reaction)) / caution) boostRoom = false;
     }
     const jump = this.nextJump(track, st.s, horizon);
     const jumpSpeed = jump === null ? 0 : minJumpSpeed(track, jump) * AI_JUMP_SPEED_MARGIN;
@@ -187,11 +200,20 @@ export class AiDriver {
     // Running out of steering is the other reason to brake: the brake-drift adds authority.
     if (!airborne && Math.abs(omegaDes) > steerAuthority(stats, v, false, false) && v > jumpSpeed) brakeNeeded = true;
     const brake = brakeNeeded && !airborne;
-    const steer = clamp(omegaDes / steerAuthority(stats, v, brake, airborne) + this.noise, -1, 1);
+    const steer =
+      this.lapse > 0 ? this.frozenSteer : clamp(omegaDes / steerAuthority(stats, v, brake, airborne) + this.noise, -1, 1);
+    if (this.lapse <= 0) this.frozenSteer = steer;
 
     // 6. Boost with a heat margin; never while braking.
-    if (st.heat >= this.heatLimit) this.boostLatched = false;
-    else if (st.heat <= this.heatLimit - AI_HEAT_HYSTERESIS) this.boostLatched = true;
+    this.coldTime = st.heat > 0 ? 0 : this.coldTime + SIM_DT;
+    // At the limit a novice may keep pushing into overheat; the call is made once per cycle.
+    if (st.heat >= this.heatLimit && this.boostLatched && !this.pushing) {
+      this.pushing = this.rng() < AI_OVERHEAT_GAMBLE * (1 - this.skill);
+      this.boostLatched = this.pushing;
+    } else if (st.overheat > 0) {
+      this.pushing = false;
+      this.boostLatched = false;
+    } else if (st.heat <= this.heatLimit - AI_HEAT_HYSTERESIS && this.coldTime >= this.boostRest) this.boostLatched = true;
     const wantSpeed = boostRoom || v < jumpSpeed;
     const boost = !brake && wantSpeed && this.boostLatched && st.overheat <= 0;
 

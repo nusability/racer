@@ -4,7 +4,7 @@
 import { TRACKS } from '../src/data/tracks/index.ts';
 import { Track } from '../src/core/track.ts';
 import type { TrackDef, TrackFeature } from '../src/core/types.ts';
-import { CHASM_DEPTH, GRAVITY } from '../src/data/tuning.ts';
+import { GRAVITY } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;

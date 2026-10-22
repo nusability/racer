@@ -123,11 +123,11 @@ export const IMPACT_INTENSITY_SPEED = 40;
 /** Hover suction pulling the racer onto the road, m/s² on top of gravity. */
 export const HOVER_SUCTION = 45;
 /** Landings softer than this closing speed cost nothing, m/s: a pod absorbs its own jumps. */
-export const LAND_SOFT_IMPACT = 40;
+export const LAND_SOFT_IMPACT = 42;
 /** Fraction of forward speed lost per m/s of hard landing. */
 export const LAND_SPEED_LOSS = 0.005;
 /** Damage per m/s of hard landing (before armour). */
-export const LAND_DAMAGE = 0.01;
+export const LAND_DAMAGE = 0.006;
 /** How far below a chasm's far edge you can arrive and still land, metres. */
 export const LANDING_STEP_TOLERANCE = 1.5;
 /** Fraction of the vertical closing speed bounced back down by a ceiling. */
@@ -175,7 +175,7 @@ export const RESPAWN_INVULNERABLE = 1.5;
 
 // Boost and heat
 /** Heat gained per second of boost (heat is 0..1). */
-export const BOOST_HEAT_RATE = 0.3;
+export const BOOST_HEAT_RATE = 0.4;
 /** Forced cool-down after overheating, seconds. */
 export const OVERHEAT_DURATION = 3;
 /** Free boost from a pad, seconds. */
@@ -237,6 +237,9 @@ export const AI_CORNER_FACTOR_HI = 0.97;
 /** Braking reaction delay, seconds of travel lost before the AI starts braking. */
 export const AI_BRAKE_REACTION_LO = 0.35;
 export const AI_BRAKE_REACTION_HI = 0.05;
+/** Straight needed before the AI boosts, as a multiple of the braking distance it needs. */
+export const AI_BOOST_CAUTION_LO = 3;
+export const AI_BOOST_CAUTION_HI = 1;
 /** Heat at which the AI stops boosting. */
 export const AI_HEAT_LIMIT_LO = 0.75;
 export const AI_HEAT_LIMIT_HI = 0.93;
@@ -246,15 +249,18 @@ export const AI_HEAT_HYSTERESIS = 0.35;
 export const AI_STEER_NOISE = 0.35;
 /** Correlation time of the steering noise, seconds. */
 export const AI_NOISE_TAU = 0.5;
-/** Lapses per second at skill 0 (scaled by (1 - skill)²): the AI ignores an obstacle. */
-export const AI_MISTAKE_RATE = 0.12;
+/** Lapses per second at skill 0 (scaled by (1 - skill)²): steering freezes, obstacles unseen. */
+export const AI_MISTAKE_RATE = 0.3;
 /** Length of a lapse, seconds. */
-export const AI_MISTAKE_DURATION = 0.7;
+export const AI_MISTAKE_DURATION = 0.6;
+/** Seconds a cold engine idles before the AI boosts again: novices waste cooling. */
+export const AI_BOOST_REST_LO = 2.5;
+export const AI_BOOST_REST_HI = 0;
 /** Approaching a jump below this multiple of its minimum clearing speed, the AI won't brake. */
 export const AI_JUMP_SPEED_MARGIN = 1.3;
 /** Chance per race start that an AI nails the launch boost, at skill 1. */
 export const AI_START_BOOST_CHANCE = 0.8;
 /** The AI detours to a boost pad when it lies within this of its line, metres. */
 export const AI_PAD_DETOUR = 7;
-/** Chance at skill 0 (scaled by 1 - skill) that an AI ignores its heat limit this race. */
-export const AI_OVERHEAT_GAMBLE = 0.6;
+/** Chance per boost cycle at skill 0 (scaled by 1 - skill) that an AI pushes into overheat. */
+export const AI_OVERHEAT_GAMBLE = 0.8;

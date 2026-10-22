@@ -342,10 +342,9 @@ export class RaceSession {
       }
       v.wasBoosting = r.boosting;
       if (r.crashed <= 0 && !r.airborne && this.nearCamera(i)) {
-        this.tmpDir.set(0, 0, 1).applyQuaternion(v.model.root.quaternion);
-        this.tmpVel.copy(this.tmpDir).multiplyScalar(r.speed * 0.15);
-        this.tmpPos.copy(v.model.root.position).addScaledVector(this.tmpDir, 6);
-        this.effects.dust(this.tmpPos, this.tmpVel, Math.min(1, r.speed / stats.topSpeed), this.track.def.palette.sand);
+        // Dust inherits the racer's velocity so it streams past the chase camera.
+        this.tmpVel.set(0, 0, -1).applyQuaternion(v.model.root.quaternion).multiplyScalar(r.speed);
+        this.effects.dust(v.model.root.position, this.tmpVel, Math.min(1, r.speed / stats.topSpeed), this.track.def.palette.sand);
       }
     });
 

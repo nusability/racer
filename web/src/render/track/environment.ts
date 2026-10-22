@@ -36,7 +36,7 @@ varying vec3 vDir;
 void main() {
   vec3 d = normalize(vDir);
   float h = max(d.y, 0.0);
-  vec3 col = mix(uHorizon, uZenith, pow(h, 0.55));
+  vec3 col = mix(uHorizon, uZenith, pow(h, 0.4));
   float toSun = max(dot(d, uSunDir), 0.0);
   // Warm glow round the sun, wider and stronger at dusk.
   col += uSun * pow(toSun, mix(18.0, 5.0, uDusk)) * mix(0.25, 0.6, uDusk) * (1.0 - h * 0.6);
