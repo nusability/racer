@@ -3,6 +3,7 @@ import type { Track } from '../../core/track.ts';
 import { FlatBuilder, SmoothBuilder, type P3 } from './builder.ts';
 import {
   BERM_BLOCK,
+  BERM_HEIGHT,
   CANYON_RIM,
   CHUNK_LENGTH,
   ROAD_TEXTURE_LENGTH,
@@ -14,7 +15,7 @@ import {
 } from './config.ts';
 import type { Ground } from './ground.ts';
 import { valueNoise } from './noise.ts';
-import { quadFacing, type Paint } from './paint.ts';
+import { quadFacing, rockQuad, type Paint } from './paint.ts';
 import type { CorridorShape } from './shape.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
@@ -24,6 +25,8 @@ const TUNNEL_WALL_FRACTION = 0.62;
 const TUNNEL_CHAMFER = 0.72;
 /** The mesa foot sits this far under the road so the terrain never shows below it. */
 const TUNNEL_FOOT = 8;
+/** Walls this close to berm height still get the painted barrier. */
+const KERB_TOLERANCE = 0.3;
 /** Lift of tunnel light strips off their rock face, metres. */
 const LIGHT_INSET = 0.08;
 
@@ -205,11 +208,16 @@ export class Corridor {
     const dir = { x: -side * this.shape.rx[kk] * 0.3, y: 1, z: -side * this.shape.rz[kk] * 0.3 };
     const block = Math.floor((((ka + kb) / 2) * this.track.step) / BERM_BLOCK) % 2 === 0;
     const kerb = block ? this.paint.accent : this.paint.white;
-    const kerbOn = this.shape.canyon[kk] < 0.5;
+    // Painted barrier only where it is still a low berm; tapering canyon ends are bare rock.
+    const kerbOn = this.shape.wall[kk] <= BERM_HEIGHT + KERB_TOLERANCE;
     for (let i = 0; i < 6; i++) {
-      if (kerbOn && i < 3) {
-        const top = i === 2 ? kerb.clone().multiplyScalar(0.8) : kerb;
-        quadFacing(b, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, top);
+      if (kerbOn && i < 2) {
+        // Unlit, so the edge reads at full contrast whichever way the wall faces the sun.
+        quadFacing(this.glow, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, kerb);
+      } else if (kerbOn && i === 2) {
+        quadFacing(b, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, kerb);
+      } else if (i < 4 && this.shape.canyon[kk] > 0) {
+        rockQuad(b, this.paint, A.pts[i], B.pts[i], B.pts[i + 1], A.pts[i + 1], dir, i === 0 ? 0.75 : 0.92);
       } else {
         quadFacing(b, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, A.cols[i], A.cols[i + 1], B.cols[i + 1], B.cols[i]);
       }
@@ -235,12 +243,13 @@ export class Corridor {
       [h, c * TUNNEL_WALL_FRACTION],
       [h, 0],
     ];
+    // A mesa: talus foot, near-vertical cliffs, broad flat top.
     const outer: [number, number][] = [
       [-h - w, -TUNNEL_FOOT],
-      [-h - w * 0.78 + wobble(1), top * 0.72],
-      [-h - w * 0.4 + wobble(2), top + wobble(3)],
-      [h + w * 0.4 + wobble(4), top + wobble(5)],
-      [h + w * 0.78 + wobble(6), top * 0.72],
+      [-h - w * 0.86 + wobble(1), top * 0.3],
+      [-h - w * 0.8 + wobble(2), top + wobble(3) * 0.3],
+      [h + w * 0.8 + wobble(4), top + wobble(5) * 0.3],
+      [h + w * 0.86 + wobble(6), top * 0.3],
       [h + w, -TUNNEL_FOOT],
     ];
     return {
@@ -254,15 +263,13 @@ export class Corridor {
     const A = this.tunnelRing(ka);
     const B = this.tunnelRing(kb);
     const col = new THREE.Color();
-    const col2 = new THREE.Color();
     for (let i = 0; i < 5; i++) {
       const mid = mean(A.inner[i], A.inner[i + 1], B.inner[i], B.inner[i + 1]);
       const shade = i === 2 ? 0.28 : 0.38;
       quadFacing(b, A.inner[i], A.inner[i + 1], B.inner[i + 1], B.inner[i], sub(A.axis, mid), this.paint.strata(mid.y, shade, col));
       const mo = mean(A.outer[i], A.outer[i + 1], B.outer[i], B.outer[i + 1]);
-      this.paint.strata(A.outer[i].y, 0.95, col);
-      this.paint.strata(A.outer[i + 1].y, i === 2 ? 1.05 : 0.95, col2);
-      quadFacing(b, A.outer[i], A.outer[i + 1], B.outer[i + 1], B.outer[i], sub(mo, A.axis), col, col2, col2, col);
+      if (i === 2) quadFacing(b, A.outer[i], A.outer[i + 1], B.outer[i + 1], B.outer[i], sub(mo, A.axis), this.paint.strata(mo.y, 1.05, col));
+      else rockQuad(b, this.paint, A.outer[i], B.outer[i], B.outer[i + 1], A.outer[i + 1], sub(mo, A.axis), 0.95);
     }
     this.tunnelLights(ka, kb);
   }
@@ -318,12 +325,8 @@ export class Corridor {
     const R = this.tunnelRing(k);
     const t = this.track.samples[k % this.n].tangent;
     const facing = { x: t.x * dir, y: t.y * dir, z: t.z * dir };
-    const col = new THREE.Color();
-    const col2 = new THREE.Color();
     for (let i = 0; i < 5; i++) {
-      this.paint.strata(R.inner[i].y, 0.8, col);
-      this.paint.strata(R.outer[i + 1].y, 0.9, col2);
-      quadFacing(b, R.inner[i], R.inner[i + 1], R.outer[i + 1], R.outer[i], facing, col, col, col2, col2);
+      rockQuad(b, this.paint, R.inner[i], R.inner[i + 1], R.outer[i + 1], R.outer[i], facing, 0.85);
     }
     // Hazard-lit frame around the mouth so the hole reads from far away.
     const frame = this.paint.hazard;

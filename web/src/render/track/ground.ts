@@ -20,6 +20,11 @@ const SHOULDER_FLAT = 5;
 const SHOULDER_DROP = 0.35;
 /** Dune crest spacing, metres. */
 const DUNE_WAVELENGTH = 130;
+/** Long dunes that stay everywhere, coarse enough for the far terrain mesh. */
+const BROAD_DUNE_WAVELENGTH = 420;
+/** Small dunes fade out between these distances from the course, metres. */
+const DUNE_FADE_START = 220;
+const DUNE_FADE_LENGTH = 260;
 /** Scale of the broad swells under the dunes, metres. */
 const SWELL_SCALE = 900;
 /** Stamp every n-th sample into the nearest-sample field (refined exactly per query). */
@@ -126,14 +131,19 @@ export class Ground {
     return { k, d };
   }
 
-  /** Open-desert height, ignoring the course. */
-  natural(x: number, z: number): number {
+  /**
+   * Open-desert height, ignoring the course. Small dunes only ripple near the course: far out
+   * the coarse terrain mesh couldn't sample them, and fog hides them anyway.
+   */
+  natural(x: number, z: number, near: Nearest | null = this.nearest(x, z)): number {
     const h = this.scenery.duneHeight;
-    const w = (x * this.duneDir.x + z * this.duneDir.z) / DUNE_WAVELENGTH;
+    const along = x * this.duneDir.x + z * this.duneDir.z;
     const warp = fbm(this.noise, x / 380, z / 380, 2) * 2.2;
-    const ridge = 1 - Math.abs(Math.sin(Math.PI * w + warp));
+    const ridge = 1 - Math.abs(Math.sin((Math.PI * along) / DUNE_WAVELENGTH + warp));
+    const broad = 0.5 + 0.5 * Math.sin((Math.PI * along) / BROAD_DUNE_WAVELENGTH + warp * 0.5);
     const swell = fbm(this.noise, x / SWELL_SCALE + 40, z / SWELL_SCALE + 40, 3);
-    return this.base + h * (0.7 * ridge * ridge + 1.1 * swell + 0.3);
+    const ripple = near ? 1 - smoothstep((Math.abs(near.d) - DUNE_FADE_START) / DUNE_FADE_LENGTH) : 0;
+    return this.base + h * (0.7 * ridge * ridge * ripple + 0.9 * broad + 1.1 * swell);
   }
 
   /** Height of the road edge on one side of sample k (the road is banked). */
@@ -144,7 +154,7 @@ export class Ground {
 
   /** The visible ground surface: road level by the corridor, easing out to the dunes. */
   height(x: number, z: number, near: Nearest | null = this.nearest(x, z)): number {
-    const nat = this.natural(x, z);
+    const nat = this.natural(x, z, near);
     if (!near) return nat;
     const smp = this.track.samples[near.k];
     const out = Math.max(0, Math.abs(near.d) - smp.width * 0.5);

@@ -24,6 +24,7 @@ import {
 } from '../data/tuning.ts';
 
 const MS_PER_KMH = 3.6;
+const STEPS_PER_SECOND = Math.round(1 / SIM_DT);
 
 export function racerSpeedKmh(state: RacerState): number {
   return state.speed * MS_PER_KMH;
@@ -58,7 +59,8 @@ export class Race {
   phase: RacePhase = 'countdown';
   /** Race clock: 0 at GO, frozen when the race ends. */
   time = 0;
-  private countdown = COUNTDOWN_SECONDS;
+  /** Countdown steps left; integer so GO lands on exactly one step. */
+  private countdownSteps = COUNTDOWN_SECONDS * STEPS_PER_SECOND;
   private readonly drivers: AiDriver[];
   private readonly playerIndex: number;
   private playerFinishTime: number | null = null;
@@ -92,7 +94,6 @@ export class Race {
     return this.racers[this.playerIndex];
   }
 
-
   step(input: PlayerInput): RaceEvent[] {
     const events: RaceEvent[] = [];
     if (this.phase === 'countdown') {
@@ -101,10 +102,11 @@ export class Race {
     }
     if (this.phase === 'racing') this.time += SIM_DT;
     // Inputs are all read from the same pre-step state, so entrant order can't bias the race.
+    // The player's autopilot runs even while the player drives, so it takes over (after the
+    // finish) already warmed up and its RNG never depends on when that happens.
     const inputs = this.vehicles.map((v, i) => {
       const ai = this.drivers[i].drive(v, this.track, this.racers);
-      const human =
-        i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
+      const human = i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
@@ -133,12 +135,14 @@ export class Race {
   }
 
   private stepCountdown(input: PlayerInput, events: RaceEvent[]) {
-    const before = this.countdown;
-    if (before === COUNTDOWN_SECONDS) events.push({ type: 'countdown', n: COUNTDOWN_SECONDS });
-    this.countdown = Math.max(0, before - SIM_DT);
-    const n = Math.ceil(this.countdown - 1e-9);
-    if (n < Math.ceil(before - 1e-9)) events.push({ type: 'countdown', n });
-    if (this.countdown > 0) return;
+    if (this.countdownSteps === COUNTDOWN_SECONDS * STEPS_PER_SECOND) {
+      events.push({ type: 'countdown', n: COUNTDOWN_SECONDS });
+    }
+    this.countdownSteps--;
+    if (this.countdownSteps % STEPS_PER_SECOND === 0) {
+      events.push({ type: 'countdown', n: this.countdownSteps / STEPS_PER_SECOND });
+    }
+    if (this.countdownSteps > 0) return;
     this.phase = 'racing';
     this.vehicles.forEach((v, i) => {
       const launch = i === this.playerIndex ? input.boost : this.drivers[i].startBoost();

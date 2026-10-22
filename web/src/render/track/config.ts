@@ -35,8 +35,8 @@ export const TUNNEL_ROCK_WIDTH = 75;
 export const TUNNEL_ROCK_ABOVE = 34;
 /** Spacing of the lit ceiling ribs inside tunnels, metres. */
 export const TUNNEL_RIB_SPACING = 18;
-/** How far a chasm's pit extends past the road edge, and how deep its glowing floor sits. */
-export const CHASM_SIDE = SHOULDER_WIDTH;
+/** How far a chasm's crack runs out past the road edge, and how deep its glowing floor sits. */
+export const CHASM_SIDE = 110;
 export const CHASM_FLOOR_EXTRA = 12;
 /** Road texture repeats every this many metres along the lap. */
 export const ROAD_TEXTURE_LENGTH = 64;
@@ -46,8 +46,9 @@ export const ROAD_TEXTURE_LENGTH = 64;
 export const TERRAIN_MARGIN = 1900;
 /** Terrain tile size; tiles near the course get fine cells, the rest one coarse mesh. */
 export const TERRAIN_TILE = 1000;
-export const TERRAIN_CELL_NEAR = { low: 26, high: 17 } as const;
-export const TERRAIN_CELL_FAR = { low: 110, high: 80 } as const;
+/** Cells per tile edge. Far counts divide near counts so tile borders share vertices. */
+export const TERRAIN_CELLS_NEAR = { low: 40, high: 60 } as const;
+export const TERRAIN_CELLS_FAR = { low: 10, high: 12 } as const;
 /** A tile is "near" when the course passes within this of it. */
 export const TERRAIN_NEAR_DIST = 700;
 /** Tiles get a downward skirt so neighbours of different resolution never show a crack. */

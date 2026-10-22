@@ -5,6 +5,7 @@ import { CHASM_DEPTH } from '../../data/tuning.ts';
 import type { FlatBuilder, P3 } from './builder.ts';
 import { CHASM_FLOOR_EXTRA, CHASM_SIDE } from './config.ts';
 import type { Corridor } from './corridor.ts';
+import { basisAt, box } from './dressing.ts';
 import { quadFacing } from './paint.ts';
 
 // Everything that warns: chasm pits, lip hazard bands, ramp and kicker chevrons, landing marks
@@ -15,6 +16,14 @@ const DECAL_LIFT = 0.04;
 const UP: P3 = { x: 0, y: 1, z: 0 };
 const EMBER = new THREE.Color(0xff5a14);
 const EMBER_DARK = new THREE.Color(0x5a0c04);
+/** Spacing of outline points where a crack crosses open ground, metres. */
+const CRACK_STEP = 16;
+/** Hazard pylons at a jump lip: stacked bands, metres. */
+const PYLON_BANDS = 9;
+const PYLON_BAND = 1.2;
+/** Sand rim round a chasm: covers the terrain cells that slope into the pit. */
+const RIM = 30;
+const RIM_LIFT = 0.3;
 /** Size of one square on the chequered start line, metres. */
 const CHECKER = 2;
 
@@ -39,6 +48,14 @@ function chevron(track: Track, g: FlatBuilder, s: number, halfWidth: number, dep
   decal(track, g, [[s + depth, 0], [s + depth + thick, 0], [s + thick, halfWidth], [s, halfWidth]], color);
 }
 
+function onGround(cor: Corridor, p: P3): P3 {
+  return { x: p.x, y: cor.ground.height(p.x, p.z), z: p.z };
+}
+
+function lift(p: P3): P3 {
+  return { x: p.x, y: p.y + RIM_LIFT, z: p.z };
+}
+
 function lastSurface(track: Track, s: number, dir: number): number {
   const n = track.samples.length;
   let k = Math.round(track.wrap(s) / track.step) % n;
@@ -61,12 +78,31 @@ function chasm(cor: Corridor, j: Jump) {
   for (const [k, dir] of [[kL, 1], [kG, -1]] as const) {
     const t = track.samples[k].tangent;
     const facing = { x: t.x * dir, y: 0, z: t.z * dir };
-    const left = cor.profile(k, -1).pts.slice().reverse();
-    const right = cor.profile(k, 1).pts;
-    const outline = [...left, ...right];
+    // The crack runs on past the corridor: extend the outline across open ground.
+    const past = (side: number) => {
+      const pts: P3[] = [];
+      for (let dx = cor.shape.reach[k] + CRACK_STEP; dx < CHASM_SIDE + CRACK_STEP / 2; dx += CRACK_STEP) {
+        pts.push(onGround(cor, cor.beside(k, side, Math.min(dx, CHASM_SIDE), 0)));
+      }
+      // One more point past the side wall so the rim flange turns the corner.
+      pts.push(onGround(cor, cor.beside(k, side, CHASM_SIDE + RIM, 0)));
+      return pts;
+    };
+    const pl = past(-1).reverse();
+    const pr = past(1);
+    const outline = [...pl, ...cor.profile(k, -1).pts.slice().reverse(), ...cor.profile(k, 1).pts, ...pr];
+    const away = { x: -facing.x * RIM, z: -facing.z * RIM };
     for (let i = 0; i + 1 < outline.length; i++) {
       const a = outline[i];
       const b = outline[i + 1];
+      const open = i < pl.length - 1 || i >= outline.length - pr.length;
+      if (open || i === pl.length - 1 || i === outline.length - pr.length - 1) {
+        // Sand rim lipping over the edge hides the terrain where it dips into the pit.
+        const ao = onGround(cor, { x: a.x + away.x, y: 0, z: a.z + away.z });
+        const bo = onGround(cor, { x: b.x + away.x, y: 0, z: b.z + away.z });
+        quadFacing(env, lift(a), lift(b), bo, ao, UP, cor.ground.color(a.x, a.z, a.y, 0, top));
+      }
+      if (i === 0 || i === outline.length - 2) continue;
       paint.strata(a.y, 0.85, top);
       bottom.copy(paint.rockDark).multiplyScalar(0.15);
       quadFacing(env, a, b, { ...b, y: floorY }, { ...a, y: floorY }, facing, top, top, bottom, bottom);
@@ -104,6 +140,9 @@ function chasm(cor: Corridor, j: Jump) {
       paint.strata(ta.y, 0.8, top);
       bottom.copy(paint.rockDark).multiplyScalar(0.15);
       quadFacing(env, ta, tb, { ...tb, y: floorY }, { ...ta, y: floorY }, inward, top, top, bottom, bottom);
+      const ao = onGround(cor, cor.beside(a, side, CHASM_SIDE + RIM, 0));
+      const bo = onGround(cor, cor.beside(b, side, CHASM_SIDE + RIM, 0));
+      quadFacing(env, lift(ta), lift(tb), bo, ao, UP, cor.ground.color(ta.x, ta.z, ta.y, 0, top));
     }
     // Floor: hot in the middle, dark at the walls.
     const span = track.samples[a].width / 2 + CHASM_SIDE;
@@ -139,7 +178,15 @@ function rampChevrons(cor: Corridor, f: Extract<TrackFeature, { kind: 'jump' }>)
   const count = 4;
   for (let i = 0; i < count; i++) {
     const s = s0 + f.rampLength * (0.25 + (0.7 * i) / count);
-    chevron(track, cor.glow, s, half * 0.55, 7, 2.2, i % 2 === 0 ? cor.paint.hazard : cor.paint.white);
+    chevron(track, cor.glow, s, half * 0.6, 10, 3.5, i % 2 === 0 ? cor.paint.hazard : cor.paint.white);
+  }
+  // Striped pylons either side of the lip: the chasm itself is invisible until you're on it.
+  const kL = lastSurface(track, s0 + f.rampLength, -1);
+  for (const side of [-1, 1]) {
+    const B = basisAt(cor, kL, side, 2.5, track.samples[kL].pos.y);
+    for (let j = 0; j < PYLON_BANDS; j++) {
+      box(cor.glow, B, 0, 0, 1.4, 1.4, j * PYLON_BAND - 1, PYLON_BAND, j % 2 ? cor.paint.black : cor.paint.hazard);
+    }
   }
 }
 
@@ -147,7 +194,7 @@ function kickerChevrons(cor: Corridor, f: Extract<TrackFeature, { kind: 'kicker'
   const track = cor.track;
   const s0 = track.paramToS(f.at);
   const half = track.widthAt(s0) / 2;
-  for (let i = 0; i < 2; i++) chevron(track, cor.glow, s0 + f.length * (0.3 + 0.35 * i), half * 0.4, 5, 1.6, cor.paint.hazard);
+  for (let i = 0; i < 2; i++) chevron(track, cor.glow, s0 + f.length * (0.25 + 0.35 * i), half * 0.45, 7, 2.6, cor.paint.hazard);
 }
 
 function startLine(cor: Corridor) {

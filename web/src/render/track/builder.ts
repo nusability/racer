@@ -50,6 +50,7 @@ export class SmoothBuilder {
   private readonly col: number[] = [];
   private readonly uv: number[] = [];
   private readonly idx: number[] = [];
+  private readonly nrm: number[] = [];
 
   get vertexCount(): number {
     return this.pos.length / 3;
@@ -58,7 +59,9 @@ export class SmoothBuilder {
     return this.idx.length / 3;
   }
 
-  vertex(p: P3, c: THREE.Color, u = 0, v = 0): number {
+  /** Pass a normal for every vertex or none: given normals replace the computed ones. */
+  vertex(p: P3, c: THREE.Color, u = 0, v = 0, n?: P3): number {
+    if (n) this.nrm.push(n.x, n.y, n.z);
     this.pos.push(p.x, p.y, p.z);
     this.col.push(c.r, c.g, c.b);
     this.uv.push(u, v);
@@ -76,7 +79,9 @@ export class SmoothBuilder {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     if (withUv) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setIndex(this.idx);
-    g.computeVertexNormals();
+    if (this.nrm.length === 0) g.computeVertexNormals();
+    else if (this.nrm.length === this.pos.length) g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
+    else throw new Error('SmoothBuilder: normals given for some vertices but not all');
     g.computeBoundingSphere();
     return g;
   }

@@ -161,7 +161,7 @@ export const RACER_HIT_INTENSITY = 0.15;
 
 // Crash and respawn
 /** Seconds a crashed racer is out before respawning. */
-export const RESPAWN_DELAY = 1.7;
+export const RESPAWN_DELAY = 2;
 /** Respawn this far behind the crash point, metres. */
 export const RESPAWN_BACKOFF = 30;
 /** Respawns near a jump move this far before its ramp, so there is room to reach speed. */
@@ -175,7 +175,7 @@ export const RESPAWN_INVULNERABLE = 1.5;
 
 // Boost and heat
 /** Heat gained per second of boost (heat is 0..1). */
-export const BOOST_HEAT_RATE = 0.4;
+export const BOOST_HEAT_RATE = 0.32;
 /** Forced cool-down after overheating, seconds. */
 export const OVERHEAT_DURATION = 3;
 /** Free boost from a pad, seconds. */
@@ -208,6 +208,8 @@ export const AI_MAX_YAW = 0.35;
 /** Obstacle look-ahead in seconds of travel. */
 export const AI_OBSTACLE_LOOK_TIME_LO = 0.8;
 export const AI_OBSTACLE_LOOK_TIME_HI = 1.5;
+/** Steps between path replans (40 Hz at SIM_DT): cheap enough for six AIs on a phone. */
+export const AI_PLAN_INTERVAL = 3;
 /** Obstacle path planner: longitudinal step, metres. */
 export const AI_PLAN_STEP = 5;
 /** Obstacle path planner: lateral resolution, metres. */

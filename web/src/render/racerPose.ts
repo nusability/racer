@@ -76,6 +76,7 @@ export function poseObject(track: Track, s: PoseSnapshot, obj: THREE.Object3D) {
   // Model space: +X right, +Y up, −Z forward.
   basis.makeBasis(right, up, fwd.negate());
   obj.quaternion.setFromRotationMatrix(basis);
-  rollQ.setFromAxisAngle(zAxis, -s.roll);
+  // The sim's roll already includes the road bank, which the banked frame applied above.
+  rollQ.setFromAxisAngle(zAxis, -(s.roll - track.bankAt(s.s)));
   obj.quaternion.multiply(rollQ);
 }

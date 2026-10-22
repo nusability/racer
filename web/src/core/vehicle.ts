@@ -73,8 +73,6 @@ export interface DriveStats {
   crashes: Record<CrashReason, number>;
   /** Seconds spent touching a wall. */
   scrapeTime: number;
-  /** Seconds spent racing (not crashed), for average speed. */
-  activeTime: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -161,7 +159,7 @@ export class Vehicle {
       steer: 0,
       invulnerable: 0,
     };
-    this.drive = { crashes: { destroyed: 0, fell: 0, obstacle: 0 }, scrapeTime: 0, activeTime: 0 };
+    this.drive = { crashes: { destroyed: 0, fell: 0, obstacle: 0 }, scrapeTime: 0 };
     this.alt = track.elevationAt(s);
     this.grounded = true;
     this.freeBoost = 0;
@@ -178,7 +176,6 @@ export class Vehicle {
       if (st.crashed <= 0) this.respawn(track, events);
       return;
     }
-    this.drive.activeTime += dt;
     st.invulnerable = Math.max(0, st.invulnerable - dt);
 
     // Applied steer follows the input at a finite rate.
@@ -297,7 +294,10 @@ export class Vehicle {
       st.vy -= GRAVITY * dt;
       this.alt += st.vy * dt;
       if (gap) {
-        if (this.alt < track.chasmFloorAt(s)) this.crash('fell', events);
+        if (this.alt < track.chasmFloorAt(s)) {
+          this.crash('fell', events);
+          return;
+        }
       } else if (this.alt <= surface) {
         if (wasOverGap && this.alt < surface - LANDING_STEP_TOLERANCE) {
           this.crash('fell', events);
@@ -351,7 +351,13 @@ export class Vehicle {
 
   private hitObstacle(
     track: Track,
-    o: Obstacle, ds: number, dx: number, dist: number, reach: number, events: RaceEvent[]) {
+    o: Obstacle,
+    ds: number,
+    dx: number,
+    dist: number,
+    reach: number,
+    events: RaceEvent[],
+  ) {
     const st = this.state;
     // Outward normal from the obstacle centre in the (s, x) plane.
     const ns = dist > 0 ? ds / dist : -1;
@@ -444,7 +450,6 @@ export class Vehicle {
     st.roll = track.bankAt(s);
     events.push({ type: 'respawn', id: st.id });
   }
-
 }
 
 const nearBuf: Obstacle[] = [];

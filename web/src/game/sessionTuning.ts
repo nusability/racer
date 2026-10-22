@@ -10,4 +10,8 @@ export const SESSION_GO_SHOWN = 0.8;
 export const SESSION_DUST_RANGE = 250;
 export const SESSION_SHAKE_SCRAPE = 0.08;
 export const SESSION_SHAKE_HIT = 0.6;
-export const SESSION_SHAKE_LAND = 0.02;
+/** Landing closing speed (m/s) treated as a full-strength impact for shake, sound and dust. */
+export const SESSION_HARD_LANDING = 50;
+export const SESSION_SHAKE_LAND = 0.5;
+/** Blinks per second while a respawned racer passes through obstacles. */
+export const SESSION_INVULNERABLE_BLINK = 8;

@@ -13,6 +13,9 @@ import { minJumpSpeed } from '../src/core/vehicle.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef } from '../src/core/types.ts';
 
+// The project has no Node typings (the web build must not see them); this is all we use.
+declare const process: { argv: string[]; exit(code: number): never };
+
 const SEED = 20261022;
 const FIELD = 6;
 const SKILL_LO = 0.3;

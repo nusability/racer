@@ -1,7 +1,7 @@
 // AI driver: reads the track ahead and produces the same PlayerInput a thumb would. It drives
 // the same Vehicle model as the player, so it can only be as fast as physics allows.
 
-import type { Obstacle, PlayerInput, RacerState } from './types.ts';
+import type { Obstacle, PlayerInput, RacerState, RacerStats } from './types.ts';
 import type { Track } from './track.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { PathPlanner, type Blocker } from './aiPlanner.ts';
@@ -35,6 +35,7 @@ import {
   AI_PAD_DETOUR,
   AI_PATH_LAG,
   AI_PATH_WINDOW,
+  AI_PLAN_INTERVAL,
   AI_PLAN_STEP,
   AI_POS_GAIN,
   AI_RACER_LOOK_TIME,
@@ -55,6 +56,10 @@ import {
 } from '../data/tuning.ts';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+function profileAt(track: Track, profile: Float64Array, s: number): number {
+  return profile[Math.floor(track.wrap(s) / track.step) % profile.length];
+}
 
 /** Mixes a race seed and an entrant index into an independent per-driver seed. */
 export function driverSeed(raceSeed: number, index: number): number {
@@ -78,6 +83,10 @@ export class AiDriver {
   private readonly obstacleBuf: Obstacle[] = [];
   private readonly planner = new PathPlanner();
   private readonly blockers: Blocker[] = [];
+  /** Steps since the path was last planned, and its heading (lateral m per m). */
+  private planAge = Infinity;
+  private planSlope = 0;
+  private profiles: { track: Track; brake: Float64Array; boost: Float64Array } | null = null;
 
   constructor(skill: number, seed: number) {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
@@ -145,46 +154,42 @@ export class AiDriver {
       blockers.length = 0;
       for (const o of track.obstaclesNear(st.s, RACER_LENGTH, obsLook, this.obstacleBuf)) blockers.push(o);
       this.addRacerBlockers(st, track, field, blockers);
-      if (blockers.length > 0) {
-        // The racer keeps its current lateral motion until steering bites, so the plan is
-        // free only after that; then hold the path's heading rather than chase a point,
-        // which would ring against the slide lag.
-        const xdot = st.speed * Math.sin(st.yaw) + st.vx;
-        const slope = this.planner.plan(
-          track,
-          st.s,
-          st.x,
-          xdot / v,
-          v * AI_PATH_LAG,
-          target,
-          obsLook,
-          clearance,
-          blockers,
-          v * AI_OBSTACLE_LEAD_TIME,
-          Math.max(AI_PLAN_STEP, v * AI_PATH_WINDOW),
-        );
-        xdotWanted = slope * v;
+      if (blockers.length === 0) this.planAge = Infinity;
+      else {
+        // Replanning every few steps is plenty: the plan is already lag-aware.
+        if (this.planAge >= AI_PLAN_INTERVAL) {
+          // The racer keeps its current lateral motion until steering bites, so the plan is
+          // free only after that; then hold the path's heading rather than chase a point,
+          // which would ring against the slide lag.
+          const xdot = st.speed * Math.sin(st.yaw) + st.vx;
+          this.planSlope = this.planner.plan(
+            track,
+            st.s,
+            st.x,
+            xdot / v,
+            v * AI_PATH_LAG,
+            target,
+            obsLook,
+            clearance,
+            blockers,
+            v * AI_OBSTACLE_LEAD_TIME,
+            Math.max(AI_PLAN_STEP, v * AI_PATH_WINDOW),
+          );
+          this.planAge = 0;
+        }
+        this.planAge++;
+        xdotWanted = this.planSlope * v;
       }
     }
 
     // 4. Speed: brake when a bend ahead can't be taken at this speed in the distance left.
-    const cornerFactor = this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI);
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);
+    const profiles = this.profilesFor(track, stats);
+    const seen = track.wrap(st.s + v * reaction);
     const top = currentTopSpeed(stats, st, true);
-    // Cautious drivers want a longer straight ahead before they boost.
-    const caution = this.bySkill(AI_BOOST_CAUTION_LO, AI_BOOST_CAUTION_HI);
-    const horizon = ((top * top) / (2 * BRAKE_DECEL)) * caution + top * reaction;
-    let brakeNeeded = false;
-    let boostRoom = true;
-    for (let d = 0; d <= horizon; d += AI_SAMPLE_STEP) {
-      const k = Math.abs(track.curvatureAt(track.wrap(st.s + d)));
-      // Authority fades linearly with speed, so the cornering limit has a closed form.
-      const h = cornerFactor * stats.handling;
-      const vAllow = h / (k + (h * STEER_SPEED_FADE) / STEER_FADE_SPEED);
-      const room = vAllow * vAllow + 2 * BRAKE_DECEL * Math.max(0, d - v * reaction);
-      if (v * v > room) brakeNeeded = true;
-      if (top * top > vAllow * vAllow + (2 * BRAKE_DECEL * Math.max(0, d - v * reaction)) / caution) boostRoom = false;
-    }
+    let brakeNeeded = v > Math.min(profileAt(track, profiles.brake, st.s), profileAt(track, profiles.brake, seen));
+    const boostRoom = top <= profileAt(track, profiles.boost, seen);
+    const horizon = (top * top) / (2 * BRAKE_DECEL) + top * reaction;
     const jump = this.nextJump(track, st.s, horizon);
     const jumpSpeed = jump === null ? 0 : minJumpSpeed(track, jump) * AI_JUMP_SPEED_MARGIN;
     if (v < jumpSpeed) brakeNeeded = false;
@@ -218,6 +223,33 @@ export class AiDriver {
     const boost = !brake && wantSpeed && this.boostLatched && st.overheat <= 0;
 
     return { steer, brake, boost };
+  }
+
+  /**
+   * Per-sample speed limits, built once per track: `brake` is the fastest speed from which
+   * every bend ahead can still be made with full braking; `boost` is the same with braking
+   * scaled down by the driver's caution, so a cautious driver needs a longer straight to boost.
+   */
+  private profilesFor(track: Track, stats: RacerStats): { brake: Float64Array; boost: Float64Array } {
+    if (this.profiles !== null && this.profiles.track === track) return this.profiles;
+    // Authority fades linearly with speed, so the cornering limit has a closed form.
+    const h = this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * stats.handling;
+    const corner = track.samples.map((p) => h / (Math.abs(p.curvature) + (h * STEER_SPEED_FADE) / STEER_FADE_SPEED));
+    const envelope = (decel: number) => {
+      const n = corner.length;
+      const out = Float64Array.from(corner);
+      // Two sweeps backwards round the loop let limits propagate across the start line.
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = n - 1; i >= 0; i--) {
+          const next = out[(i + 1) % n];
+          out[i] = Math.min(out[i], Math.sqrt(next * next + 2 * decel * track.step));
+        }
+      }
+      return out;
+    };
+    const caution = this.bySkill(AI_BOOST_CAUTION_LO, AI_BOOST_CAUTION_HI);
+    this.profiles = { track, brake: envelope(BRAKE_DECEL), boost: envelope(BRAKE_DECEL / caution) };
+    return this.profiles;
   }
 
   /** Racers we are catching, placed where we would meet them. */

@@ -179,6 +179,9 @@ Object.assign(window, {
       if (next.yaw !== undefined) orbit.yaw = next.yaw;
       if (next.pitch !== undefined) orbit.pitch = next.pitch;
       if (next.dist !== undefined) orbit.dist = next.dist;
+      placeCamera();
+      ts.update(performance.now() / 1000, camera.position);
+      renderer.render(scene, camera);
     },
     stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, buildMs, length: track.length, ...totals() }),
     track,

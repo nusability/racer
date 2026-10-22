@@ -84,3 +84,30 @@ export function quadFacing(
     b.tri(a, d, c2, ca, cd, cc);
   }
 }
+
+/** Rock faces taller than this are split into bands so the strata show as flat colour bands. */
+const STRATA_BAND = 7;
+
+function lerpP(a: P3, b: P3, t: number): P3 {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+}
+
+/**
+ * A rock quad (a, b along the bottom, c, d along the top: a-b-c-d) split into horizontal bands,
+ * each painted with the stratum at its height, so tall cliffs read as layered sandstone.
+ */
+export function rockQuad(bld: FlatBuilder, paint: Paint, a: P3, b: P3, c: P3, d: P3, dir: P3, shade: number): void {
+  const rise = Math.max(Math.abs(d.y - a.y), Math.abs(c.y - b.y));
+  const bands = Math.max(1, Math.ceil(rise / STRATA_BAND));
+  const col = new THREE.Color();
+  for (let i = 0; i < bands; i++) {
+    const t0 = i / bands;
+    const t1 = (i + 1) / bands;
+    const p0 = lerpP(a, d, t0);
+    const p1 = lerpP(b, c, t0);
+    const p2 = lerpP(b, c, t1);
+    const p3 = lerpP(a, d, t1);
+    paint.strata((p0.y + p2.y) / 2, shade * (0.9 + 0.1 * t1), col);
+    quadFacing(bld, p0, p1, p2, p3, dir, col);
+  }
+}

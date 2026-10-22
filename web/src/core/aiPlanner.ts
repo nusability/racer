@@ -51,7 +51,10 @@ export class PathPlanner {
     lead: number,
     window: number,
   ): number {
-    const rows = Math.max(2, Math.ceil(look / AI_PLAN_STEP) + 1);
+    // Nothing past the farthest blocker changes the answer, so plan only that far.
+    let far = lagDist + window;
+    for (const o of obstacles) far = Math.max(far, track.delta(s, o.s) + o.radius + RACER_RADIUS + clearance + lead);
+    const rows = Math.max(2, Math.ceil(Math.min(look, far) / AI_PLAN_STEP) + 1);
     let half = 0;
     for (let k = 0; k < rows; k++) half = Math.max(half, track.widthAt(s + k * AI_PLAN_STEP) / 2 - RACER_HALF_WIDTH);
     const cols = Math.floor((2 * half) / AI_PLAN_LATERAL) + 1;

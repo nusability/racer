@@ -47,11 +47,18 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 
 ## Core Game Loop
 
-1. {{STEP}}
-2. {{STEP}}
-3. {{STEP}}
+1. **Pick a race**: the next race of a championship cup, or a quick race on any track.
+2. **Race**: six racers, 2–3 laps. Throttle is automatic; the player steers, air-brakes into
+   tight corners and boosts. Boost heats the engines, and overheating locks boost out for a
+   few seconds. The track does the damage: walls scrape speed and hull, pillars and arch legs
+   wreck you, and chasms swallow a racer who leaves a jump too slow. A wreck costs about three
+   seconds and a respawn.
+3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
+   tap to the next race). Spend them in the garage on new racers and upgrades.
 
-**Win / lose / end**: {{HOW A RUN, MATCH OR LEVEL ENDS}}
+**Win / lose / end**: a race ends when everyone finishes, or 20 s after the player does. A cup
+is four races scored 10/8/6/4/2/1; winning it pays a bonus and unlocks the next cup. Winning
+the third cup, the Mirage Grand Prix, makes you Mirage Champion.
 
 ## Tuned Numbers
 
@@ -61,9 +68,24 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 
 | Name | Value | What it controls |
 |---|---|---|
-| {{name}} | {{value}} | {{effect}} |
+| Simulation step | 1/120 s | Fixed step for physics and AI, seeded RNG |
+| Starter top speed | 150 m/s (540 km/h) | Dustwing; racers range 150–198 m/s, up to ~240 m/s upgraded |
+| Boost | ×(1 + 0.22–0.32) top speed | Racer's boostPower; thrusters add 0.03 per level |
+| Boost heat | 0.32 heat/s | About 3 s of boost from cold; cooling 0.2–0.3 heat/s |
+| Overheat | 3 s at 85% top speed | Boost locked out |
+| Boost pad / launch boost | 1.2 s / 0.9 s free boost | No heat |
+| Gravity | 38 m/s² | Jumps read weighty at these speeds |
+| Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
+| Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
+| Laps | 2–3 per track, 7.4–9.8 km | Lap times 45–65 s on the starter racer |
+| Championship pay | 1000/750/550/400/250/150 × 1/4/12 | By place, per cup tier; cup bonus 2k/6k/25k |
+| Quick race pay | 50% of current tier | Scaled by laps |
+| Racer prices | 0 / 3k / 6.5k / 11k / 18k / 30k | Second racer after the first cup |
+| Upgrades | 5 tracks × 5 levels, 300–8500 each | Full set on one racer ≈ one Grand Prix of winnings |
 
 ## Platforms & Scope
+
+web/ prototype only (landscape preferred, portrait supported).
 
 <!-- prototype: "web/ prototype only." pre-prod onward: fill in the list below. -->
 

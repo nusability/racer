@@ -13,6 +13,10 @@ const ARCH_THICKNESS = 6.5;
 const ARCH_DEPTH = 7;
 /** How far the underside of an arch bows up over its opening. */
 const ARCH_BOW = 5;
+/** How steeply the underside drops into the legs either side of the opening. */
+const ARCH_HAUNCH = 1.1;
+/** Extra height of the span's crown over its ends. */
+const ARCH_DOME = 6;
 /** Arch spans run past the road edge into the walls by this much. */
 const ARCH_OVERHANG = 8;
 /** Legs and pillars are buried this far so they never float on a banked road. */
@@ -116,15 +120,20 @@ function span(
   for (let i = 0; i <= steps; i++) xs.push(xMin + ((xMax - xMin) * i) / steps);
   xs.push(openMin, openMax);
   xs.sort((p, q) => p - q);
+  // Underside: a bow over the opening, then curving down into the legs (which hide it), so the
+  // span and legs read as one piece of rock.
   const under = (x: number) => {
-    if (x <= openMin || x >= openMax) return height;
+    if (x <= openMin) return Math.max(0, height - (openMin - x) * ARCH_HAUNCH);
+    if (x >= openMax) return Math.max(0, height - (x - openMax) * ARCH_HAUNCH);
     return height + ARCH_BOW * Math.sin((Math.PI * (x - openMin)) / (openMax - openMin));
   };
-  const thick = xs.map(() => ARCH_THICKNESS * (0.85 + rng() * 0.35));
-  const sag = (x: number) => 1.5 * Math.cos((Math.PI * x) / (xMax - xMin));
-  const corners = xs.map((x, i) => {
+  const mid = (xMin + xMax) / 2;
+  const halfSpan = (xMax - xMin) / 2;
+  const crown = height + ARCH_BOW + ARCH_THICKNESS;
+  const corners = xs.map((x) => {
     const u = under(x);
-    const t = u + thick[i] + sag(x);
+    const dome = crown + ARCH_DOME * (1 - ((x - mid) / halfSpan) ** 2) + rng() * 1.2;
+    const t = Math.max(u + ARCH_THICKNESS * 0.6, dome);
     const d = ARCH_DEPTH / 2;
     return [track.toWorld(s - d, x, u), track.toWorld(s - d, x, t), track.toWorld(s + d, x, t), track.toWorld(s + d, x, u)];
   });

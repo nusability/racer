@@ -54,24 +54,25 @@ export function buildHorizon(cor: Corridor, scenery: TrackScenery, quality: Qual
     cz += s.pos.z / S.length;
   }
   const radius = Math.max(...S.map((s) => Math.hypot(s.pos.x - cx, s.pos.z - cz)));
-  const clear = (x: number, z: number) => {
-    for (let k = 0; k < S.length; k += 25) if (Math.hypot(S[k].pos.x - x, S[k].pos.z - z) < HORIZON_CLEAR) return false;
+  const clear = (x: number, z: number, r: number) => {
+    for (let k = 0; k < S.length; k += 10) if (Math.hypot(S[k].pos.x - x, S[k].pos.z - z) < HORIZON_CLEAR + r) return false;
     return true;
   };
-  const place = (count: number, inner: number, outer: number, make: (c: P3) => void) => {
+  const place = (count: number, inner: number, outer: number, size: () => number, make: (c: P3, r: number) => void) => {
     for (let i = 0, tries = 0; i < count && tries < count * 20; tries++) {
       const a = rng() * Math.PI * 2;
       const d = range(rng, inner, outer);
       const x = cx + Math.cos(a) * d;
       const z = cz + Math.sin(a) * d;
-      if (!clear(x, z)) continue;
-      make({ x, y: cor.ground.natural(x, z) - 6, z });
+      const r = size();
+      // Footprint reaches 1.4 r at the talus, plus the lathe's jitter.
+      if (!clear(x, z, r * 1.7)) continue;
+      make({ x, y: cor.ground.natural(x, z) - 6, z }, r);
       i++;
     }
   };
   const sides = quality === 'high' ? 10 : 7;
-  place(scenery.mesas, radius + HORIZON_MIN, radius + HORIZON_MAX, (c) => {
-    const r = range(rng, 90, 320);
+  place(scenery.mesas, radius + HORIZON_MIN, radius + HORIZON_MAX, () => range(rng, 90, 320), (c, r) => {
     const h = range(rng, 60, 210);
     const tiers: [number, number][] = [
       [r * 1.4, 0],
@@ -84,8 +85,7 @@ export function buildHorizon(cor: Corridor, scenery: TrackScenery, quality: Qual
     lathe(b, c, tiers, sides, rng, cor.paint);
   });
   // Spires stand closer in, so they sweep past and sell the speed.
-  place(scenery.spires, radius * 0.25, radius + HORIZON_MAX * 0.6, (c) => {
-    const r = range(rng, 9, 26);
+  place(scenery.spires, radius * 0.25, radius + HORIZON_MAX * 0.6, () => range(rng, 9, 26), (c, r) => {
     const h = range(rng, 70, 190);
     lathe(b, c, [[r * 1.7, 0], [r, h * 0.3], [r * 0.7, h * 0.78], [r * 1.15, h * 0.86], [r * 0.95, h * 0.95], [r * 0.4, h]], 6, rng, cor.paint);
   });

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { SmoothBuilder } from './builder.ts';
 import {
-  TERRAIN_CELL_FAR,
-  TERRAIN_CELL_NEAR,
+  TERRAIN_CELLS_FAR,
+  TERRAIN_CELLS_NEAR,
   TERRAIN_MARGIN,
   TERRAIN_NEAR_DIST,
   TERRAIN_SKIRT,
@@ -11,8 +11,11 @@ import {
 } from './config.ts';
 import type { Ground } from './ground.ts';
 
+/** Skirts are only glimpsed through hairline cracks; keep them close to the sand's tone. */
+const SKIRT_SHADE = 0.95;
 /** The flat apron past the terrain edge reaches this far out, into full fog. */
 const APRON = 7000;
+const UP = { x: 0, y: 1, z: 0 };
 
 /**
  * Desert heightfield in tiles: tiles the course passes near get fine cells and their own mesh
@@ -55,12 +58,12 @@ export function buildTerrain(ground: Ground, quality: Quality, material: THREE.M
     for (let i = 0; i < nx; i++) {
       const isNear = near[j * nx + i] === 1;
       const b = isNear ? new SmoothBuilder() : far;
-      const cell = isNear ? TERRAIN_CELL_NEAR[quality] : TERRAIN_CELL_FAR[quality];
-      addTile(b, ground, x0 + i * TERRAIN_TILE, z0 + j * TERRAIN_TILE, cell, col);
+      const cells = isNear ? TERRAIN_CELLS_NEAR[quality] : TERRAIN_CELLS_FAR[quality];
+      addTile(b, ground, x0 + i * TERRAIN_TILE, z0 + j * TERRAIN_TILE, cells, col);
       if (isNear) meshes.push(toMesh(b, material));
     }
   }
-  addApron(far, ground, x0, z0, nx * TERRAIN_TILE, nz * TERRAIN_TILE, TERRAIN_CELL_FAR[quality], col);
+  addApron(far, ground, x0, z0, nx * TERRAIN_TILE, nz * TERRAIN_TILE, TERRAIN_TILE / TERRAIN_CELLS_FAR[quality], col);
   meshes.push(toMesh(far, material));
   return meshes;
 }
@@ -74,22 +77,27 @@ function toMesh(b: SmoothBuilder, material: THREE.Material): THREE.Mesh {
   return m;
 }
 
-function addTile(b: SmoothBuilder, ground: Ground, tx: number, tz: number, cell: number, col: THREE.Color) {
-  const n = Math.round(TERRAIN_TILE / cell);
+function addTile(b: SmoothBuilder, ground: Ground, tx: number, tz: number, n: number, col: THREE.Color) {
   const step = TERRAIN_TILE / n;
-  const hs = new Float32Array((n + 1) * (n + 1));
-  for (let j = 0; j <= n; j++) {
-    for (let i = 0; i <= n; i++) hs[j * (n + 1) + i] = ground.meshHeight(tx + i * step, tz + j * step);
+  // Heights include a one-cell ring outside the tile, so normals at the border are computed
+  // exactly as the neighbouring tile computes them and shading runs seamlessly across.
+  const w = n + 3;
+  const hs = new Float32Array(w * w);
+  for (let j = -1; j <= n + 1; j++) {
+    for (let i = -1; i <= n + 1; i++) hs[(j + 1) * w + i + 1] = ground.meshHeight(tx + i * step, tz + j * step);
   }
+  const h = (i: number, j: number) => hs[(j + 1) * w + i + 1];
   const first = b.vertexCount;
-  const h = (i: number, j: number) => hs[Math.min(n, Math.max(0, j)) * (n + 1) + Math.min(n, Math.max(0, i))];
+  const nrm = new THREE.Vector3();
   for (let j = 0; j <= n; j++) {
     for (let i = 0; i <= n; i++) {
       const x = tx + i * step;
       const z = tz + j * step;
       const y = h(i, j);
-      const slope = Math.hypot(h(i + 1, j) - h(i - 1, j), h(i, j + 1) - h(i, j - 1)) / (2 * step);
-      b.vertex({ x, y, z }, ground.color(x, z, y, slope, col));
+      const dx = h(i + 1, j) - h(i - 1, j);
+      const dz = h(i, j + 1) - h(i, j - 1);
+      nrm.set(-dx, 2 * step, -dz).normalize();
+      b.vertex({ x, y, z }, ground.color(x, z, y, Math.hypot(dx, dz) / (2 * step), col), 0, 0, nrm);
     }
   }
   const at = (i: number, j: number) => first + j * (n + 1) + i;
@@ -105,19 +113,22 @@ function addTile(b: SmoothBuilder, ground: Ground, tx: number, tz: number, cell:
       }
     }
   }
-  // Skirts on all four edges, hanging straight down.
+  // Skirts on all four edges, hanging straight down, on their own vertices so they never
+  // bend the surface normals.
   const edges: [number, number, number, number][] = [];
   for (let q = 0; q < n; q++) {
     edges.push([q, 0, q + 1, 0], [q + 1, n, q, n], [0, q + 1, 0, q], [n, q, n, q + 1]);
   }
   for (const [ia, ja, ib, jb] of edges) {
-    const a = at(ia, ja);
-    const bb = at(ib, jb);
-    const pa = { x: tx + ia * step, y: h(ia, ja) - TERRAIN_SKIRT, z: tz + ja * step };
-    const pb = { x: tx + ib * step, y: h(ib, jb) - TERRAIN_SKIRT, z: tz + jb * step };
-    const c = ground.color(pa.x, pa.z, pa.y + TERRAIN_SKIRT, 0, col);
-    const da = b.vertex(pa, c);
-    const db = b.vertex(pb, c);
+    const pa = { x: tx + ia * step, y: h(ia, ja), z: tz + ja * step };
+    const pb = { x: tx + ib * step, y: h(ib, jb), z: tz + jb * step };
+    const c = ground.color(pa.x, pa.z, pa.y, 0, col).multiplyScalar(SKIRT_SHADE);
+    const out = { x: (pa.x + pb.x) / 2 - (tx + TERRAIN_TILE / 2), y: 0, z: (pa.z + pb.z) / 2 - (tz + TERRAIN_TILE / 2) };
+    nrm.set(out.x, 0, out.z).normalize();
+    const a = b.vertex(pa, c, 0, 0, nrm);
+    const bb = b.vertex(pb, c, 0, 0, nrm);
+    const da = b.vertex({ ...pa, y: pa.y - TERRAIN_SKIRT }, c, 0, 0, nrm);
+    const db = b.vertex({ ...pb, y: pb.y - TERRAIN_SKIRT }, c, 0, 0, nrm);
     b.tri(a, da, bb);
     b.tri(bb, da, db);
   }
@@ -138,13 +149,13 @@ function addApron(b: SmoothBuilder, ground: Ground, x0: number, z0: number, w: n
   const outer: number[] = [];
   for (const p of ring) {
     const y = ground.meshHeight(p.x, p.z);
-    inner.push(b.vertex({ x: p.x, y, z: p.z }, ground.color(p.x, p.z, y, 0, col)));
+    inner.push(b.vertex({ x: p.x, y, z: p.z }, ground.color(p.x, p.z, y, 0, col), 0, 0, UP));
     const dx = p.x - cx;
     const dz = p.z - cz;
     const l = Math.hypot(dx, dz);
     const ox = p.x + (dx / l) * APRON;
     const oz = p.z + (dz / l) * APRON;
-    outer.push(b.vertex({ x: ox, y: ground.base, z: oz }, ground.color(ox, oz, ground.base, 0, col)));
+    outer.push(b.vertex({ x: ox, y: ground.base, z: oz }, ground.color(ox, oz, ground.base, 0, col), 0, 0, UP));
   }
   for (let q = 0; q < ring.length; q++) {
     const r = (q + 1) % ring.length;

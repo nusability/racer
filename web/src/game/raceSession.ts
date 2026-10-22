@@ -9,6 +9,7 @@ import { racerById } from '../data/racers.ts';
 import { trackById } from '../data/tracks/index.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import type { GameAudio } from '../audio/audio.ts';
+import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
 import { ChaseCamera } from '../render/chaseCamera.ts';
 import { Effects } from '../render/effects.ts';
 import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
@@ -23,6 +24,8 @@ import {
   SESSION_DUST_RANGE,
   SESSION_FINISH_LINGER,
   SESSION_GO_SHOWN,
+  SESSION_HARD_LANDING,
+  SESSION_INVULNERABLE_BLINK,
   SESSION_MAX_FRAME_DT,
   SESSION_SHAKE_HIT,
   SESSION_SHAKE_LAND,
@@ -251,11 +254,12 @@ export class RaceSession {
         const i = this.indexOf(ev.id);
         if (this.nearCamera(i)) {
           this.worldPos(i, this.tmpPos);
-          this.effects.landing(this.tmpPos, ev.impact);
+          this.effects.landing(this.tmpPos, Math.min(1, ev.impact / SESSION_HARD_LANDING));
         }
         if (ev.id === pid) {
-          audio.oneShot('land', ev.impact);
-          this.cam.addShake(SESSION_SHAKE_LAND * ev.impact);
+          const hard = Math.min(1, ev.impact / SESSION_HARD_LANDING);
+          audio.oneShot('land', hard);
+          this.cam.addShake(SESSION_SHAKE_LAND * hard);
         }
         return;
       }
@@ -324,6 +328,11 @@ export class RaceSession {
       const v = this.views[i];
       lerpSnapshot(this.track, v.prev, v.curr, alpha, v.draw);
       poseObject(this.track, v.draw, v.model.root);
+      if (r.crashed <= 0) {
+        const blinkOn = r.invulnerable <= 0 || Math.floor(this.clock * SESSION_INVULNERABLE_BLINK) % 2 === 0;
+        const inLens = i !== pi && v.model.root.position.distanceTo(this.cam.camera.position) < CAM_HIDE_NEAR;
+        v.model.root.visible = blinkOn && !inLens;
+      }
       const stats = this.request.entrants[i].stats;
       v.model.update(dt, this.clock, {
         speed: r.speed,
