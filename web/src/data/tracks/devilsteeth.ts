@@ -10,6 +10,7 @@ export const devilsteeth: TrackDef = {
   laps: 3,
   seed: 606,
   width: 34,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -700, y: 0 },
@@ -45,6 +46,7 @@ export const devilsteeth: TrackDef = {
     { kind: 'boulders', from: 11.3, to: 11.9, count: 8, radius: 2.5 },
     { kind: 'boostPad', at: 12.5, lateral: 0 },
   ],
+  branches: [],
   palette: { sky: 0x5a8cc8, horizon: 0xeab088, sand: 0xc8784a, road: 0xa86a48, rock: 0x8a3020, accent: 0xffd040, sun: 0xffe6c0, dusk: 0.3 },
 };
 

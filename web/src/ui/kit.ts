@@ -88,6 +88,8 @@ export function pips(level: number, max: number): HTMLElement {
 export interface SegmentOption<T extends string> {
   value: T;
   label: string;
+  /** Small second line under the label. */
+  sub?: string;
 }
 
 /** A row of mutually exclusive buttons; ids are `<surface>_<field>_<value>_button`. */
@@ -105,7 +107,8 @@ export function segmented<T extends string>(
     const b = button({
       id: `${idPrefix}_${opt.value}_button`,
       label: opt.label,
-      aria: `${aria}: ${opt.label}`,
+      sub: opt.sub,
+      aria: `${aria}: ${opt.label}${opt.sub ? ` (${opt.sub})` : ''}`,
       variant: 'ghost',
       onTap: () => {
         buttons.forEach((x, i) => setOn(x, options[i].value === opt.value));

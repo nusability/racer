@@ -1,4 +1,5 @@
 import type { TrackParam } from '../../core/types.ts';
+import type { LandmarkKind } from '../../render/landmarks/types.ts';
 
 // Presentation-only dressing for a track: what stands around the course, never on it. The
 // simulation never reads this, so it can change without touching race behaviour.
@@ -18,4 +19,18 @@ export interface TrackScenery {
   scatterPerKm: number;
   /** Palm groves around a pool beside the road; side -1 = left, 1 = right. */
   oases: { at: TrackParam; side: -1 | 1 }[];
+  /** Unique set pieces beside the course. */
+  landmarks: LandmarkPlacement[];
+}
+
+export interface LandmarkPlacement {
+  kind: LandmarkKind;
+  /** Main-loop position it stands beside. */
+  at: TrackParam;
+  side: -1 | 1;
+  /** Gap between the hard boundary of the track and the landmark's footprint, metres. */
+  distance: number;
+  /** Extra rotation about Y, radians (0 = facing the track). */
+  heading?: number;
+  scale?: number;
 }

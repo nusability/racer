@@ -1,22 +1,27 @@
-// Builds a closed, uniformly sampled track from a TrackDef and answers track-space queries.
-// The simulation lives entirely in track space (s, x, y); only presentation calls toWorld.
+// Builds uniformly sampled ribbons (the closed main loop and open shortcut branches) and
+// answers track-space queries. The simulation lives entirely in track space (s, x, y); only
+// presentation calls toWorld.
 
 import type {
   Arch,
   BoostPad,
+  BranchDef,
   Jump,
   Obstacle,
+  TrackControlPoint,
   TrackDef,
   TrackFeature,
   TrackSample,
   Vec3,
 } from './types.ts';
+import { catmullRom, cross, makeFrame, normalize, smoothstep, vec3, type Frame } from './geom.ts';
 import { mulberry32, range } from './rng.ts';
 import {
   ARCH_LEG_MIN_RADIUS,
   BANK_PER_CURVATURE,
   BOOST_PAD_LENGTH,
   BOOST_PAD_WIDTH,
+  BRANCH_JUNCTION_LENGTH,
   CHASM_DEPTH,
   DEFAULT_NARROW_BLEND,
   KICKER_BACK_FRACTION,
@@ -28,62 +33,31 @@ import {
   TRACK_SPLINE_SUBDIVISIONS,
 } from '../data/tuning.ts';
 
-export interface Frame {
-  pos: Vec3;
-  tangent: Vec3;
-  right: Vec3;
-  up: Vec3;
+export { makeFrame, vec3, type Frame } from './geom.ts';
+
+/** What a ribbon is built from: the main loop's def or a branch's derived one. */
+export interface RibbonSpec {
+  id: string;
+  closed: boolean;
+  seed: number;
+  width: number;
+  runoff: number;
+  points: TrackControlPoint[];
+  features: TrackFeature[];
 }
 
-export function vec3(x = 0, y = 0, z = 0): Vec3 {
-  return { x, y, z };
+/** Extra edge room a junction needs, applied after the ribbon's own features. */
+interface EdgeOverride {
+  s0: number;
+  s1: number;
+  side: -1 | 1;
+  /** The edge sits this far beyond that side's road edge (0 = a wall at the road edge). */
+  extra: number;
 }
 
-export function makeFrame(): Frame {
-  return { pos: vec3(), tangent: vec3(), right: vec3(), up: vec3() };
-}
-
-function normalize(v: Vec3): Vec3 {
-  const l = Math.hypot(v.x, v.y, v.z);
-  if (l === 0) throw new Error('normalize: zero-length vector (degenerate track geometry)');
-  v.x /= l;
-  v.y /= l;
-  v.z /= l;
-  return v;
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return vec3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-}
-
-function smoothstep(t: number): number {
-  const c = Math.min(1, Math.max(0, t));
-  return c * c * (3 - 2 * c);
-}
-
-/** Centripetal Catmull-Rom between p1 and p2. */
-function catmullRom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 {
-  const alpha = 0.5;
-  const d = (a: Vec3, b: Vec3) => Math.max(1e-4, Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) ** alpha);
-  const t0 = 0;
-  const t1 = t0 + d(p0, p1);
-  const t2 = t1 + d(p1, p2);
-  const t3 = t2 + d(p2, p3);
-  const u = t1 + (t2 - t1) * t;
-  const lerp = (a: Vec3, b: Vec3, ta: number, tb: number) => {
-    const w = (u - ta) / (tb - ta);
-    return vec3(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w, a.z + (b.z - a.z) * w);
-  };
-  const a1 = lerp(p0, p1, t0, t1);
-  const a2 = lerp(p1, p2, t1, t2);
-  const a3 = lerp(p2, p3, t2, t3);
-  const b1 = lerp(a1, a2, t0, t2);
-  const b2 = lerp(a2, a3, t1, t3);
-  return lerp(b1, b2, t1, t2);
-}
-
-export class Track {
-  readonly def: TrackDef;
+export class Ribbon {
+  readonly id: string;
+  readonly closed: boolean;
   readonly length: number;
   readonly step: number;
   readonly samples: TrackSample[];
@@ -91,36 +65,47 @@ export class Track {
   readonly arches: Arch[] = [];
   readonly boostPads: BoostPad[] = [];
   readonly jumps: Jump[] = [];
-  /** Arc length at each control point, plus the full length at the end. */
+  /** Arc length at each control point (for a closed loop, plus the full length at the end). */
   private readonly pointS: number[];
   private readonly buckets: Obstacle[][];
+  /** Number of resampled intervals; samples.length is count (closed) or count + 1 (open). */
   private readonly count: number;
 
-  constructor(def: TrackDef) {
-    this.def = def;
-    const n = def.points.length;
-    if (n < 4) throw new Error(`Track ${def.id}: needs at least 4 control points, has ${n}`);
+  constructor(spec: RibbonSpec, edgeOverrides: EdgeOverride[] = []) {
+    this.id = spec.id;
+    this.closed = spec.closed;
+    const n = spec.points.length;
+    if (n < 4) throw new Error(`Ribbon ${spec.id}: needs at least 4 control points, has ${n}`);
 
-    // 1. Dense closed spline.
-    const ctrl = def.points.map((p) => vec3(p.x, p.y, p.z));
-    const widths = def.points.map((p) => p.width ?? def.width);
+    // 1. Dense spline. An open ribbon mirrors its end points to give the end segments a tangent.
+    const ctrl = spec.points.map((p) => vec3(p.x, p.y, p.z));
+    const widths = spec.points.map((p) => p.width ?? spec.width);
+    const at = (i: number): Vec3 => {
+      if (this.closed) return ctrl[(i + n) % n];
+      if (i < 0) return vec3(2 * ctrl[0].x - ctrl[1].x, 2 * ctrl[0].y - ctrl[1].y, 2 * ctrl[0].z - ctrl[1].z);
+      if (i >= n) {
+        const a = ctrl[n - 1];
+        const b = ctrl[n - 2];
+        return vec3(2 * a.x - b.x, 2 * a.y - b.y, 2 * a.z - b.z);
+      }
+      return ctrl[i];
+    };
+    const segments = this.closed ? n : n - 1;
     const dense: Vec3[] = [];
     const denseW: number[] = [];
     const segStart: number[] = [];
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < segments; i++) {
       segStart.push(dense.length);
-      const p0 = ctrl[(i - 1 + n) % n];
-      const p1 = ctrl[i];
-      const p2 = ctrl[(i + 1) % n];
-      const p3 = ctrl[(i + 2) % n];
+      const w0 = widths[i];
+      const w1 = widths[(i + 1) % n];
       for (let k = 0; k < TRACK_SPLINE_SUBDIVISIONS; k++) {
         const t = k / TRACK_SPLINE_SUBDIVISIONS;
-        dense.push(catmullRom(p0, p1, p2, p3, t));
-        denseW.push(widths[i] + (widths[(i + 1) % n] - widths[i]) * smoothstep(t));
+        dense.push(catmullRom(at(i - 1), at(i), at(i + 1), at(i + 2), t));
+        denseW.push(w0 + (w1 - w0) * smoothstep(t));
       }
     }
-    dense.push({ ...dense[0] });
-    denseW.push(denseW[0]);
+    dense.push(this.closed ? { ...dense[0] } : { ...ctrl[n - 1] });
+    denseW.push(this.closed ? denseW[0] : widths[n - 1]);
     const cum = [0];
     for (let i = 1; i < dense.length; i++) {
       const a = dense[i - 1];
@@ -136,12 +121,13 @@ export class Track {
     this.length = total;
     this.step = total / count;
     this.count = count;
+    const ns = this.closed ? count : count + 1;
     const pos: Vec3[] = [];
     const width: number[] = [];
     let j = 0;
-    for (let k = 0; k < count; k++) {
-      const s = k * this.step;
-      while (cum[j + 1] < s) j++;
+    for (let k = 0; k < ns; k++) {
+      const s = Math.min(total, k * this.step);
+      while (j < cum.length - 2 && cum[j + 1] < s) j++;
       const w = (s - cum[j]) / (cum[j + 1] - cum[j]);
       const a = dense[j];
       const b = dense[j + 1];
@@ -151,41 +137,54 @@ export class Track {
 
     // 3. Horizontal curvature from heading change, smoothed.
     const heading: number[] = [];
-    for (let k = 0; k < count; k++) {
-      const a = pos[(k - 1 + count) % count];
-      const b = pos[(k + 1) % count];
+    for (let k = 0; k < ns; k++) {
+      const a = pos[this.nb(k, -1)];
+      const b = pos[this.nb(k, 1)];
       heading.push(Math.atan2(b.x - a.x, -(b.z - a.z)));
     }
     const rawCurv: number[] = [];
-    for (let k = 0; k < count; k++) {
-      let dh = heading[(k + 1) % count] - heading[(k - 1 + count) % count];
+    for (let k = 0; k < ns; k++) {
+      const a = this.nb(k, -1);
+      const b = this.nb(k, 1);
+      let dh = heading[b] - heading[a];
       while (dh > Math.PI) dh -= 2 * Math.PI;
       while (dh < -Math.PI) dh += 2 * Math.PI;
-      rawCurv.push(dh / (2 * this.step));
+      rawCurv.push(dh / ((b - a === 0 ? 1 : this.closed ? 2 : b - a) * this.step));
     }
     const curvature = this.smooth(rawCurv);
 
-    // 4. Features that shape elevation, width and the sky above.
+    // 4. Features that shape elevation, width, edges and the sky above.
     const elev = pos.map((p) => p.y);
-    const gap = new Array<boolean>(count).fill(false);
-    const ceiling = new Array<number>(count).fill(Infinity);
-    const wallHeight = new Array<number>(count).fill(0);
-    const rng = mulberry32(def.seed);
-    for (const f of def.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight);
+    const gap = new Array<boolean>(ns).fill(false);
+    const ceiling = new Array<number>(ns).fill(Infinity);
+    const wallHeight = new Array<number>(ns).fill(0);
+    const runL = new Array<number>(ns).fill(spec.runoff);
+    const runR = new Array<number>(ns).fill(spec.runoff);
+    const rng = mulberry32(spec.seed);
+    for (const f of spec.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight, runL, runR);
+    const edgeL = width.map((w, k) => w / 2 + runL[k]);
+    const edgeR = width.map((w, k) => w / 2 + runR[k]);
+    for (const o of edgeOverrides) {
+      this.forRange(o.s0, o.s1, (k) => {
+        const edge = width[k] / 2 + o.extra;
+        if (o.side < 0) edgeL[k] = edge;
+        else edgeR[k] = edge;
+      });
+    }
 
     // 5. Slope, bank, frames. Differences never straddle a gap edge: the chasm floor sits at
     // the base elevation, so a central difference at a lip would read the drop as a steep
     // downslope and launch racers into the pit instead of over it.
     const prevOf = (k: number) => {
-      const p = (k - 1 + count) % count;
+      const p = this.nb(k, -1);
       return gap[p] === gap[k] ? p : k;
     };
     const nextOf = (k: number) => {
-      const q = (k + 1) % count;
+      const q = this.nb(k, 1);
       return gap[q] === gap[k] ? q : k;
     };
     const slope: number[] = [];
-    for (let k = 0; k < count; k++) {
+    for (let k = 0; k < ns; k++) {
       const a = prevOf(k);
       const b = nextOf(k);
       const span = (a === k ? 0 : 1) + (b === k ? 0 : 1);
@@ -194,10 +193,10 @@ export class Track {
     const bank = this.smooth(curvature.map((c) => Math.max(-MAX_BANK, Math.min(MAX_BANK, c * BANK_PER_CURVATURE))));
     const worldUp = vec3(0, 1, 0);
     this.samples = [];
-    for (let k = 0; k < count; k++) {
+    for (let k = 0; k < ns; k++) {
       const p = vec3(pos[k].x, elev[k], pos[k].z);
-      const a = pos[(k - 1 + count) % count];
-      const b = pos[(k + 1) % count];
+      const a = pos[this.nb(k, -1)];
+      const b = pos[this.nb(k, 1)];
       // Horizontal run of the central difference with the gap-safe slope for the rise.
       const run = Math.hypot(b.x - a.x, b.z - a.z);
       const t = normalize(vec3(b.x - a.x, slope[k] * run, b.z - a.z));
@@ -206,7 +205,7 @@ export class Track {
       const c = Math.cos(bank[k]);
       const sn = Math.sin(bank[k]);
       this.samples.push({
-        s: k * this.step,
+        s: Math.min(total, k * this.step),
         pos: p,
         tangent: t,
         right: vec3(r0.x * c - u0.x * sn, r0.y * c - u0.y * sn, r0.z * c - u0.z * sn),
@@ -218,11 +217,13 @@ export class Track {
         gap: gap[k],
         ceiling: ceiling[k],
         wallHeight: wallHeight[k],
+        edgeL: edgeL[k],
+        edgeR: edgeR[k],
       });
     }
 
     // 6. Things standing on the road.
-    for (const f of def.features) this.applyObjects(f, rng);
+    for (const f of spec.features) this.applyObjects(f, rng);
     this.obstacles.sort((a, b) => a.s - b.s);
     this.buckets = Array.from({ length: Math.ceil(this.length / OBSTACLE_BUCKET) }, () => []);
     for (const o of this.obstacles) {
@@ -230,27 +231,38 @@ export class Track {
       const lo = Math.floor((o.s - o.radius) / OBSTACLE_BUCKET);
       const hi = Math.floor((o.s + o.radius) / OBSTACLE_BUCKET);
       for (let b = lo; b <= hi; b++) {
+        if (!this.closed && (b < 0 || b >= this.buckets.length)) continue;
         this.buckets[((b % this.buckets.length) + this.buckets.length) % this.buckets.length].push(o);
       }
     }
   }
 
+  /** Neighbour sample index d steps away (clamped at the ends of an open ribbon). */
+  private nb(k: number, d: number): number {
+    const ns = this.closed ? this.count : this.count + 1;
+    if (this.closed) return (k + d + ns) % ns;
+    return Math.max(0, Math.min(ns - 1, k + d));
+  }
+
   /** Arc length of a control-point parameter (see TrackParam). */
   paramToS(u: number): number {
-    const n = this.def.points.length;
-    if (u < 0 || u > n) throw new Error(`Track ${this.def.id}: feature param ${u} outside 0..${n}`);
-    const i = Math.min(n - 1, Math.floor(u));
+    const segments = this.pointS.length - 1;
+    if (u < 0 || u > segments) throw new Error(`Ribbon ${this.id}: feature param ${u} outside 0..${segments}`);
+    const i = Math.min(segments - 1, Math.floor(u));
     const f = u - i;
     return this.pointS[i] + (this.pointS[i + 1] - this.pointS[i]) * f;
   }
 
+  /** A closed loop wraps s; an open ribbon clamps it to its ends. */
   wrap(s: number): number {
+    if (!this.closed) return Math.max(0, Math.min(this.length, s));
     const r = s % this.length;
     return r < 0 ? r + this.length : r;
   }
 
-  /** Signed forward distance from a to b, in (-length/2, length/2]. */
+  /** Signed forward distance from a to b (on a loop: the short way round). */
   delta(a: number, b: number): number {
+    if (!this.closed) return b - a;
     let d = this.wrap(b - a);
     if (d > this.length / 2) d -= this.length;
     return d;
@@ -258,8 +270,12 @@ export class Track {
 
   private indexOf(s: number): { i: number; f: number; i2: number } {
     const w = this.wrap(s) / this.step;
-    const i = Math.floor(w) % this.samples.length;
-    return { i, f: w - Math.floor(w), i2: (i + 1) % this.samples.length };
+    if (!this.closed) {
+      const i = Math.min(this.count - 1, Math.floor(w));
+      return { i, f: Math.min(1, w - i), i2: i + 1 };
+    }
+    const i = Math.floor(w) % this.count;
+    return { i, f: w - Math.floor(w), i2: (i + 1) % this.count };
   }
 
   /** The nearest sample (no interpolation): for flags like gap and ceiling. */
@@ -268,13 +284,26 @@ export class Track {
     return this.samples[f < 0.5 ? i : i2];
   }
 
-  private lerpScalar(s: number, key: 'width' | 'curvature' | 'slope' | 'bank'): number {
+  private lerpScalar(s: number, key: 'width' | 'curvature' | 'slope' | 'bank' | 'edgeL' | 'edgeR'): number {
     const { i, f, i2 } = this.indexOf(s);
     return this.samples[i][key] + (this.samples[i2][key] - this.samples[i][key]) * f;
   }
 
+  /** Road width (edge to edge of the paved surface). */
   widthAt(s: number): number {
     return this.lerpScalar(s, 'width');
+  }
+  /** Hard boundary on the left, as a negative x. */
+  minXAt(s: number): number {
+    return -this.lerpScalar(s, 'edgeL');
+  }
+  /** Hard boundary on the right, as a positive x. */
+  maxXAt(s: number): number {
+    return this.lerpScalar(s, 'edgeR');
+  }
+  /** True when x is on the paved road rather than the sand run-off. */
+  onRoad(s: number, x: number): boolean {
+    return Math.abs(x) <= this.widthAt(s) / 2;
   }
   curvatureAt(s: number): number {
     return this.lerpScalar(s, 'curvature');
@@ -312,9 +341,7 @@ export class Track {
       o.z = va.z + (vb.z - va.z) * f;
       return o;
     };
-    out.pos.x = a.pos.x + (b.pos.x - a.pos.x) * f;
-    out.pos.y = a.pos.y + (b.pos.y - a.pos.y) * f;
-    out.pos.z = a.pos.z + (b.pos.z - a.pos.z) * f;
+    mix(a.pos, b.pos, out.pos);
     normalize(mix(a.tangent, b.tangent, out.tangent));
     normalize(mix(a.right, b.right, out.right));
     normalize(mix(a.up, b.up, out.up));
@@ -330,6 +357,39 @@ export class Track {
     return out;
   }
 
+  /**
+   * World → track space near a hint: the s and lateral x of the closest centreline point
+   * within `window` metres of sHint (horizontal distance). Used to hand a racer between the
+   * main loop and a branch at a junction.
+   */
+  project(p: Vec3, sHint: number, window: number): { s: number; x: number } {
+    const k0 = Math.round(this.wrap(sHint) / this.step);
+    const reach = Math.ceil(window / this.step);
+    let best = -1;
+    let bestD = Infinity;
+    for (let d = -reach; d <= reach; d++) {
+      const k = this.closed ? this.nb(k0, d) : k0 + d;
+      if (k < 0 || k >= this.samples.length) continue;
+      const q = this.samples[k].pos;
+      const dd = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+      if (dd < bestD) {
+        bestD = dd;
+        best = k;
+      }
+    }
+    if (best < 0) throw new Error(`Ribbon ${this.id}: nothing to project onto near s=${sHint}`);
+    const smp = this.samples[best];
+    const dx = p.x - smp.pos.x;
+    const dz = p.z - smp.pos.z;
+    const along = dx * smp.tangent.x + dz * smp.tangent.z;
+    const tanH = Math.hypot(smp.tangent.x, smp.tangent.z);
+    const rightH = Math.hypot(smp.right.x, smp.right.z);
+    return {
+      s: this.wrap(smp.s + along / tanH),
+      x: (dx * smp.right.x + dz * smp.right.z) / (rightH * rightH),
+    };
+  }
+
   /** Obstacles whose centre is within `ahead` metres in front of s or `behind` behind it. */
   obstaclesNear(s: number, behind: number, ahead: number, out: Obstacle[] = []): Obstacle[] {
     out.length = 0;
@@ -337,6 +397,7 @@ export class Track {
     const lo = Math.floor((s - behind) / OBSTACLE_BUCKET);
     const hi = Math.floor((s + ahead) / OBSTACLE_BUCKET);
     for (let b = lo; b <= hi && b - lo < nb; b++) {
+      if (!this.closed && (b < 0 || b >= nb)) continue;
       for (const o of this.buckets[((b % nb) + nb) % nb]) {
         const d = this.delta(s, o.s);
         if (d >= -behind && d <= ahead && !out.includes(o)) out.push(o);
@@ -348,25 +409,27 @@ export class Track {
   // ---------------------------------------------------------------------------
 
   private smooth(values: number[]): number[] {
-    const n = values.length;
     const r = TRACK_SMOOTH_RADIUS;
     return values.map((_, k) => {
       let sum = 0;
-      for (let d = -r; d <= r; d++) sum += values[(k + d + n) % n];
+      for (let d = -r; d <= r; d++) sum += values[this.nb(k, d)];
       return sum / (2 * r + 1);
     });
   }
 
-  /** Calls fn(k, t) for every sample index between s0 and s1 (wrapping), t = 0..1 along it. */
+  /** Calls fn(k, t) for every sample index between s0 and s1 (wrapping on a loop), t = 0..1 along it. */
   private forRange(s0: number, s1: number, fn: (k: number, t: number, ds: number) => void) {
+    if (!this.closed && s1 < s0) throw new Error(`Ribbon ${this.id}: range ${s0}..${s1} runs backwards`);
     const len = s1 >= s0 ? s1 - s0 : s1 + this.length - s0;
     const n = this.count;
-    const k0 = Math.ceil(s0 / this.step);
+    const k0 = Math.ceil(s0 / this.step - 1e-9);
     const steps = Math.floor(len / this.step);
     for (let q = 0; q <= steps; q++) {
       const ds = (k0 + q) * this.step - s0;
-      if (ds > len) break;
-      fn((((k0 + q) % n) + n) % n, len === 0 ? 0 : ds / len, ds);
+      if (ds > len + 1e-9) break;
+      const k = this.closed ? (((k0 + q) % n) + n) % n : k0 + q;
+      if (k > n) break;
+      fn(k, len === 0 ? 0 : ds / len, ds);
     }
   }
 
@@ -377,7 +440,13 @@ export class Track {
     gap: boolean[],
     ceiling: number[],
     wallHeight: number[],
+    runL: number[],
+    runR: number[],
   ) {
+    const sides = (side: -1 | 1 | undefined, fn: (arr: number[]) => void) => {
+      if (side !== 1) fn(runL);
+      if (side !== -1) fn(runR);
+    };
     switch (f.kind) {
       case 'dunes': {
         const s0 = this.paramToS(f.from);
@@ -408,11 +477,29 @@ export class Track {
         break;
       }
       case 'tunnel': {
-        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => (ceiling[k] = f.ceiling));
+        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => {
+          ceiling[k] = f.ceiling;
+          runL[k] = 0;
+          runR[k] = 0;
+        });
         break;
       }
       case 'canyon': {
-        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => (wallHeight[k] = f.wallHeight));
+        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => {
+          wallHeight[k] = f.wallHeight;
+          runL[k] = 0;
+          runR[k] = 0;
+        });
+        break;
+      }
+      case 'walls': {
+        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => sides(f.side, (arr) => (arr[k] = 0)));
+        break;
+      }
+      case 'runoff': {
+        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) =>
+          sides(f.side, (arr) => (arr[k] = f.amount)),
+        );
         break;
       }
       case 'narrow': {
@@ -475,4 +562,102 @@ export class Track {
         break;
     }
   }
+}
+
+/** A shortcut ribbon and where it meets the main loop. */
+export interface Branch {
+  index: number;
+  def: BranchDef;
+  ribbon: Ribbon;
+  side: -1 | 1;
+  /** Main-loop s where the branch leaves (start of the entry junction) and rejoins (end of the exit junction). */
+  entryS: number;
+  exitS: number;
+  /**
+   * Lateral offset from the main centreline to the branch centreline inside the junctions:
+   * the branch runs alongside the main road, edge to edge.
+   */
+  junctionOffset: number;
+}
+
+/** The main loop plus its branches. Existing code treats a Track as its main ribbon. */
+export class Track extends Ribbon {
+  readonly def: TrackDef;
+  readonly branches: Branch[];
+
+  constructor(def: TrackDef) {
+    // The main loop's edge on a branch's side opens up at the junctions so racers can move
+    // across, and closes into a divider wall between them.
+    const probe = new Ribbon(mainSpec(def));
+    const overrides: EdgeOverride[] = [];
+    for (const b of def.branches) {
+      const entryS = probe.paramToS(b.from);
+      const exitS = probe.paramToS(b.to);
+      if (exitS - entryS < 4 * BRANCH_JUNCTION_LENGTH) {
+        throw new Error(`Track ${def.id}: branch ${b.id} must leave and rejoin in order and be longer than its junctions`);
+      }
+      overrides.push({ s0: entryS, s1: entryS + BRANCH_JUNCTION_LENGTH, side: b.side, extra: b.width });
+      overrides.push({ s0: entryS + BRANCH_JUNCTION_LENGTH, s1: exitS - BRANCH_JUNCTION_LENGTH, side: b.side, extra: 0 });
+      overrides.push({ s0: exitS - BRANCH_JUNCTION_LENGTH, s1: exitS, side: b.side, extra: b.width });
+    }
+    super(mainSpec(def), overrides);
+    this.def = def;
+    this.branches = def.branches.map((b, index) => buildBranch(this, b, index));
+  }
+
+  /** The ribbon a racer is on: -1 = this loop, else a branch. */
+  ribbon(branch: number): Ribbon {
+    if (branch < 0) return this;
+    const b = this.branches[branch];
+    if (!b) throw new Error(`Track ${this.def.id}: no branch ${branch}`);
+    return b.ribbon;
+  }
+}
+
+function mainSpec(def: TrackDef): RibbonSpec {
+  return {
+    id: def.id,
+    closed: true,
+    seed: def.seed,
+    width: def.width,
+    runoff: def.runoff,
+    points: def.points,
+    features: def.features,
+  };
+}
+
+function buildBranch(main: Track, b: BranchDef, index: number): Branch {
+  const entryS = main.paramToS(b.from);
+  const exitS = main.paramToS(b.to);
+  const offset = (s: number) => b.side * (main.widthAt(s) / 2 + b.width / 2);
+  const onMain = (s: number): TrackControlPoint => {
+    const p = main.toWorld(s, offset(s), 0);
+    return { x: p.x, y: p.y, z: p.z, width: b.width };
+  };
+  const points = [
+    onMain(entryS),
+    onMain(entryS + BRANCH_JUNCTION_LENGTH),
+    ...b.points,
+    onMain(exitS - BRANCH_JUNCTION_LENGTH),
+    onMain(exitS),
+  ];
+  const spec: RibbonSpec = {
+    id: `${main.def.id}/${b.id}`,
+    closed: false,
+    seed: main.def.seed + index + 1,
+    width: b.width,
+    runoff: b.runoff,
+    points,
+    features: b.features,
+  };
+  const ribbonProbe = new Ribbon(spec);
+  // Inside the junctions the branch's main-facing edge opens across the main road.
+  const towardMain = (b.side === 1 ? -1 : 1) as -1 | 1;
+  const endJ = ribbonProbe.paramToS(1);
+  const startExitJ = ribbonProbe.paramToS(points.length - 2);
+  const ribbon = new Ribbon(spec, [
+      { s0: 0, s1: endJ, side: towardMain, extra: main.widthAt(entryS) },
+      { s0: startExitJ, s1: ribbonProbe.length, side: towardMain, extra: main.widthAt(exitS) },
+  ]);
+  return { index, def: b, ribbon, side: b.side, entryS, exitS, junctionOffset: offset(entryS) };
 }

@@ -1,3 +1,5 @@
+@import './tokens.css';
+
 .pause-overlay {
   position: absolute;
   inset: 0;
@@ -20,16 +22,16 @@
   border: 2px solid rgba(255, 170, 80, 0.5);
   text-align: center;
   color: #ffe9cc;
-  font-family: inherit;
+  font-family: var(--font);
 }
 .pause-panel h2 { margin: 0 0 8px; letter-spacing: 0.2em; }
 .pause-btn {
+  font-family: var(--font);
   min-height: 52px;
   border-radius: 12px;
   border: 2px solid rgba(255, 170, 80, 0.6);
   background: transparent;
   color: #ffe9cc;
-  font: inherit;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.1em;

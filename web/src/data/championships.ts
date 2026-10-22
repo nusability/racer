@@ -20,7 +20,10 @@ export interface CupDef {
   tier: number;
   blurb: string;
   trackIds: string[];
-  /** Exactly five; ordered strongest first (front of the race-1 grid). */
+  /**
+   * Exactly five; ordered strongest first (front of the race-1 grid). Each cup has one clear
+   * front-runner and a tail of beatable rivals, so a struggling player still scores points.
+   */
   rivals: RivalDef[];
   /** Cup unlocked by winning this one, or null for the final cup. */
   unlocks: string | null;
@@ -40,11 +43,11 @@ export const CUPS: CupDef[] = [
     blurb: 'Salt pans and switchbacks. Prove you can hold a line at speed.',
     trackIds: ['sunpan', 'rattlesnake', 'oasis', 'bonecanyon'],
     rivals: [
-      { id: 'rasha', name: 'Rasha Dunmore', racerId: 'sirocco', skill: 0.55, upgradeLevel: 1 },
-      { id: 'kesh', name: 'Kesh Varo', racerId: 'scarab', skill: 0.5, upgradeLevel: 1 },
-      { id: 'imra', name: 'Imra Sol', racerId: 'dustwing', skill: 0.42, upgradeLevel: 1 },
-      { id: 'barrow', name: 'Barrow Quill', racerId: 'scarab', skill: 0.36, upgradeLevel: 0 },
-      { id: 'tamsin', name: 'Tamsin Hale', racerId: 'dustwing', skill: 0.3, upgradeLevel: 0 },
+      { id: 'rasha', name: 'Rasha Dunmore', racerId: 'sirocco', skill: 0.45, upgradeLevel: 1 },
+      { id: 'kesh', name: 'Kesh Varo', racerId: 'scarab', skill: 0.34, upgradeLevel: 0 },
+      { id: 'imra', name: 'Imra Sol', racerId: 'dustwing', skill: 0.28, upgradeLevel: 0 },
+      { id: 'barrow', name: 'Barrow Quill', racerId: 'scarab', skill: 0.24, upgradeLevel: 0 },
+      { id: 'tamsin', name: 'Tamsin Hale', racerId: 'dustwing', skill: 0.2, upgradeLevel: 0 },
     ],
     unlocks: 'canyon',
   },
@@ -55,11 +58,11 @@ export const CUPS: CupDef[] = [
     blurb: 'Tight rock, long drops. The walls start to bite.',
     trackIds: ['oasis', 'bonecanyon', 'glasssea', 'devilsteeth'],
     rivals: [
-      { id: 'vey', name: 'Vey Kadir', racerId: 'viper', skill: 0.75, upgradeLevel: 3 },
-      { id: 'oren', name: 'Oren Sirr', racerId: 'quadra', skill: 0.69, upgradeLevel: 2 },
-      { id: 'nyx', name: 'Nyx Ashgrove', racerId: 'sirocco', skill: 0.63, upgradeLevel: 2 },
-      { id: 'dax', name: 'Dax Marrow', racerId: 'quadra', skill: 0.56, upgradeLevel: 1 },
-      { id: 'pell', name: 'Pell Ostrava', racerId: 'scarab', skill: 0.5, upgradeLevel: 1 },
+      { id: 'vey', name: 'Vey Kadir', racerId: 'viper', skill: 0.65, upgradeLevel: 3 },
+      { id: 'oren', name: 'Oren Sirr', racerId: 'quadra', skill: 0.55, upgradeLevel: 2 },
+      { id: 'nyx', name: 'Nyx Ashgrove', racerId: 'sirocco', skill: 0.49, upgradeLevel: 1 },
+      { id: 'dax', name: 'Dax Marrow', racerId: 'quadra', skill: 0.44, upgradeLevel: 1 },
+      { id: 'pell', name: 'Pell Ostrava', racerId: 'scarab', skill: 0.4, upgradeLevel: 1 },
     ],
     unlocks: 'mirage',
   },

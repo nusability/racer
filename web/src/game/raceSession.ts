@@ -18,6 +18,7 @@ import { SpeedLines } from '../render/speedLines.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/trackScene.ts';
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
+import { createMinimap, type Minimap } from '../ui/minimap.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
 import type { Hud, InputSource, RaceOutcome, RaceRequest, Settings } from './types.ts';
 import {
@@ -70,6 +71,9 @@ export class RaceSession {
   private countdown: number | null = null;
   private countdownClearAt = 0;
   private scrapeLevel = 0;
+  private shownBranch = -1;
+  private readonly minimap: Minimap;
+  private readonly dotColors: string[];
   private finishedFor = 0;
   private paused = false;
   private done = false;
@@ -114,6 +118,8 @@ export class RaceSession {
     ctx.uiRoot.appendChild(this.hudRoot);
     this.hud = createHud(this.hudRoot, () => this.pause());
     this.input = createInput(this.hudRoot, ctx.settings);
+    this.minimap = createMinimap(this.hudRoot, this.track);
+    this.dotColors = request.entrants.map((e) => `#${racerById(e.racerId).visual.primary.toString(16).padStart(6, '0')}`);
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
@@ -169,6 +175,8 @@ export class RaceSession {
     this.acc = 0;
     this.finishedFor = 0;
     this.countdown = null;
+    this.shownBranch = -1;
+    this.cam.reset();
     this.syncSnapshots(true);
     for (const v of this.views) v.model.root.visible = true;
   }
@@ -191,6 +199,8 @@ export class RaceSession {
       while (this.acc >= SIM_DT) {
         this.acc -= SIM_DT;
         const events = this.race.step(input);
+        // A nudge is a displacement, not a rate: it must land on exactly one step.
+        input.nudge = 0;
         this.syncSnapshots(false);
         for (const ev of events) this.handleEvent(ev);
       }
@@ -303,7 +313,7 @@ export class RaceSession {
   }
 
   private nearCamera(i: number): boolean {
-    return Math.abs(this.track.delta(this.player().s, this.race.racers[i].s)) < SESSION_DUST_RANGE;
+    return this.views[i].model.root.position.distanceTo(this.cam.camera.position) < SESSION_DUST_RANGE;
   }
 
   private wallSparks(i: number, side: -1 | 1, intensity: number) {
@@ -362,7 +372,12 @@ export class RaceSession {
     const speedFrac = p.speed / top;
     const pv = this.views[pi].draw;
     // The camera follows the interpolated pose, not the raw step, or it judders.
-    this.cam.update(dt, this.track, { ...p, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
+    this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
+    if (pv.branch !== this.shownBranch) {
+      if (pv.branch >= 0) this.hud.flash(this.track.branches[pv.branch].def.name.toUpperCase());
+      this.shownBranch = pv.branch;
+    }
+    this.minimap.update(this.race.racers, pi, this.dotColors);
     this.speedLines.update(dt, Math.max(0, Math.min(1, (speedFrac - 0.45) * 1.6)) + (p.boosting ? 0.35 : 0));
     this.effects.update(dt, this.cam.camera);
     this.trackScene.update(this.clock, this.cam.camera.position);
@@ -396,6 +411,7 @@ export class RaceSession {
     this.ctx.audio.stopRaceSounds();
     this.pauseClose?.();
     this.input.dispose();
+    this.minimap.dispose();
     this.hud.dispose();
     this.hudRoot.remove();
     this.speedLines.dispose();

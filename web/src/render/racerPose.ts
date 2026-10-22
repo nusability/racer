@@ -2,12 +2,13 @@
 // simulation steps so motion is smooth at any display rate.
 
 import * as THREE from 'three';
-import type { Track } from '../core/track.ts';
+import type { Ribbon, Track } from '../core/track.ts';
 import { makeFrame } from '../core/track.ts';
 import type { RacerState, Vec3 } from '../core/types.ts';
 import { POSE_MAX_PITCH, POSE_VISUAL_HOVER } from './cameraTuning.ts';
 
 export interface PoseSnapshot {
+  branch: number;
   s: number;
   x: number;
   y: number;
@@ -18,6 +19,7 @@ export interface PoseSnapshot {
 }
 
 export function snapshot(r: RacerState, out: PoseSnapshot): PoseSnapshot {
+  out.branch = r.branch;
   out.s = r.s;
   out.x = r.x;
   out.y = r.y;
@@ -29,12 +31,21 @@ export function snapshot(r: RacerState, out: PoseSnapshot): PoseSnapshot {
 }
 
 export function emptySnapshot(): PoseSnapshot {
-  return { s: 0, x: 0, y: 0, yaw: 0, roll: 0, vy: 0, speed: 0 };
+  return { branch: -1, s: 0, x: 0, y: 0, yaw: 0, roll: 0, vy: 0, speed: 0 };
 }
 
-/** Blend a → b by alpha, unwrapping s across the start line. */
+/**
+ * Blend a → b by alpha, unwrapping s across the start line. Across a hand-over between the
+ * main loop and a branch the two s values live on different ribbons, so take b as is.
+ */
 export function lerpSnapshot(track: Track, a: PoseSnapshot, b: PoseSnapshot, alpha: number, out: PoseSnapshot) {
-  out.s = track.wrap(a.s + track.delta(a.s, b.s) * alpha);
+  if (a.branch !== b.branch) {
+    Object.assign(out, b);
+    return out;
+  }
+  const ribbon = track.ribbon(b.branch);
+  out.branch = b.branch;
+  out.s = ribbon.wrap(a.s + ribbon.delta(a.s, b.s) * alpha);
   out.x = a.x + (b.x - a.x) * alpha;
   out.y = a.y + (b.y - a.y) * alpha;
   out.yaw = a.yaw + (b.yaw - a.yaw) * alpha;
@@ -58,6 +69,10 @@ const zAxis = new THREE.Vector3(0, 0, 1);
 
 /** Writes position + orientation into obj. Forward of the model is −Z. */
 export function poseObject(track: Track, s: PoseSnapshot, obj: THREE.Object3D) {
+  poseOnRibbon(track.ribbon(s.branch), s, obj);
+}
+
+function poseOnRibbon(track: Ribbon, s: PoseSnapshot, obj: THREE.Object3D) {
   track.toWorld(s.s, s.x, s.y + POSE_VISUAL_HOVER, p, frame);
   obj.position.set(p.x, p.y, p.z);
   t.set(frame.tangent.x, frame.tangent.y, frame.tangent.z);

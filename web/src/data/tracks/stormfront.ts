@@ -10,6 +10,7 @@ export const stormfront: TrackDef = {
   laps: 3,
   seed: 808,
   width: 32,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -800, y: 0 },
@@ -45,6 +46,7 @@ export const stormfront: TrackDef = {
     { kind: 'jump', at: 12.2, rampLength: 80, rampHeight: 6, gapLength: 75 },
     { kind: 'boostPad', at: 13.6, lateral: 0 },
   ],
+  branches: [],
   palette: { sky: 0x3a3a4e, horizon: 0xb48a62, sand: 0xa8805a, road: 0x8e6c4a, rock: 0x5e3a30, accent: 0xffc820, sun: 0xffb070, dusk: 0.7 },
 };
 

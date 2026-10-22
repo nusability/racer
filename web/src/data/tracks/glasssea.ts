@@ -10,6 +10,7 @@ export const glasssea: TrackDef = {
   laps: 2,
   seed: 505,
   width: 40,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -792, y: 0 },
@@ -37,6 +38,7 @@ export const glasssea: TrackDef = {
     { kind: 'boostPad', at: 12.3, lateral: -8 },
     { kind: 'boostPad', at: 12.3, lateral: 8 },
   ],
+  branches: [],
   palette: { sky: 0x2c2458, horizon: 0xff9a62, sand: 0xd9927a, road: 0xa8706a, rock: 0x6a3a58, accent: 0x40e0ff, sun: 0xffa060, dusk: 0.8 },
 };
 

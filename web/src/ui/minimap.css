@@ -1,0 +1,19 @@
+@import './tokens.css';
+
+.minimap {
+  position: absolute;
+  z-index: 21;
+  top: calc(var(--safe-t) + 64px);
+  right: var(--safe-r);
+  width: 120px;
+  height: 120px;
+  border-radius: 14px;
+  background: rgba(26, 12, 6, 0.35);
+  pointer-events: none;
+}
+@media (orientation: portrait) {
+  .minimap {
+    width: 96px;
+    height: 96px;
+  }
+}

@@ -10,6 +10,7 @@ export const sunpan: TrackDef = {
   laps: 3,
   seed: 101,
   width: 40,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -700, y: 0 },
@@ -36,6 +37,7 @@ export const sunpan: TrackDef = {
     { kind: 'dunes', from: 7.8, to: 8.9, amplitude: 2.5, wavelength: 220 },
     { kind: 'boostPad', at: 10.5, lateral: 6 },
   ],
+  branches: [],
   palette: { sky: 0x3d7fd0, horizon: 0xf3dfb8, sand: 0xeedcbc, road: 0xd8b07a, rock: 0xc07848, accent: 0xff5a2a, sun: 0xfff2d8, dusk: 0 },
 };
 

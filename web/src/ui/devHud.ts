@@ -16,6 +16,22 @@ if (!['drag', 'tilt', 'buttons'].includes(steering)) throw new Error(`hud-viewer
 const layer = h('div', 'race-layer');
 layer.style.cssText = 'position:absolute;inset:0';
 root.append(layer);
+// Stand-ins for what the session draws: a road strip with the craft, and the minimap slot.
+const ROAD_HALF_WIDTH_M = 25;
+/** Rate (m/s) a full steer command moves the target in this fake; the sim owns the real one. */
+const FAKE_STEER_RATE_MPS = 40;
+const road = h('div');
+road.style.cssText = 'position:absolute;left:20%;right:20%;top:46%;height:6px;background:rgba(60,30,10,.5);border-radius:3px';
+const craft = h('div');
+craft.style.cssText = 'position:absolute;top:-9px;width:24px;height:24px;margin-left:-12px;border-radius:6px;background:#3cf2ff;box-shadow:0 0 12px #3cf2ff';
+road.append(craft);
+root.append(road);
+const minimap = h('div');
+minimap.style.cssText = 'position:absolute;right:max(14px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 60px);width:var(--mm);height:var(--mm);border:2px dashed rgba(255,255,255,.6);border-radius:10px;z-index:30;pointer-events:none';
+minimap.style.setProperty('--mm', window.innerWidth > window.innerHeight ? '120px' : '96px');
+root.append(minimap);
+let craftX = 0;
+let nudgeTotal = 0;
 const readout = h('pre');
 readout.style.cssText = 'position:absolute;left:50%;top:8px;transform:translateX(-50%);margin:0;padding:4px 8px;background:rgba(0,0,0,.5);color:#fff;font:12px monospace;z-index:30;pointer-events:none';
 root.append(readout);
@@ -44,6 +60,10 @@ function frame(now: number): void {
   const t = racing ? -countdownLeft : 0;
   const lap = 1 + Math.floor(t / LAP_S);
   if (lap !== lastLap && lap <= 3) hud.flash(lap === 3 ? 'FINAL LAP' : `LAP ${lap}`);
+  if (racing && Math.floor(t / 7) !== Math.floor((t - dt) / 7)) hud.flash("SMUGGLER'S CUT");
+  craftX = Math.max(-ROAD_HALF_WIDTH_M, Math.min(ROAD_HALF_WIDTH_M, craftX + inp.nudge + inp.steer * FAKE_STEER_RATE_MPS * dt));
+  nudgeTotal += inp.nudge;
+  craft.style.left = `${((craftX + ROAD_HALF_WIDTH_M) / (2 * ROAD_HALF_WIDTH_M)) * 100}%`;
   lastLap = lap;
   const heat = racing ? (Math.sin(t * 0.6) * 0.5 + 0.5) * 1.05 : 0;
   const view: HudView = {
@@ -62,7 +82,7 @@ function frame(now: number): void {
     finished: false,
   };
   hud.update(view);
-  readout.textContent = `steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${steering}`;
+  readout.textContent = `x ${craftX.toFixed(1)}m  nudgeΣ ${nudgeTotal.toFixed(1)}m  steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${steering}`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

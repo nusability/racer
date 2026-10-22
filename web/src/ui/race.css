@@ -95,7 +95,10 @@
   top: 24%;
   left: 50%;
   transform: translate(-50%, 0);
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--safe-l));
+  text-align: center;
+  line-height: 1;
   font-size: 44px;
   font-weight: 900;
   font-style: italic;
@@ -108,13 +111,21 @@
 /* --- Touch controls --------------------------------------------------------------------------- */
 .touch { position: absolute; inset: 0; z-index: 15; touch-action: none; }
 .touch.no-touch { display: none; }
-.tc-zone { position: absolute; left: 0; top: 0; bottom: 0; width: 60%; touch-action: none; }
-.tc-ring,
-.tc-knob { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; transition: opacity 120ms; pointer-events: none; }
-.tc-ring { width: 140px; height: 140px; margin: -70px 0 0 -70px; border: 3px solid rgba(248, 227, 192, 0.45); background: rgba(20, 8, 2, 0.18); }
-.tc-knob { width: 60px; height: 60px; margin: -30px 0 0 -30px; background: rgba(248, 227, 192, 0.85); box-shadow: 0 0 16px rgba(255, 173, 74, 0.6); }
-.tc-zone.is-active .tc-ring,
-.tc-zone.is-active .tc-knob { opacity: 1; }
+.tc-zone { position: absolute; left: 0; top: 0; bottom: 0; width: 65%; touch-action: none; }
+.tc-dot,
+.tc-trail { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; will-change: transform; }
+.tc-dot {
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  background: rgba(248, 227, 192, 0.35);
+  border: 2px solid rgba(248, 227, 192, 0.8);
+  box-shadow: 0 0 14px rgba(255, 173, 74, 0.55);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.tc-zone.is-active .tc-dot { opacity: 1; }
+.tc-trail { width: 18px; height: 18px; margin: -9px 0 0 -9px; background: var(--orange-hi); opacity: 0; }
 
 .tc-btn {
   position: absolute;
@@ -160,7 +171,7 @@
 .tc-right.is-held { background: var(--sand); color: var(--ink); }
 
 @media (orientation: portrait) {
-  .hud__bottom { left: auto; right: var(--safe-r); top: calc(var(--safe-t) + 64px); bottom: auto; transform: none; align-items: flex-end; width: 170px; }
+  .hud__bottom { left: var(--safe-l); top: calc(var(--safe-t) + 128px); bottom: auto; transform: none; align-items: flex-start; width: 170px; }
   .hud__speed-n { font-size: 46px; }
   .hud__count { font-size: 120px; margin-top: -60px; }
   .hud__flash { font-size: 34px; }

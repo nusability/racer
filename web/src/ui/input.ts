@@ -6,8 +6,14 @@ import type { PlayerInput } from '../core/types.ts';
 import type { InputSource, Settings } from '../game/types.ts';
 import { h } from './kit.ts';
 
-/** Drag distance (px) for full lock at sensitivity 1; higher sensitivity needs less. */
-const DRAG_FULL_LOCK_PX = 70;
+/**
+ * Slide steering: metres the craft's lateral target moves per CSS pixel of finger travel at
+ * sensitivity 1. A ~120 px thumb sweep crosses a ~50 m road, so the craft sits under the thumb.
+ */
+const SLIDE_METRES_PER_PX = 50 / 120;
+/** Trail dots behind the slide indicator, and how long each fades. */
+const SLIDE_TRAIL_DOTS = 6;
+const SLIDE_TRAIL_FADE_MS = 220;
 /** Seconds for digital steering (keys, buttons) to ramp from centre to full lock. */
 const DIGITAL_STEER_RAMP_S = 0.12;
 /** Tilt (degrees) for full lock at sensitivity 1. */
@@ -85,40 +91,45 @@ export function createInput(root: HTMLElement, settings: Settings): InputSource 
   const left = holdButton('race_left_button', 'tc-left', '◀', 'Steer left');
   const right = holdButton('race_right_button', 'tc-right', '▶', 'Steer right');
 
-  // Drag steering: analog, relative to where the thumb landed.
+  // Slide steering (trackpad): finger travel moves the craft's lateral target directly, so
+  // lifting the finger leaves the craft where it is. Movement accumulates until read().
   const zone = h('div', 'tc-zone');
-  const ring = h('div', 'tc-ring');
-  const knob = h('div', 'tc-knob');
-  zone.append(ring, knob);
+  const dot = h('div', 'tc-dot');
+  const trail = Array.from({ length: SLIDE_TRAIL_DOTS }, () => h('div', 'tc-trail'));
+  zone.append(...trail, dot);
+  const metresPerPx = SLIDE_METRES_PER_PX * settings.sensitivity;
   let dragId: number | null = null;
-  let dragX0 = 0;
-  /** Thumb origin inside the zone, cached at touch-down so moves never read layout. */
-  let ringX = 0;
-  let ringY = 0;
-  let dragSteer = 0;
-  const fullLockPx = DRAG_FULL_LOCK_PX / settings.sensitivity;
+  let lastX = 0;
+  /** Zone origin, cached at touch-down so moves never read layout. */
+  let zoneLeft = 0;
+  let zoneTop = 0;
+  let trailNext = 0;
+  let nudge = 0;
 
-  function placeThumb(): void {
-    ring.style.transform = `translate3d(${ringX}px, ${ringY}px, 0)`;
-    knob.style.transform = `translate3d(${ringX + dragSteer * fullLockPx}px, ${ringY}px, 0)`;
+  function placeDot(x: number, y: number): void {
+    dot.style.transform = `translate3d(${x - zoneLeft}px, ${y - zoneTop}px, 0)`;
   }
   zone.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (dragId !== null) return;
     zone.setPointerCapture(e.pointerId);
     dragId = e.pointerId;
-    dragX0 = e.clientX;
-    dragSteer = 0;
+    lastX = e.clientX;
     const r = zone.getBoundingClientRect();
-    ringX = e.clientX - r.left;
-    ringY = e.clientY - r.top;
-    placeThumb();
+    zoneLeft = r.left;
+    zoneTop = r.top;
+    placeDot(e.clientX, e.clientY);
     zone.classList.add('is-active');
   });
   zone.addEventListener('pointermove', (e) => {
     if (e.pointerId !== dragId) return;
-    dragSteer = clamp1((e.clientX - dragX0) / fullLockPx);
-    placeThumb();
+    nudge += (e.clientX - lastX) * metresPerPx;
+    lastX = e.clientX;
+    placeDot(e.clientX, e.clientY);
+    const t = trail[trailNext];
+    trailNext = (trailNext + 1) % trail.length;
+    t.style.transform = dot.style.transform;
+    t.animate([{ opacity: 0.45 }, { opacity: 0 }], { duration: SLIDE_TRAIL_FADE_MS, fill: 'forwards' });
   });
   const endDrag = (e: PointerEvent) => {
     if (e.pointerId !== dragId) return;
@@ -126,7 +137,6 @@ export function createInput(root: HTMLElement, settings: Settings): InputSource 
   };
   function releaseDrag(): void {
     dragId = null;
-    dragSteer = 0;
     zone.classList.remove('is-active');
   }
   zone.addEventListener('pointerup', endDrag);
@@ -172,6 +182,7 @@ export function createInput(root: HTMLElement, settings: Settings): InputSource 
     left.release();
     right.release();
     releaseDrag();
+    nudge = 0;
     tiltSteer = 0;
   }
   const onVisibility = () => {
@@ -200,9 +211,11 @@ export function createInput(root: HTMLElement, settings: Settings): InputSource 
       const target = (anyKey(KEYS_RIGHT) || right.held() ? 1 : 0) - (anyKey(KEYS_LEFT) || left.held() ? 1 : 0);
       const step = dt / DIGITAL_STEER_RAMP_S;
       digital = target > digital ? Math.min(target, digital + step) : Math.max(target, digital - step);
-      const analog = settings.steering === 'drag' ? dragSteer : settings.steering === 'tilt' ? tiltSteer : 0;
+      const taken = nudge;
+      nudge = 0;
       return {
-        steer: clamp1(analog + digital),
+        steer: clamp1((settings.steering === 'tilt' ? tiltSteer : 0) + digital),
+        nudge: taken,
         boost: boost.held() || anyKey(KEYS_BOOST),
         brake: brake.held() || anyKey(KEYS_BRAKE),
       };

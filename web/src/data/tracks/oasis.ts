@@ -10,6 +10,7 @@ export const oasis: TrackDef = {
   laps: 3,
   seed: 303,
   width: 36,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -800, y: 2 },
@@ -35,6 +36,7 @@ export const oasis: TrackDef = {
     { kind: 'boostPad', at: 6.9, lateral: -8 },
     { kind: 'dunes', from: 9.2, to: 11.5, amplitude: 2, wavelength: 180 },
   ],
+  branches: [],
   palette: { sky: 0x3f86cf, horizon: 0xf5d9a6, sand: 0xe9c486, road: 0xcfa26a, rock: 0xb8743c, accent: 0x18b8c8, sun: 0xfff3d6, dusk: 0.05 },
 };
 

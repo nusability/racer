@@ -10,6 +10,7 @@ export const bonecanyon: TrackDef = {
   laps: 3,
   seed: 404,
   width: 30,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -600, y: 0 },
@@ -41,6 +42,7 @@ export const bonecanyon: TrackDef = {
     { kind: 'boulders', from: 9.3, to: 10.0, count: 10, radius: 3 },
     { kind: 'boostPad', at: 11.3, lateral: 0 },
   ],
+  branches: [],
   palette: { sky: 0x6a9cd0, horizon: 0xf2e6d0, sand: 0xe6d8bc, road: 0xc8b490, rock: 0xe8dcc4, accent: 0xd03020, sun: 0xfff6e6, dusk: 0.15 },
 };
 

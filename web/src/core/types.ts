@@ -22,7 +22,7 @@ export interface TrackControlPoint {
   z: number;
   /** Base elevation of the road surface. */
   y: number;
-  /** Drivable width (wall to wall) from here to the next point; interpolated. */
+  /** Road width (edge to edge) from here to the next point; interpolated. */
   width?: number;
 }
 
@@ -53,7 +53,14 @@ export type TrackFeature =
   /** Seeded scatter of boulders between from..to. */
   | { kind: 'boulders'; from: TrackParam; to: TrackParam; count: number; radius: number }
   /** Boost pad on the road surface: free boost without heat. */
-  | { kind: 'boostPad'; at: TrackParam; lateral: number };
+  | { kind: 'boostPad'; at: TrackParam; lateral: number }
+  /**
+   * Hard walls at the road edge (no sand run-off) on one side or both (side omitted).
+   * Canyons and tunnels already imply walls on both sides.
+   */
+  | { kind: 'walls'; from: TrackParam; to: TrackParam; side?: -1 | 1 }
+  /** Run-off override: drivable sand beyond the road edge, metres, on one side or both. */
+  | { kind: 'runoff'; from: TrackParam; to: TrackParam; amount: number; side?: -1 | 1 };
 
 export interface TrackPalette {
   sky: number; // zenith colour
@@ -76,12 +83,44 @@ export interface TrackDef {
   difficulty: number;
   laps: number;
   seed: number;
-  /** Default drivable width when a point doesn't set one. */
+  /** Default road width when a point doesn't set one. */
   width: number;
+  /**
+   * Default drivable sand beyond each road edge, metres, before the hard boundary. Sand is
+   * slower than the road, so cutting across it is a choice, not a free shortcut.
+   */
+  runoff: number;
   /** Closed loop: the last point connects back to the first. The start line is at point 0. */
   points: TrackControlPoint[];
   features: TrackFeature[];
+  /** Alternative routes that leave and rejoin the main loop (shortcuts). */
+  branches: BranchDef[];
   palette: TrackPalette;
+}
+
+/**
+ * A shortcut: an open ribbon that leaves the main road from one side and rejoins it later.
+ * At each end it runs alongside the main road, edge to edge, for BRANCH_JUNCTION_LENGTH
+ * metres (the junction, where racers can cross between the two); between the junctions a
+ * divider wall separates them. The builder derives the two junction control points at each
+ * end, so the full control list is [entry, entry + J, ...points, exit − J, exit] and branch
+ * features use that list's parameter space: 0..1 is the entry junction, 2 is points[0], and
+ * points.length + 2 .. points.length + 3 is the exit junction.
+ */
+export interface BranchDef {
+  id: string;
+  /** Shown on the minimap and in flashes, e.g. "Smuggler's Cut". */
+  name: string;
+  /** Side of the main road it leaves from and rejoins on. */
+  side: -1 | 1;
+  /** Main-loop params where it leaves and rejoins; from < to (never across the start line). */
+  from: TrackParam;
+  to: TrackParam;
+  width: number;
+  /** Default sand run-off of the branch; walled by default (0) to make it a commitment. */
+  runoff: number;
+  points: TrackControlPoint[];
+  features: TrackFeature[];
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +150,12 @@ export interface TrackSample {
   ceiling: number;
   /** Visual canyon wall height, 0 when none (low berm). */
   wallHeight: number;
+  /**
+   * Hard boundary distance from the centreline on the left and right (both positive, both ≥
+   * width/2). Between the road edge and the boundary is drivable sand.
+   */
+  edgeL: number;
+  edgeR: number;
 }
 
 /** A solid obstacle in track space: a vertical cylinder standing on the road. */
@@ -195,9 +240,19 @@ export type UpgradeId = 'engine' | 'thrusters' | 'steering' | 'cooling' | 'armor
 // Race simulation (src/core/race.ts)
 // ---------------------------------------------------------------------------
 
+/**
+ * The racer is driven by a lateral TARGET position, not by heading: the craft always flies
+ * along the track and slides sideways to where the pilot puts it (very fast, but not
+ * instantly). Two ways to move the target, which add up:
+ */
 export interface PlayerInput {
-  /** -1 (full left) .. 1 (full right). */
+  /** Rate command, -1 (full left) .. 1 (full right): keys, buttons, tilt. */
   steer: number;
+  /**
+   * Trackpad-style displacement of the target, metres, applied once (the step that receives
+   * it). Positive = right. The drag control turns finger movement into this.
+   */
+  nudge: number;
   /** Air brake held. */
   brake: boolean;
   /** Boost held. */
@@ -222,7 +277,9 @@ export interface RaceConfig {
 
 export interface RacerState {
   id: string;
-  /** Position along the lap, 0..track.length. */
+  /** -1 on the main loop, else the index into track.branches the racer is on. */
+  branch: number;
+  /** Position along the current ribbon (main: 0..track.length; branch: 0..branch length). */
   s: number;
   /** Total distance covered since the start line, for ordering. */
   distance: number;
@@ -233,9 +290,9 @@ export interface RacerState {
   vy: number;
   /** Forward speed, m/s. */
   speed: number;
-  /** Lateral slide velocity in track space, m/s. */
+  /** Sideways velocity in track space, m/s (+ = moving right). */
   vx: number;
-  /** Heading relative to the track tangent, radians (+ = pointing right). */
+  /** Visual heading relative to the track tangent, radians (+ = pointing right): presentation only. */
   yaw: number;
   /** Visual roll the presentation can use, radians. */
   roll: number;
@@ -257,7 +314,7 @@ export interface RacerState {
   place: number;
   /** Best lap time so far (s) or null. */
   bestLap: number | null;
-  /** Steering actually applied this step (-1..1), for presentation. */
+  /** Steer rate command applied this step (-1..1), for presentation. */
   steer: number;
   /** Seconds left of post-respawn invulnerability (obstacles and racers pass through). */
   invulnerable: number;
@@ -266,6 +323,8 @@ export interface RacerState {
 export type RaceEvent =
   | { type: 'countdown'; n: number } // 3, 2, 1, 0 = GO
   | { type: 'scrape'; id: string; side: -1 | 1; intensity: number }
+  /** Entered (on: true) or left (on: false) the sand run-off beyond the road edge. */
+  | { type: 'offroad'; id: string; on: boolean }
   | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number }
   | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'obstacle' }
   | { type: 'respawn'; id: string }

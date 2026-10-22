@@ -9,8 +9,8 @@ export const MAX_SENSITIVITY = 1.5;
 const SENSITIVITY_STEP = 0.1;
 
 const STEERING_HELP: Record<SteeringMode, string> = {
-  drag: 'Touch the left side and slide your thumb left or right.',
-  tilt: 'Tilt the phone like a wheel.',
+  drag: 'Slide a thumb anywhere on the left: the craft follows it, and stays put when you lift.',
+  tilt: 'Tilt the phone like a wheel; the more you tilt, the faster you slide.',
   buttons: 'Left and right buttons, bottom-left.',
 };
 
@@ -25,7 +25,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
     'settings_steering',
     'Steering',
     [
-      { value: 'drag', label: 'DRAG' },
+      { value: 'drag', label: 'SLIDE', sub: 'drag the craft' },
       { value: 'tilt', label: 'TILT' },
       { value: 'buttons', label: 'BUTTONS' },
     ],

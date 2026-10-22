@@ -11,6 +11,7 @@ export const mirageh: TrackDef = {
   laps: 3,
   seed: 707,
   width: 32,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -700, y: 10 },
@@ -39,6 +40,7 @@ export const mirageh: TrackDef = {
     { kind: 'kicker', at: 14.4, length: 40, height: 2.5 },
     { kind: 'boostPad', at: 15.5, lateral: 0 },
   ],
+  branches: [],
   palette: { sky: 0x4a7ec0, horizon: 0xf0b878, sand: 0xd8a060, road: 0xb88050, rock: 0x9a5030, accent: 0xff3a5a, sun: 0xffe0b0, dusk: 0.45 },
 };
 

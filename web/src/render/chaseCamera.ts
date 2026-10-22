@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import type { Track } from '../core/track.ts';
-import { makeFrame } from '../core/track.ts';
+import { makeFrame, type Frame } from '../core/track.ts';
 import type { RacerState, Vec3 } from '../core/types.ts';
 import {
   CAM_BACK_BOOST,
@@ -37,6 +37,7 @@ export class ChaseCamera {
   private readonly target = new THREE.Vector3();
   private readonly trackUp = new THREE.Vector3();
   private initialised = false;
+  private branch = -1;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAM_FOV_MIN, aspect, 0.5, 3200);
@@ -54,21 +55,28 @@ export class ChaseCamera {
     const backTarget = CAM_BACK_MIN + (CAM_BACK_MAX - CAM_BACK_MIN) * Math.min(1, speedFrac) + CAM_BACK_BOOST * boost;
     this.back += (backTarget - this.back) * k;
 
+    // Keep the smoothed lateral offset continuous when the racer changes ribbon.
+    if (p.branch !== this.branch) {
+      const b = track.branches[p.branch < 0 ? this.branch : p.branch];
+      this.x += p.branch < 0 ? b.junctionOffset : -b.junctionOffset;
+      this.branch = p.branch;
+    }
+    const ribbon = track.ribbon(p.branch);
     const sCam = p.s - this.back;
-    const half = track.widthAt(sCam) / 2 - CAM_WALL_MARGIN;
+    const half = Math.min(-ribbon.minXAt(sCam), ribbon.maxXAt(sCam)) - CAM_WALL_MARGIN;
     const xTarget = Math.max(-half, Math.min(half, p.x * CAM_LATERAL_FOLLOW));
     this.x += (xTarget - this.x) * k;
     let yTarget = p.y + CAM_HEIGHT;
-    const ceiling = Math.min(track.ceilingAt(sCam), track.ceilingAt(p.s));
+    const ceiling = Math.min(ribbon.ceilingAt(sCam), ribbon.ceilingAt(p.s));
     if (Number.isFinite(ceiling)) yTarget = Math.min(yTarget, ceiling - CAM_CEILING_MARGIN);
     // Over a chasm keep following the racer's height rather than the missing surface.
     this.y += (yTarget - this.y) * k;
 
-    track.toWorld(sCam, this.x, this.y, this.tmp, this.frame);
+    placeOnCourse(track, p.branch, sCam, this.x, this.y, this.tmp, this.frame);
     this.camera.position.set(this.tmp.x, this.tmp.y, this.tmp.z);
     this.trackUp.set(this.frame.up.x, this.frame.up.y, this.frame.up.z);
 
-    track.toWorld(p.s + CAM_LOOK_AHEAD, p.x, p.y + CAM_LOOK_HEIGHT, this.tmp, this.frame);
+    placeOnCourse(track, p.branch, p.s + CAM_LOOK_AHEAD, p.x, p.y + CAM_LOOK_HEIGHT, this.tmp, this.frame);
     this.target.set(this.tmp.x, this.tmp.y, this.tmp.z);
 
     // Follow the road's bank partly so turns lean, but never fully (nausea on phones).
@@ -89,8 +97,29 @@ export class ChaseCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Snap instead of easing on the next update (start, restart). */
+  reset() {
+    this.initialised = false;
+    this.branch = -1;
+  }
+
   resize(aspect: number) {
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
   }
+}
+
+/**
+ * A point on the racer's ribbon, continuing onto the main loop past either end of a branch
+ * (the branch runs alongside the main road there), so the camera can trail behind or look
+ * ahead across a junction.
+ */
+function placeOnCourse(track: Track, branch: number, s: number, x: number, y: number, out: Vec3, frame: Frame) {
+  if (branch >= 0) {
+    const b = track.branches[branch];
+    if (s < 0) return track.toWorld(b.entryS + s, x + b.junctionOffset, y, out, frame);
+    if (s > b.ribbon.length) return track.toWorld(b.exitS + s - b.ribbon.length, x + b.junctionOffset, y, out, frame);
+    return b.ribbon.toWorld(s, x, y, out, frame);
+  }
+  return track.toWorld(s, x, y, out, frame);
 }

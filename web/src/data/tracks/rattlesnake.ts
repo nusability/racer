@@ -10,6 +10,7 @@ export const rattlesnake: TrackDef = {
   laps: 3,
   seed: 202,
   width: 34,
+  runoff: 0,
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 700, z: 0, y: 0 },
@@ -38,6 +39,7 @@ export const rattlesnake: TrackDef = {
     { kind: 'dunes', from: 12.1, to: 13.8, amplitude: 2, wavelength: 200 },
     { kind: 'boostPad', at: 13.2, lateral: -7 },
   ],
+  branches: [],
   palette: { sky: 0x4f8ed0, horizon: 0xf0c890, sand: 0xe2a868, road: 0xc8905a, rock: 0xa8522e, accent: 0x2ad0a0, sun: 0xfff0d0, dusk: 0.1 },
 };
 

@@ -74,46 +74,43 @@ export const DAMAGE_TOP_SPEED_LOSS = 0.08;
 /** Top speed multiplier while overheated. */
 export const OVERHEAT_TOP_SPEED = 0.85;
 
-// Steering and slide
-/** How fast applied steer follows the input, per second: removes touch-input jitter. */
-export const STEER_SLEW = 8;
-/** Fraction of steering authority lost at STEER_FADE_SPEED: high speed is twitchy enough. */
-export const STEER_SPEED_FADE = 0.5;
-export const STEER_FADE_SPEED = 250;
-/** Air brake multiplies steering authority: the brake-drift into hairpins. */
-export const BRAKE_TURN_MULT = 1.7;
-/** Weak pull of the nose back toward the track direction, 1/s; small so you must steer. */
-export const YAW_SELF_CENTER = 0.4;
-/** The nose never points further than this from the track direction, radians. */
-export const MAX_YAW = 0.7;
-/** Frenet denominator floor: keeps ds/dt finite on the inside of very tight turns. */
-export const FRENET_MIN_DENOM = 0.3;
-/** Steering authority kept in the air: pods correct mid-air, just less. */
+// Lateral control: the craft flies along the track and the player sets where across it it is.
+/** Handling (racer stat) at which the lateral numbers below apply as written. */
+export const HANDLING_REF = 1.6;
+/** Full steer moves the lateral target this fast, m/s (scaled by handling). */
+export const STEER_TARGET_RATE = 45;
+/** Natural frequency of the critically damped chase of the target, rad/s (by handling). */
+export const LATERAL_RESPONSE = 9;
+/** Fastest the craft moves sideways, m/s (by handling): snappy, never a teleport. */
+export const LATERAL_SPEED_MAX = 55;
+/** The target may sit this far past a hard boundary, so pushing into a wall grinds it. */
+export const TARGET_OVERREACH = 1;
+/** Corners drift the target outward: m/s of drift per m/s² of speed²·curvature at GRIP_REF. */
+export const CORNER_PULL = 0.11;
+/** Grip (racer stat) at which CORNER_PULL applies as written; more grip, less drift. */
+export const GRIP_REF = 0.6;
+/** Fraction of the corner drift left while the air brake is held. */
+export const CORNER_PULL_BRAKE = 0.35;
+/** Lateral response (target rate and chase) kept in the air: pods correct mid-air, just less. */
 export const AIR_STEER_FACTOR = 0.45;
-/** Fraction of a steering rotation the momentum does not follow at once (becomes slide). */
-export const SLIDE_INHERIT = 0.35;
-/** Braking loosens the rear: more slide while the brake is held. */
-export const BRAKE_SLIDE_MULT = 1.4;
-/** Slide damping per unit grip, 1/s. */
-export const GRIP_DAMP = 10;
-/** Fraction of grip damping that works in the air. */
-export const AIR_GRIP_FACTOR = 0.15;
-/** Sliding scrubs forward speed: m/s² per m/s of slide. */
-export const SLIDE_SCRUB = 0.35;
+/** Frenet denominator floor: keeps ds/dt finite far on the inside of very tight turns. */
+export const FRENET_MIN_DENOM = 0.3;
 
-// Walls
-/** Forward speed lost per m/s of speed into the wall. */
-export const WALL_IMPACT_SPEED_LOSS = 0.9;
-/** Grinding along a wall, m/s². Punishing but not race-ending. */
-export const WALL_FRICTION_DECEL = 35;
-/** Wall impacts below this normal speed do no damage, m/s. */
-export const WALL_DAMAGE_FREE_SPEED = 6;
-/** Damage per m/s of normal speed above the free speed (before armour). */
-export const WALL_DAMAGE_PER_SPEED = 0.011;
-/** On impact the nose is turned away by this fraction of its angle into the wall. */
-export const WALL_YAW_REFLECT = 0.3;
-/** Fraction of the normal speed bounced back off the wall. */
-export const WALL_RESTITUTION = 0.25;
+// Sand run-off and hard boundaries
+/** Top speed multiplier on sand: cutting across it is a choice, not a free line. */
+export const SAND_TOP_SPEED = 0.8;
+/** Extra drag on sand, m/s². */
+export const SAND_DRAG = 8;
+/** Forward speed lost per m/s of sideways speed into a boundary. */
+export const BOUNDARY_SPEED_LOSS = 0.4;
+/** Grinding along a boundary, m/s². */
+export const BOUNDARY_FRICTION_DECEL = 20;
+/** Boundary hits below this sideways speed do no damage, m/s: only a hard angle hurts. */
+export const BOUNDARY_DAMAGE_FREE_SPEED = 30;
+/** Damage per m/s of sideways speed above the free speed (before armour). */
+export const BOUNDARY_DAMAGE_PER_SPEED = 0.008;
+/** Fraction of the sideways speed bounced back off a boundary. */
+export const BOUNDARY_RESTITUTION = 0.3;
 /** Scrape intensity of a gentle grind; impact speed adds to it. */
 export const SCRAPE_BASE_INTENSITY = 0.2;
 /** Normal speed that makes any impact full intensity, m/s. */
@@ -142,16 +139,16 @@ export const ARCH_HALF_DEPTH = 3;
 // Obstacles and other racers
 /** Search distance for obstacles around a racer, metres (exceeds any radius sum). */
 export const OBSTACLE_QUERY_RANGE = 30;
-/** Fraction of velocity into an obstacle above which the hit is "dead-on". */
-export const OBSTACLE_CRASH_HEADON = 0.7;
-/** A dead-on hit above this fraction of top speed is a crash. */
-export const OBSTACLE_CRASH_SPEED_FRACTION = 0.6;
-/** Forward speed lost per m/s of speed into an obstacle. */
-export const OBSTACLE_SPEED_LOSS = 1.0;
-/** Damage per m/s of speed into an obstacle (before armour). */
-export const OBSTACLE_DAMAGE_PER_SPEED = 0.006;
-/** Fraction of the normal speed bounced back off an obstacle. */
-export const OBSTACLE_RESTITUTION = 0.2;
+/** A hit closer to dead centre than this fraction of the combined radius can be a crash. */
+export const OBSTACLE_CRASH_OFFSET = 0.35;
+/** ...but only above this fraction of top speed. */
+export const OBSTACLE_CRASH_SPEED_FRACTION = 0.7;
+/** Forward speed lost by a glancing hit, as a fraction, at its most central. */
+export const OBSTACLE_SPEED_LOSS = 0.25;
+/** Damage of a glancing hit at its most central (before armour). */
+export const OBSTACLE_DAMAGE = 0.12;
+/** Sideways speed a glancing hit throws the racer off with, m/s. */
+export const OBSTACLE_DEFLECT_SPEED = 25;
 /** Lateral separation acceleration per metre of overlap between racers, 1/s². Soft on purpose. */
 export const RACER_PUSH_RATE = 60;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
@@ -184,10 +181,12 @@ export const BOOST_PAD_DURATION = 1.2;
 export const BOOST_PAD_MAX_HEIGHT = 3;
 
 // Presentation hints
-/** Visual lean per unit of applied steer, radians. */
-export const ROLL_PER_STEER = 0.45;
-/** Extra visual lean per m/s of slide, radians. */
-export const ROLL_PER_SLIDE = 0.012;
+/** Visual heading never turns further than this from the track direction, radians. */
+export const MAX_VISUAL_YAW = 0.5;
+/** Visual lean per m/s of sideways speed, radians. */
+export const ROLL_PER_LATERAL_SPEED = 0.012;
+/** Largest visual lean (on top of the track bank), radians. */
+export const MAX_LEAN = 0.6;
 
 // AI driver (src/core/ai.ts). Skill 0..1 interpolates the *_LO/_HI pairs.
 /** Spacing of the AI's look-ahead samples, metres. */
@@ -197,14 +196,12 @@ export const AI_LINE_LOOK_TIME_LO = 0.9;
 export const AI_LINE_LOOK_TIME_HI = 1.5;
 /** Curvature (1/m) at which the racing line hugs the inside fully. */
 export const AI_LINE_FULL_CURVATURE = 1 / 300;
-/** Distance the AI's line keeps from the walls, metres. */
+/** Distance the AI's line keeps inside the road edge, metres. */
 export const AI_WALL_MARGIN = 3;
-/** Lateral position gain: how hard the AI closes on its target line, 1/s. */
-export const AI_POS_GAIN = 1.6;
-/** Heading gain of the steering controller, 1/s. */
-export const AI_YAW_GAIN = 7;
-/** The AI never asks for more heading than this off the track direction, radians. */
-export const AI_MAX_YAW = 0.35;
+/** The AI closes the gap between its target and where it wants it in about this long, s. */
+export const AI_TARGET_TIME = 0.08;
+/** The AI sets its target to the planned path this many seconds ahead: the chase lag. */
+export const AI_TARGET_LEAD = 0.15;
 /** Obstacle look-ahead in seconds of travel. */
 export const AI_OBSTACLE_LOOK_TIME_LO = 0.8;
 export const AI_OBSTACLE_LOOK_TIME_HI = 1.5;
@@ -215,9 +212,9 @@ export const AI_PLAN_STEP = 5;
 /** Obstacle path planner: lateral resolution, metres. */
 export const AI_PLAN_LATERAL = 0.5;
 /** Lateral metres per metre of travel the planner assumes the racer can swerve. */
-export const AI_PLAN_MAX_SLOPE = 0.2;
-/** Obstacles block this many seconds of travel in front of them, so dodges start early. */
-export const AI_OBSTACLE_LEAD_TIME = 0.15;
+export const AI_PLAN_MAX_SLOPE = 0.25;
+/** Obstacles block this many seconds of travel in front of and behind them. */
+export const AI_OBSTACLE_LEAD_TIME = 0.1;
 /** The AI steers around racers it would catch within this many seconds. */
 export const AI_RACER_LOOK_TIME = 1.2;
 /** Planner cost of a blocked cell; dwarfs any line or swerve cost so blocked means avoid. */
@@ -226,16 +223,16 @@ export const AI_PLAN_BLOCK_COST = 1e6;
 export const AI_PLAN_LINE_COST = 1;
 /** Planner cost per metre of swerve: keeps paths smooth. */
 export const AI_PLAN_SWERVE_COST = 2;
-/** Response lag of steering + slide the AI plans around: it plans from where it will be. */
-export const AI_PATH_LAG = 0.15;
-/** The AI holds the planned path's mean heading over this many seconds of travel. */
-export const AI_PATH_WINDOW = 0.1;
+/** Planner cost per step spent on sand: slower, so only worth it to get round something. */
+export const AI_PLAN_SAND_COST = 40;
+/** Response lag the AI plans around: it is committed to its current sideways motion. */
+export const AI_PATH_LAG = 0.08;
 /** Extra clearance the AI leaves around obstacles, metres. */
 export const AI_CLEARANCE_LO = 2.5;
 export const AI_CLEARANCE_HI = 1.2;
 /** Fraction of the theoretical cornering limit the AI dares to carry. */
-export const AI_CORNER_FACTOR_LO = 0.75;
-export const AI_CORNER_FACTOR_HI = 0.97;
+export const AI_CORNER_FACTOR_LO = 0.7;
+export const AI_CORNER_FACTOR_HI = 0.95;
 /** Braking reaction delay, seconds of travel lost before the AI starts braking. */
 export const AI_BRAKE_REACTION_LO = 0.35;
 export const AI_BRAKE_REACTION_HI = 0.05;
@@ -247,11 +244,11 @@ export const AI_HEAT_LIMIT_LO = 0.75;
 export const AI_HEAT_LIMIT_HI = 0.93;
 /** The AI resumes boosting once heat has fallen this far below its limit. */
 export const AI_HEAT_HYSTERESIS = 0.35;
-/** Steering noise amplitude at skill 0 (scaled by 1 - skill). */
-export const AI_STEER_NOISE = 0.35;
-/** Correlation time of the steering noise, seconds. */
+/** Wander of the AI's target at skill 0 (scaled by 1 - skill), metres. */
+export const AI_TARGET_NOISE = 4;
+/** Correlation time of the target wander, seconds. */
 export const AI_NOISE_TAU = 0.5;
-/** Lapses per second at skill 0 (scaled by (1 - skill)²): steering freezes, obstacles unseen. */
+/** Lapses per second at skill 0 (scaled by (1 - skill)²): hands off, obstacles unseen. */
 export const AI_MISTAKE_RATE = 0.3;
 /** Length of a lapse, seconds. */
 export const AI_MISTAKE_DURATION = 0.6;
@@ -266,3 +263,12 @@ export const AI_START_BOOST_CHANCE = 0.8;
 export const AI_PAD_DETOUR = 7;
 /** Chance per boost cycle at skill 0 (scaled by 1 - skill) that an AI pushes into overheat. */
 export const AI_OVERHEAT_GAMBLE = 0.8;
+/** Chance per lap that an AI takes a shortcut it comes to. */
+export const AI_SHORTCUT_LO = 0.2;
+export const AI_SHORTCUT_HI = 0.8;
+/** The AI decides on a shortcut and lines up for it this many seconds before its entry. */
+export const AI_SHORTCUT_LOOK_TIME = 2;
+
+// --- Shortcuts (src/core/track.ts) ---
+/** Length of the side-by-side run where a branch leaves or rejoins the main road. */
+export const BRANCH_JUNCTION_LENGTH = 60;
