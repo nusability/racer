@@ -1,0 +1,37 @@
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 10, 4, 0.6);
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+.pause-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 240px;
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(40, 22, 10, 0.92);
+  border: 2px solid rgba(255, 170, 80, 0.5);
+  text-align: center;
+  color: #ffe9cc;
+  font-family: inherit;
+}
+.pause-panel h2 { margin: 0 0 8px; letter-spacing: 0.2em; }
+.pause-btn {
+  min-height: 52px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 170, 80, 0.6);
+  background: transparent;
+  color: #ffe9cc;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.pause-btn.primary { background: #ff7a1a; border-color: #ff7a1a; color: #1d0e04; }

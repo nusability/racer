@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800;900&display=swap');
+
+/* Design tokens: the desert-sunset vocabulary every screen, the HUD and the touch controls use. */
+:root {
+  --ink: #1a0c06;
+  --ink-2: #2a140a;
+  --panel: rgba(34, 16, 8, 0.84);
+  --panel-edge: rgba(255, 170, 90, 0.26);
+  --sand: #f8e3c0;
+  --sand-dim: #c9a47c;
+  --orange: #ff7a1a;
+  --orange-hi: #ffad4a;
+  --orange-lo: #8a3200;
+  --red: #ff4a2e;
+  --cyan: #3cf2ff;
+  --gold: #ffcf4a;
+  --radius: 14px;
+  --tap: 52px;
+  --gap: 12px;
+  --font: 'Saira Condensed', 'Barlow Condensed', 'Roboto Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --safe-t: max(10px, env(safe-area-inset-top));
+  --safe-r: max(14px, env(safe-area-inset-right));
+  --safe-b: max(10px, env(safe-area-inset-bottom));
+  --safe-l: max(14px, env(safe-area-inset-left));
+}

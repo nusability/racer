@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Mirage Racer: racer viewer</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1a0f08; font: 12px system-ui, sans-serif; }
+      canvas { display: block; }
+      #bar { position: fixed; left: 6px; top: 6px; display: flex; flex-wrap: wrap; gap: 4px; max-width: 96vw; }
+      #bar button { background: #000a; color: #f2e3c6; border: 1px solid #f2e3c655; border-radius: 4px; padding: 3px 7px; }
+      #bar button.on { background: #d9822bcc; color: #000; }
+      #bar.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="bar"></div>
+    <script type="module" src="/src/render/racerViewer.ts"></script>
+  </body>
+</html>
