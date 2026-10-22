@@ -60,7 +60,7 @@ function frame(now: number): void {
   const t = racing ? -countdownLeft : 0;
   const lap = 1 + Math.floor(t / LAP_S);
   if (lap !== lastLap && lap <= 3) hud.flash(lap === 3 ? 'FINAL LAP' : `LAP ${lap}`);
-  if (racing && Math.floor(t / 7) !== Math.floor((t - dt) / 7)) hud.flash("SMUGGLER'S CUT");
+  if (t > dt && Math.floor(t / 7) !== Math.floor((t - dt) / 7)) hud.flash("SMUGGLER'S CUT");
   craftX = Math.max(-ROAD_HALF_WIDTH_M, Math.min(ROAD_HALF_WIDTH_M, craftX + inp.nudge + inp.steer * FAKE_STEER_RATE_MPS * dt));
   nudgeTotal += inp.nudge;
   craft.style.left = `${((craftX + ROAD_HALF_WIDTH_M) / (2 * ROAD_HALF_WIDTH_M)) * 100}%`;

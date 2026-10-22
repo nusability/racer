@@ -174,5 +174,5 @@
   .hud__bottom { left: var(--safe-l); top: calc(var(--safe-t) + 128px); bottom: auto; transform: none; align-items: flex-start; width: 170px; }
   .hud__speed-n { font-size: 46px; }
   .hud__count { font-size: 120px; margin-top: -60px; }
-  .hud__flash { font-size: 34px; }
+  .hud__flash { top: 34%; font-size: 34px; }
 }

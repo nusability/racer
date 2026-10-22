@@ -2,11 +2,13 @@
 // Deterministic: same track, config and input tape give the same race.
 
 import type { PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
-import type { Track } from './track.ts';
+import type { Branch, Ribbon, Track } from './track.ts';
 import { AiDriver, driverSeed } from './ai.ts';
-import { Vehicle } from './vehicle.ts';
+import { Vehicle, jumpAround } from './vehicle.ts';
+import { junctionBounds, type JunctionBounds } from './junction.ts';
 import {
   AUTOPILOT_SKILL,
+  BRANCH_JUNCTION_LENGTH,
   COUNTDOWN_SECONDS,
   FINISH_GRACE,
   GRID_FRONT_GAP,
@@ -19,6 +21,8 @@ import {
   RACER_HIT_INTENSITY,
   RACER_LENGTH,
   RACER_PUSH_RATE,
+  RESPAWN_BACKOFF,
+  RESPAWN_JUMP_RUNUP,
   SIM_DT,
   START_BOOST_DURATION,
 } from '../data/tuning.ts';
@@ -39,9 +43,12 @@ export interface RacerPose {
   roll: number;
 }
 
-/** Pose at `alpha` (0..1) between two consecutive steps; s wraps across the start line. */
-export function lerpPose(track: Track, a: RacerPose, b: RacerPose, alpha: number, out: RacerPose): RacerPose {
-  out.s = track.wrap(a.s + track.delta(a.s, b.s) * alpha);
+/**
+ * Pose at `alpha` (0..1) between two consecutive steps on one ribbon; s wraps across the
+ * start line. When the racer changed ribbon between the steps, use the newer pose as is.
+ */
+export function lerpPose(ribbon: Ribbon, a: RacerPose, b: RacerPose, alpha: number, out: RacerPose): RacerPose {
+  out.s = ribbon.wrap(a.s + ribbon.delta(a.s, b.s) * alpha);
   out.x = a.x + (b.x - a.x) * alpha;
   out.y = a.y + (b.y - a.y) * alpha;
   out.yaw = a.yaw + (b.yaw - a.yaw) * alpha;
@@ -66,6 +73,8 @@ export class Race {
   private playerFinishTime: number | null = null;
   /** Pairs of racers in contact last step, so a 'racer' hit fires once per contact. */
   private readonly touching = new Set<number>();
+  /** Per branch: branch s where its entry junction ends and its exit junction starts. */
+  private readonly junctions: JunctionBounds[];
 
   constructor(track: Track, config: RaceConfig) {
     if (config.entrants.length === 0) throw new Error('Race: no entrants');
@@ -80,8 +89,10 @@ export class Race {
       const col = i % 2;
       const back = GRID_FRONT_GAP + row * GRID_ROW_SPACING + col * GRID_STAGGER;
       const x = (col === 0 ? -1 : 1) * GRID_LANE_OFFSET;
-      return new Vehicle(e.id, e.stats, track, track.wrap(-back), x);
+      const s = track.wrap(-back);
+      return new Vehicle(e.id, e.stats, track, s, x, track.delta(0, s));
     });
+    this.junctions = track.branches.map(junctionBounds);
     this.racers = this.vehicles.map((v) => v.state);
     this.drivers = config.entrants.map(
       (e, i) => new AiDriver(e.isPlayer ? AUTOPILOT_SKILL : e.skill, driverSeed(config.seed, i)),
@@ -110,7 +121,14 @@ export class Race {
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
-    this.vehicles.forEach((v, i) => v.step(inputs[i], this.track, events));
+    this.vehicles.forEach((v, i) => {
+      const from = this.mainS(v.state);
+      v.step(inputs[i], this.track.ribbon(v.state.branch), events);
+      if (v.respawnDue) this.respawn(v, events);
+      else if (v.state.crashed <= 0) this.junction(v);
+      // Standings distance runs along the main loop, whichever ribbon the racer is on.
+      v.state.distance += this.track.delta(from, this.mainS(v.state));
+    });
     this.contacts(events);
     if (this.phase === 'racing') {
       this.vehicles.forEach((v, i) => this.laps(v, before[i], events));
@@ -199,7 +217,7 @@ export class Race {
           this.touching.delete(key);
           continue;
         }
-        const ds = this.track.delta(a.state.s, b.state.s);
+        const ds = this.track.ribbon(a.state.branch).delta(a.state.s, b.state.s);
         const dx = b.state.x - a.state.x;
         const overlapX = 2 * RACER_HALF_WIDTH - Math.abs(dx);
         const overlapS = RACER_LENGTH - Math.abs(ds);
@@ -227,10 +245,82 @@ export class Race {
     const sa = a.state;
     const sb = b.state;
     if (sa.crashed > 0 || sb.crashed > 0 || sa.invulnerable > 0 || sb.invulnerable > 0) return false;
+    if (sa.branch !== sb.branch) return false;
     return (
-      Math.abs(this.track.delta(sa.s, sb.s)) < RACER_LENGTH &&
+      Math.abs(this.track.ribbon(sa.branch).delta(sa.s, sb.s)) < RACER_LENGTH &&
       Math.abs(sb.x - sa.x) < 2 * RACER_HALF_WIDTH &&
       Math.abs(b.alt - a.alt) < RACER_HEIGHT
     );
   }
+
+  /** Where on the main loop a racer counts as being: a branch maps linearly onto the stretch it skips. */
+  private mainS(st: RacerState): number {
+    if (st.branch < 0) return st.s;
+    const b = this.track.branches[st.branch];
+    return b.entryS + (st.s / b.ribbon.length) * (b.exitS - b.entryS);
+  }
+
+  /** Crossing between the main loop and a shortcut, at the junctions where they run side by side. */
+  private junction(v: Vehicle) {
+    const st = v.state;
+    const main = this.track;
+    if (st.branch < 0) {
+      for (const b of main.branches) {
+        const into = main.delta(b.entryS, st.s);
+        if (into < 0 || into > BRANCH_JUNCTION_LENGTH || b.side * st.x <= main.widthAt(st.s) / 2) continue;
+        const p = b.ribbon.project(main.toWorld(st.s, st.x, 0, worldBuf), into, 2 * BRANCH_JUNCTION_LENGTH);
+        v.transfer(b.index, p.s, p.x);
+        return;
+      }
+      return;
+    }
+    const b = main.branches[st.branch];
+    const rb = b.ribbon;
+    const j = this.junctions[st.branch];
+    const atEnd = st.s >= rb.length - rb.step;
+    const inEntry = st.s <= j.inEnd;
+    const crossed = (inEntry || st.s >= j.outStart) && b.side * st.x < -rb.widthAt(st.s) / 2;
+    if (!crossed && !atEnd) return;
+    const hint = inEntry ? b.entryS + st.s : b.exitS - (rb.length - st.s);
+    const p = main.project(rb.toWorld(st.s, st.x, 0, worldBuf), hint, 2 * BRANCH_JUNCTION_LENGTH);
+    v.transfer(-1, p.s, p.x);
+    if (atEnd) this.mergeOntoMain(v, b);
+  }
+
+  /** At a branch's end everyone is on the main road: fold a racer still out wide back inside it. */
+  private mergeOntoMain(v: Vehicle, b: Branch) {
+    const st = v.state;
+    const lo = this.track.minXAt(st.s) + RACER_HALF_WIDTH;
+    const hi = this.track.maxXAt(st.s) - RACER_HALF_WIDTH;
+    const x = Math.min(hi, Math.max(lo, st.x));
+    if (x !== st.x) v.transfer(-1, st.s, x);
+    if (b.side * st.vx > 0) st.vx = 0;
+  }
+
+  /**
+   * Respawn a bit behind the crash on the same ribbon, never in or just before a chasm; a
+   * crash in a branch's entry junction (or one backed up into it) goes back onto the main road.
+   */
+  private respawn(v: Vehicle, events: RaceEvent[]) {
+    const main = this.track;
+    let branch = v.crashBranch;
+    let s: number;
+    if (branch >= 0) {
+      const b = main.branches[branch];
+      s = v.crashS - RESPAWN_BACKOFF;
+      const jump = jumpAround(b.ribbon, s, RESPAWN_JUMP_RUNUP);
+      if (jump) s = jump.rampStart - RESPAWN_JUMP_RUNUP;
+      if (s <= this.junctions[branch].inEnd) {
+        branch = -1;
+        s = main.wrap(b.entryS + Math.max(0, s));
+      }
+    } else s = main.wrap(v.crashS - RESPAWN_BACKOFF);
+    if (branch < 0) {
+      const jump = jumpAround(main, s, RESPAWN_JUMP_RUNUP);
+      if (jump) s = main.wrap(jump.rampStart - RESPAWN_JUMP_RUNUP);
+    }
+    v.respawn(branch, main.ribbon(branch), s, events);
+  }
 }
+
+const worldBuf = { x: 0, y: 0, z: 0 };
