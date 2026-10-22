@@ -55,7 +55,7 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
    choices with a clear way round, and only a dead-centre hit at speed wrecks you. Chasms
    swallow a racer who leaves a jump too slow. Every track has a walled, risky shortcut that
-   saves a second or two. A wreck costs about three seconds and a respawn.
+   saves two or three seconds. A wreck costs about three seconds and a respawn.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades.
 
@@ -80,7 +80,7 @@ the third cup, the Mirage Grand Prix, makes you Mirage Champion.
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 80% top speed, no damage |
 | Obstacle wreck | Hit within 20% of dead centre above 70% top speed | Anything else deflects (≤ 15% speed) |
-| Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1–2 s when driven well |
+| Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1.5–3 s when driven well |
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | No heat |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
