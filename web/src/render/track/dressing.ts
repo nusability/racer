@@ -12,6 +12,8 @@ import { quadFacing } from './paint.ts';
 const GANTRY_HEIGHT = 17;
 const GANTRY_BEAM = 4;
 const STAND_TIERS = 7;
+/** Length of a crowd stand on the outside of a corner, metres. */
+const CORNER_STAND = 90;
 const STAND_TIER_DEPTH = 3.2;
 const STAND_TIER_RISE = 2.1;
 /** Grandstand front edge, metres past the road edge (clear of barrier and shoulder lip). */
@@ -67,10 +69,10 @@ function panel(b: FlatBuilder, B: Basis, x0: number, x1: number, y0: number, y1:
   quadFacing(b, at(B, x0, y0, z), at(B, x1, y0, z), at(B, x1, y1, z), at(B, x0, y1, z), dir, color);
 }
 
-export function buildDressing(cor: Corridor, props: FlatBuilder, seed: number): void {
+export function buildDressing(cor: Corridor, props: FlatBuilder, seed: number, cornerStands: number): void {
   const rng = mulberry32(seed ^ 0x7a11);
   gantry(cor, props);
-  grandstands(cor, props, rng);
+  grandstands(cor, props, rng, cornerStands);
   flags(cor, props);
   markers(cor, props);
   chevronBoards(cor, props);
@@ -102,17 +104,38 @@ function gantry(cor: Corridor, props: FlatBuilder) {
   }
 }
 
-function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number) {
+/** Stands at the start, plus crowds on the outside of the tightest corners. */
+function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, cornerStands: number) {
   const track = cor.ribbon;
   const p = cor.paint;
   const crowd = CROWD_COLOURS.map((c) => new THREE.Color(c));
   const concrete = p.white.clone().multiplyScalar(0.62);
   const roofCol = p.accent.clone().multiplyScalar(0.9);
-  for (const [side, s0, s1] of [
+  const runs: [number, number, number][] = [
     [-1, -START_ZONE + 40, -60],
     [1, 40, START_ZONE - 60],
     [1, -START_ZONE + 60, -90],
-  ] as const) {
+  ];
+  // Corner apexes: the sharpest curvature peaks, well apart, with open sand on the outside.
+  const n = track.samples.length;
+  const peaks: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const c = Math.abs(track.samples[k].curvature);
+    if (c < 1 / CHEVRON_RADIUS) continue;
+    let isPeak = true;
+    for (let d = -40; d <= 40 && isPeak; d++) if (Math.abs(track.samples[(k + d + n) % n].curvature) > c) isPeak = false;
+    if (isPeak) peaks.push(k);
+  }
+  peaks.sort((a, b) => Math.abs(track.samples[b].curvature) - Math.abs(track.samples[a].curvature));
+  for (const k of peaks) {
+    if (runs.length - 3 >= cornerStands) break;
+    const side = track.samples[k].curvature > 0 ? -1 : 1;
+    const s = k * track.step;
+    let ok = s > START_ZONE * 2 && s < track.length - START_ZONE * 2;
+    for (let d = -CORNER_STAND / 2; d <= CORNER_STAND / 2 && ok; d += CROWD_CELL) ok = usable(cor, Math.round((s + d) / track.step), side);
+    if (ok) runs.push([side, s - CORNER_STAND / 2, s + CORNER_STAND / 2]);
+  }
+  for (const [side, s0, s1] of runs) {
     const cells = Math.round((s1 - s0) / CROWD_CELL);
     for (let c = 0; c < cells; c++) {
       const s = s0 + (c + 0.5) * CROWD_CELL;

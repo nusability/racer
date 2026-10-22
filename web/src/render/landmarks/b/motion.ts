@@ -5,8 +5,6 @@ import * as THREE from 'three';
 
 export type V3 = readonly [number, number, number];
 
-// --- Motion -------------------------------------------------------------------------------
-
 /**
  * Two-level rigid motion evaluated on the GPU. The inner rotation turns the part about its
  * pivot (axisB); the outer one carries pivot and part round the hub (axisA). Angles are

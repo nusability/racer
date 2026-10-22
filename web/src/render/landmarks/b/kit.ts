@@ -21,8 +21,6 @@ const HALO_DUSK = 0.95;
 /** Soft-sprite falloff exponent for halos (hot centre). */
 const HALO_HARDNESS = 2.2;
 
-// --- The kit itself -----------------------------------------------------------------------
-
 /** One landmark under construction: its rng, palette-derived colours and draw buckets. */
 export class Kit {
   readonly rng: Rng;
@@ -41,7 +39,6 @@ export class Kit {
   private readonly crowdSpots: CrowdSpot[] = [];
   private readonly particleSets: Particles[] = [];
   private readonly owned: { dispose(): void }[] = [];
-  private extraUpdate: ((time: number) => void) | null = null;
 
   constructor(opts: LandmarkOptions, salt: number) {
     this.rng = mulberry32((opts.seed ^ salt) >>> 0);
@@ -84,10 +81,6 @@ export class Kit {
     this.owned.push(...disposables);
   }
 
-  onUpdate(fn: (time: number) => void): void {
-    this.extraUpdate = fn;
-  }
-
   private mesh(bucket: Bucket, mat: THREE.Material, name: string): void {
     if (bucket.vertexCount === 0) {
       mat.dispose();
@@ -123,14 +116,12 @@ export class Kit {
       this.addObject(pts, pts.geometry, pts.material as THREE.Material);
     });
     const u = this.u;
-    const extra = this.extraUpdate;
     const owned = this.owned;
     return {
       group: this.group,
       radius,
       update(time: number) {
         u.uTime.value = time;
-        if (extra) extra(time);
       },
       dispose() {
         for (const d of owned) d.dispose();

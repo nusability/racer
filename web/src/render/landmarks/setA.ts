@@ -1,34 +1,15 @@
-// Set A landmarks: machines and spectacle. Placeholder boxes until each real build lands.
+// Set A landmarks: machines and spectacle. One file per landmark under ./a/.
 
-import * as THREE from 'three';
-import type { Landmark, LandmarkFactory, LandmarkOptions } from './types.ts';
-import { createSpaceport } from './a/spaceport.ts';
+import type { LandmarkFactory } from './types.ts';
 import { createInvasion } from './a/invasion.ts';
-import { createWreck } from './a/wreck.ts';
-import { createSkyfleet } from './a/skyfleet.ts';
 import { createMine } from './a/mine.ts';
+import { createSandbeast } from './a/sandbeast.ts';
+import { createSkyfleet } from './a/skyfleet.ts';
+import { createSpaceport } from './a/spaceport.ts';
 import { createStormwall } from './a/stormwall.ts';
+import { createWreck } from './a/wreck.ts';
 
 type SetAKind = 'spaceport' | 'invasion' | 'wreck' | 'skyfleet' | 'mine' | 'stormwall' | 'sandbeast';
-
-function placeholder(w: number, h: number, d: number): LandmarkFactory {
-  return (opts: LandmarkOptions): Landmark => {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    geo.translate(0, h / 2, 0);
-    const mat = new THREE.MeshLambertMaterial({ color: opts.palette.accent });
-    const group = new THREE.Group();
-    group.add(new THREE.Mesh(geo, mat));
-    return {
-      group,
-      radius: Math.hypot(w, d) / 2,
-      update: () => {},
-      dispose: () => {
-        geo.dispose();
-        mat.dispose();
-      },
-    };
-  };
-}
 
 export const LANDMARKS_A: Record<SetAKind, LandmarkFactory> = {
   spaceport: createSpaceport,
@@ -37,5 +18,5 @@ export const LANDMARKS_A: Record<SetAKind, LandmarkFactory> = {
   skyfleet: createSkyfleet,
   mine: createMine,
   stormwall: createStormwall,
-  sandbeast: placeholder(300, 60, 100),
+  sandbeast: createSandbeast,
 };

@@ -30,6 +30,8 @@ export interface TrackScene {
 const PAD_LIFT = 0.05;
 /** Chevron repeats along one pad. */
 const PAD_REPEATS = 3;
+/** Crowd stands on the outside of the tightest corners. */
+const CORNER_STANDS = { low: 1, high: 3 } as const;
 
 export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   const def = track.def;
@@ -47,7 +49,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     buildRockFeatures(c, def.seed);
   }
   const props = new FlatBuilder();
-  buildDressing(corridors[0], props, def.seed);
+  buildDressing(corridors[0], props, def.seed, CORNER_STANDS[quality]);
   const signs: SignQuads = { pos: [], uv: [] };
   buildJunctions(corridors[0], corridors.slice(1), track, signs);
 

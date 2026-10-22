@@ -39,10 +39,14 @@ const HOP_PAUSE = 1.5;
 const FIREWORK_EVERY = 2.6;
 const FIREWORK_RISE = 1.6;
 const FIREWORK_SPARKS = 36;
+/** Rockets that can be climbing at once. */
+const MAX_ROCKETS = 4;
 const SEARCH_SWEEP = 0.25;
 const SEARCH_ALPHA = 0.09;
 const PROP_SPIN = 9;
 const LIGHT_STRING = 10;
+/** Ships kept on low quality (the first of the layout). */
+const LOW_SHIPS = 3;
 
 interface Ship {
   holder: THREE.Bone;
@@ -89,7 +93,7 @@ export function createSkyfleet(opts: LandmarkOptions): Landmark {
     { barge: false, x: 170, z: 170, alt: 390 },
     { barge: true, x: -60, z: 230, alt: 250 },
   ];
-  for (const L of layout) {
+  for (const L of layout.slice(0, hi ? layout.length : LOW_SHIPS)) {
     const holder = rig.bone();
     const ship: Ship = {
       holder,
@@ -137,7 +141,7 @@ export function createSkyfleet(opts: LandmarkOptions): Landmark {
   let lampI = 0;
   const lamp = (x: number, y: number, z: number, size: number, c: THREE.Color, a: number) => glow.lamp(lampI++, x, y, z, size, c, a);
   let fireworkT = 1;
-  const rockets: { x: number; y: number; z: number; t: number; c: number }[] = Array.from({ length: 4 }, () => ({ x: 0, y: 0, z: 0, t: -1, c: 0 }));
+  const rockets: { x: number; y: number; z: number; t: number; c: number }[] = Array.from({ length: MAX_ROCKETS }, () => ({ x: 0, y: 0, z: 0, t: -1, c: 0 }));
   const white = col(0xffffff);
   const green = col(0x60ff90);
   const red = col(0xff4030);

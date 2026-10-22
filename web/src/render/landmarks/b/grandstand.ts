@@ -25,14 +25,17 @@ const HALF = (SECTIONS * SECTION_WIDTH + (SECTIONS - 1) * AISLE) / 2;
 const TOP_Y = FRONT_Y + TIERS * RISE;
 const BACK_Z = FRONT_Z + TIERS * TREAD;
 /** Spectator spacing along a row and how full the stand is. */
-const SEAT_SPACING = { high: 2.9, low: 4.2 } as const;
+const SEAT_SPACING = { high: 2.9, low: 3.4 } as const;
+/** Low quality seats every other tier. */
+const TIER_STRIDE = { high: 1, low: 2 } as const;
 /** Spectators are drawn larger than life so the stand reads as a crowd from the track. */
 const SPECTATOR_SCALE = 1.45;
 const OCCUPANCY = 0.9;
 /** The wave: crest speed along the stand (m/s) and how often a new one starts (s). */
 const WAVE_SPEED = 45;
 const WAVE_PERIOD = 8;
-const WAVE_SHARPNESS = 10;
+const WAVE_SHARPNESS = 6;
+const WAVE_JUMP = 1.5;
 const ROOF = { rise: 16, overhang: 0.55 } as const;
 const MAST_HEIGHT = 30;
 const SCREEN = { w: 66, h: 22, y: TOP_Y + 34 } as const;
@@ -230,7 +233,7 @@ export function createGrandstand(opts: LandmarkOptions): Landmark {
   // the rest bounce and cheer on their own.
   const waveFreq = (Math.PI * 2) / WAVE_PERIOD;
   const spacing = kit.q(SEAT_SPACING.high, SEAT_SPACING.low);
-  for (let i = 0; i < TIERS; i++) {
+  for (let i = 0; i < TIERS; i += kit.q(TIER_STRIDE.high, TIER_STRIDE.low)) {
     const y = FRONT_Y + i * RISE;
     const z = FRONT_Z + i * TREAD + TREAD * 0.45;
     for (let s = 0; s < SECTIONS; s++) {
@@ -246,7 +249,7 @@ export function createGrandstand(opts: LandmarkOptions): Landmark {
           ry: Math.PI + (rng() - 0.5) * 0.4,
           color: vary(rng, kit.festiveColor(), 0.3),
           scale: SPECTATOR_SCALE,
-          hop: waving ? 0.9 : 0.3,
+          hop: waving ? WAVE_JUMP : 0.3,
           freq: waving ? waveFreq : 4 + rng() * 3,
           phase: waving ? (-px * waveFreq) / WAVE_SPEED : rng() * 100,
           sharp: waving ? WAVE_SHARPNESS : 2,

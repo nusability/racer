@@ -7,7 +7,7 @@ import type { Landmark } from './types.ts';
 
 // Developer-only viewer for the set-A landmarks (landmark-viewer.html, never linked from the
 // game). Query: ?kind=spaceport&quality=high|low&cam=near|far|race|orbit&t=seconds&pause=1
-// &palette=noon|amber|dusk|storm&seed=n&ang=radians&dist=metres&look=metres
+// &palette=noon|amber|dusk|storm&seed=n&ang=radians&dist=metres&look=metres&rx=metres&bench=1
 
 type Kind = keyof typeof LANDMARKS_A;
 
@@ -44,6 +44,8 @@ const angle = Number(params.get('ang') ?? 0.5);
 
 const factory = LANDMARKS_A[kind];
 const lookParam = params.get('look');
+/** Race camera: where along the road it is at t (else it loops past on its own clock). */
+const raceX = params.get('rx');
 if (!factory) throw new Error(`unknown landmark kind "${kind}"`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -91,6 +93,15 @@ while (time < startT) {
   time += WARMUP_STEP;
 }
 
+/** ?bench=1: average update() cost over many steady frames, shown in the HUD. */
+const BENCH_FRAMES = 3000;
+let benchMs = Number.NaN;
+if (params.get('bench') === '1') {
+  const b0 = performance.now();
+  for (let i = 0; i < BENCH_FRAMES; i++) lm.update(startT + i / 60, 1 / 60);
+  benchMs = (performance.now() - b0) / BENCH_FRAMES;
+}
+
 const hud = document.createElement('div');
 hud.style.cssText =
   'position:fixed;left:6px;top:6px;color:#fff;font:11px/1.3 monospace;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre';
@@ -101,7 +112,7 @@ function placeCamera(t: number): void {
   if (cam === 'race') {
     // Fly along the road (z = 0) at racing speed, sweeping past the landmark.
     const span = R * 2 + 1200;
-    const x = ((t * RACE_SPEED) % span) - span / 2;
+    const x = raceX === null ? ((t * RACE_SPEED) % span) - span / 2 : Number(raceX) + (t - startT) * RACE_SPEED;
     camera.position.set(x, RACE_HEIGHT, 0);
     camera.lookAt(x + 100, RACE_HEIGHT - 0.6, 18);
     return;
@@ -135,7 +146,7 @@ function frame(now: number): void {
   hud.textContent =
     `${kind} · ${quality} · ${cam} · t=${time.toFixed(1)}s · r=${R.toFixed(0)}m · fog ${FOG_FAR[quality]}m\n` +
     `landmark ≈ ${info.calls - baseCalls} draws · ${info.triangles - baseTris} tris · ${info.points} pts\n` +
-    `build ${buildMs.toFixed(0)} ms · update ${updMs.toFixed(3)} ms`;
+    `build ${buildMs.toFixed(0)} ms · update ${updMs.toFixed(3)} ms` + (Number.isNaN(benchMs) ? '' : ` · bench ${benchMs.toFixed(3)} ms`);
   frames++;
   (window as unknown as { __frames: number }).__frames = frames;
   requestAnimationFrame(frame);

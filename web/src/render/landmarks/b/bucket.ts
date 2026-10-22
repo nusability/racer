@@ -3,8 +3,6 @@
 import * as THREE from 'three';
 import { KINETIC_ATTRS, type Motion, type Twinkle, type V3 } from './motion.ts';
 
-// --- Buckets ------------------------------------------------------------------------------
-
 const DEFAULT_TWINKLE: Twinkle = { depth: 0, freq: 0, phase: 0, sharp: 1 };
 const scratchV = new THREE.Vector3();
 const IDENTITY = new THREE.Matrix4();

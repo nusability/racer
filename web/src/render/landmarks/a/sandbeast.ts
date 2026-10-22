@@ -8,15 +8,13 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { T, box, brush, col, cyl, disposeKit, glowBoost, makeKit, mix, mulberry32, ramp, rock, shade, smooth } from './kit.ts';
 
 /** The breach arc: a circle of radius ARC_R whose centre is ARC_SINK below the sand. */
-const ARC_R = 88;
-const ARC_SINK = 23;
+const ARC_R = 112;
+const ARC_SINK = 30;
 const HALF_SPAN = Math.sqrt(ARC_R * ARC_R - ARC_SINK * ARC_SINK);
-/** Angle where the arc meets the ground. */
-const GROUND_A = Math.asin(ARC_SINK / ARC_R);
 
-const SEG_LEN = 7;
-const HEAD_R = 9.5;
-const TAIL_R = 2.4;
+const SEG_LEN = 9;
+const HEAD_R = 13;
+const TAIL_R = 3.2;
 
 /** Cycle, seconds: the mound approaches, the beast breaches, the dust settles. */
 const CYCLE = 20;
@@ -27,11 +25,11 @@ const T_SUBMERGED = 17;
 const UNDER_A = 0.35;
 const MOUND_FROM = -230;
 const RIPPLES = 3;
-const RIPPLE_MAX = 60;
+const RIPPLE_MAX = 75;
 const JAW_OPEN = 0.75;
 
-const RADIUS = 240;
-const HEIGHT = 90;
+const RADIUS = 260;
+const HEIGHT = 110;
 
 interface Segment {
   bone: THREE.Bone;
@@ -41,7 +39,6 @@ interface Segment {
 export function createSandbeast(opts: LandmarkOptions): Landmark {
   const { palette, quality } = opts;
   const hi = quality === 'high';
-  const rng = mulberry32(opts.seed ^ 0xbea57);
   const boost = glowBoost(palette);
   const nSeg = hi ? 26 : 16;
   const segLen = hi ? SEG_LEN : (SEG_LEN * 26) / 16;
@@ -62,8 +59,8 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
 
   // --- Craters at the breach and dive points, ripple rings ---
   for (const x of [-HALF_SPAN, HALF_SPAN]) {
-    rig.add(cyl(26, 34, 0.4, 12), shade(sand, 0.8), { m: T(x, -0.1, 0) });
-    rig.add(new THREE.TorusGeometry(30, 5, 3, 14).rotateX(Math.PI / 2).scale(1, 0.6, 1), shade(sand, 1.05), { m: T(x, 0, 0) });
+    rig.add(cyl(HEAD_R * 2.6, HEAD_R * 3.2, 0.4, 12), shade(sand, 0.8), { m: T(x, -0.1, 0) });
+    rig.add(new THREE.TorusGeometry(HEAD_R * 3, 6, 3, 14).rotateX(Math.PI / 2).scale(1, 0.6, 1), shade(sand, 1.05), { m: T(x, 0, 0) });
   }
   const ripples: THREE.Bone[] = [];
   for (const x of [-HALF_SPAN, HALF_SPAN]) {
@@ -129,9 +126,10 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
   const U = new THREE.Vector3();
   const Rv = new THREE.Vector3();
   const basis = new THREE.Matrix4();
+  const gullet = col(0xfff0c0);
   let prevHeadY = -100;
   let acc = 0;
-  const travel = Math.PI + 2 * UNDER_A + (nSeg * segLen) / ARC_R + GROUND_A;
+  const travel = Math.PI + 2 * UNDER_A + (nSeg * segLen) / ARC_R;
   const omega = travel / (T_SUBMERGED - T_BREACH);
   const dTheta = segLen / ARC_R;
 
@@ -190,7 +188,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
     if (head.scale.x > 0) {
       rig.local(head, 0, 0, 6, P);
       glow.lamp(li++, P.x, P.y, P.z, 30 * (0.3 + open), maw, (0.5 + open) * boost);
-      glow.lamp(li++, P.x, P.y, P.z, 14, col1, boost);
+      glow.lamp(li++, P.x, P.y, P.z, 14, gullet, boost);
     } else {
       glow.lamp(li++, 0, -1000, 0, 0, maw, 0);
       glow.lamp(li++, 0, -1000, 0, 0, maw, 0);
@@ -244,7 +242,6 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
     glow.update(dt);
     smoke.update(dt);
   }
-  const col1 = col(0xfff0c0);
 
   return { group: kit.group, radius: RADIUS, update, dispose: () => disposeKit(kit) };
 }

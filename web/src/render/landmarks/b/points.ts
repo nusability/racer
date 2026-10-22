@@ -4,8 +4,6 @@ import * as THREE from 'three';
 import { KINETIC_GLSL, type SharedUniforms, type V3 } from './motion.ts';
 import type { Rng } from '../../../core/rng.ts';
 
-// --- Point sprites: halos and looping particles -------------------------------------------
-
 const POINTS_VERTEX = /* glsl */ `
 attribute vec3 color;
 attribute float aSize;
