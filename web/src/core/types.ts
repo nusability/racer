@@ -52,8 +52,13 @@ export type TrackFeature =
   | { kind: 'arch'; at: TrackParam; opening: number; offset: number; height: number }
   /** Seeded scatter of boulders between from..to. */
   | { kind: 'boulders'; from: TrackParam; to: TrackParam; count: number; radius: number }
-  /** Boost pad on the road surface: free boost without heat. */
+  /** Boost pad on the road surface: an instant burst of free boost. */
   | { kind: 'boostPad'; at: TrackParam; lateral: number }
+  /**
+   * A line of boost cells floating over the course: each one tops up the racer's boost tank.
+   * `count` cells, `spacing` metres apart along s, starting at `at`, all at `lateral`.
+   */
+  | { kind: 'boostCells'; at: TrackParam; lateral: number; count: number; spacing: number }
   /**
    * Hard walls at the road edge (no sand run-off) on one side or both (side omitted).
    * Canyons and tunnels already imply walls on both sides.
@@ -182,6 +187,14 @@ export interface BoostPad {
   width: number;
 }
 
+/** A collectible that refills the boost tank. Each racer can take each cell once per lap. */
+export interface BoostCell {
+  /** Index into the ribbon's cells. */
+  index: number;
+  s: number;
+  x: number;
+}
+
 export interface Jump {
   /** Ramp start, lip (= gap start) and gap end, in s. */
   rampStart: number;
@@ -206,8 +219,8 @@ export interface RacerStats {
   grip: number;
   /** Boost multiplies top speed by (1 + boostPower). */
   boostPower: number;
-  /** Heat shed per second when not boosting (heat is 0..1). */
-  cooling: number;
+  /** Seconds of boost a full tank holds. */
+  boostTank: number;
   /** Damage taken is divided by this (1 = baseline). */
   armor: number;
 }
@@ -234,7 +247,7 @@ export interface RacerDef {
   visual: RacerVisual;
 }
 
-export type UpgradeId = 'engine' | 'thrusters' | 'steering' | 'cooling' | 'armor';
+export type UpgradeId = 'engine' | 'thrusters' | 'steering' | 'tank' | 'armor';
 
 // ---------------------------------------------------------------------------
 // Race simulation (src/core/race.ts)
@@ -296,10 +309,8 @@ export interface RacerState {
   yaw: number;
   /** Visual roll the presentation can use, radians. */
   roll: number;
-  /** 0..1. */
-  heat: number;
-  /** Seconds left of forced cool-down after overheating; 0 when fine. */
-  overheat: number;
+  /** Boost tank fill, 0..1. Holding boost drains it; boost cells refill it. No penalty for using it. */
+  boost: number;
   /** 0..1; 1 = destroyed. */
   damage: number;
   boosting: boolean;
@@ -331,7 +342,10 @@ export type RaceEvent =
   | { type: 'launch'; id: string }
   | { type: 'land'; id: string; impact: number }
   | { type: 'boostPad'; id: string }
-  | { type: 'overheat'; id: string }
+  /** A racer collected boost cell `cell` of ribbon `branch` (-1 = main loop). */
+  | { type: 'pickup'; id: string; branch: number; cell: number }
+  /** A racer's tank ran dry while boost was held. */
+  | { type: 'tankEmpty'; id: string }
   | { type: 'lap'; id: string; lap: number; time: number }
   | { type: 'finish'; id: string; place: number; time: number };
 

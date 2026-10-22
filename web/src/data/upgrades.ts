@@ -45,12 +45,12 @@ export const UPGRADES: UpgradeDef[] = [
     },
   },
   {
-    id: 'cooling',
-    name: 'Coolant',
-    blurb: 'Boost longer before overheating.',
+    id: 'tank',
+    name: 'Boost tank',
+    blurb: 'Store more boost.',
     costs: [400, 900, 1800, 3200, 5500],
     apply: (s) => {
-      s.cooling *= 1.12;
+      s.boostTank *= 1.12;
     },
   },
   {
@@ -67,7 +67,7 @@ export const UPGRADES: UpgradeDef[] = [
 export type UpgradeLevels = Record<UpgradeId, number>;
 
 export function noUpgrades(): UpgradeLevels {
-  return { engine: 0, thrusters: 0, steering: 0, cooling: 0, armor: 0 };
+  return { engine: 0, thrusters: 0, steering: 0, tank: 0, armor: 0 };
 }
 
 export function effectiveStats(racer: RacerDef, levels: UpgradeLevels): RacerStats {

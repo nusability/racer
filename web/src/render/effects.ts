@@ -18,7 +18,8 @@ const DUST_SPREAD = 2.6;
 const DUST_DROP = 0.9;
 const DUST_LIFE = [0.7, 1.3] as const;
 const DUST_SIZE = [1.2, 6.0] as const;
-const DUST_ALPHA = 0.5;
+// Low on purpose: a racer tailing another must still see the road through its dust.
+const DUST_ALPHA = 0.1;
 const DUST_LIFT = [1.5, 5.5] as const;
 /** Dust is dragged along in the racer's wake: it starts with this share of the racer's velocity
  * and bleeds it off, so from the chase camera it streams back past the lens instead of being

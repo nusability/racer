@@ -17,3 +17,6 @@ export const SESSION_SHAKE_LAND = 0.5;
 export const SESSION_INVULNERABLE_BLINK = 8;
 /** Dust multiplier while a racer is on the sand run-off. */
 export const SESSION_OFFROAD_DUST = 2.5;
+/** Nozzle glow the racer model shows while boosting / cruising (its old heat input). */
+export const SESSION_BOOST_NOZZLE_HEAT = 0.6;
+export const SESSION_IDLE_NOZZLE_HEAT = 0.15;

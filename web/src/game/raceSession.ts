@@ -26,6 +26,8 @@ import {
   SESSION_FINISH_LINGER,
   SESSION_GO_SHOWN,
   SESSION_HARD_LANDING,
+  SESSION_BOOST_NOZZLE_HEAT,
+  SESSION_IDLE_NOZZLE_HEAT,
   SESSION_INVULNERABLE_BLINK,
   SESSION_OFFROAD_DUST,
   SESSION_MAX_FRAME_DT,
@@ -179,6 +181,7 @@ export class RaceSession {
     this.countdown = null;
     this.shownBranch = -1;
     this.cam.reset();
+    this.trackScene.resetCells();
     this.syncSnapshots(true);
     for (const v of this.views) v.model.root.visible = true;
   }
@@ -281,13 +284,19 @@ export class RaceSession {
         if (this.nearCamera(i)) this.burst(i);
         return;
       }
-      case 'overheat':
+      case 'pickup':
         if (ev.id === pid) {
-          audio.oneShot('overheat');
-          this.hud.flash('OVERHEAT');
+          this.trackScene.collectCell(ev.branch, ev.cell);
+          this.hud.pulseBoost();
+          audio.oneShot('pickup');
         }
         return;
+      case 'tankEmpty':
+        if (ev.id === pid) audio.oneShot('tankEmpty');
+        return;
       case 'lap':
+        // Each lap the player may collect every cell again.
+        if (ev.id === pid) this.trackScene.resetCells();
         if (ev.id === pid && ev.lap < this.request.laps) {
           audio.oneShot('lap');
           this.hud.flash(ev.lap === this.request.laps - 1 ? 'FINAL LAP' : `LAP ${ev.lap + 1}`);
@@ -355,8 +364,8 @@ export class RaceSession {
         speed: r.speed,
         topSpeed: stats.topSpeed,
         boosting: r.boosting,
-        heat: r.heat,
-        overheated: r.overheat > 0,
+        heat: r.boosting ? SESSION_BOOST_NOZZLE_HEAT : SESSION_IDLE_NOZZLE_HEAT,
+        overheated: false,
         damage: r.damage,
         steer: r.steer,
         airborne: r.airborne,
@@ -391,7 +400,7 @@ export class RaceSession {
     this.trackScene.update(this.clock, this.cam.camera.position);
 
     if (!this.paused) {
-      this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne, heat: p.heat });
+      this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne });
       this.ctx.audio.wind(Math.min(1, speedFrac));
       this.ctx.audio.scrapeLoop(this.scrapeLevel);
       this.scrapeLevel = 0;
@@ -404,8 +413,7 @@ export class RaceSession {
       laps: this.request.laps,
       time: this.race.time,
       bestLap: p.bestLap,
-      heat: p.heat,
-      overheated: p.overheat > 0,
+      boost: p.boost,
       damage: p.damage,
       boosting: p.boosting,
       countdown: this.countdown,

@@ -4,6 +4,7 @@
 
 import type {
   Arch,
+  BoostCell,
   BoostPad,
   BranchDef,
   Jump,
@@ -70,6 +71,7 @@ export class Ribbon {
   readonly obstacles: Obstacle[] = [];
   readonly arches: Arch[] = [];
   readonly boostPads: BoostPad[] = [];
+  readonly cells: BoostCell[] = [];
   readonly jumps: Jump[] = [];
   /** Arc length at each control point (for a closed loop, plus the full length at the end). */
   private readonly pointS: number[];
@@ -526,6 +528,7 @@ export class Ribbon {
       case 'arch':
       case 'boulders':
       case 'boostPad':
+      case 'boostCells':
         break;
     }
   }
@@ -565,6 +568,13 @@ export class Ribbon {
       case 'boostPad': {
         const s = this.paramToS(f.at);
         this.boostPads.push({ s, x: f.lateral, length: BOOST_PAD_LENGTH, width: BOOST_PAD_WIDTH });
+        break;
+      }
+      case 'boostCells': {
+        const s0 = this.paramToS(f.at);
+        for (let i = 0; i < f.count; i++) {
+          this.cells.push({ index: this.cells.length, s: this.wrap(s0 + i * f.spacing), x: f.lateral });
+        }
         break;
       }
       default:
