@@ -80,7 +80,7 @@ export class Corridor {
     this.ribbon = view.ribbon;
     this.n = this.ribbon.samples.length;
     this.stride = STATION_STRIDE[quality];
-    this.chunkSamples = Math.round(CHUNK_LENGTH / this.ribbon.step);
+    this.chunkSamples = Math.round(CHUNK_LENGTH[quality] / this.ribbon.step);
     const last = this.ribbon.closed ? this.n : this.n - 1;
     for (let k0 = 0; k0 < last; k0 += this.chunkSamples) {
       const k1 = Math.min(last, k0 + this.chunkSamples);
