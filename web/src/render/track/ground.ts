@@ -64,6 +64,8 @@ export class Ground {
   private readonly sandDark: THREE.Color;
   private readonly sandLight: THREE.Color;
   private readonly pads: Pad[] = [];
+  /** Landmark footprints: the corridor hides its boundary dressing inside them. */
+  private readonly footprints: Pad[] = [];
 
   constructor(
     readonly views: RibbonView[],
@@ -126,6 +128,15 @@ export class Ground {
   /** Level the ground for a landmark: a disc at height y blending out over PAD_FADE. */
   addPad(x: number, z: number, r: number, y: number): void {
     this.pads.push({ x, z, r, y });
+  }
+
+  /** Mark a landmark footprint: no boundary lip, wall or terrain sink inside it. */
+  addFootprint(x: number, z: number, r: number): void {
+    this.footprints.push({ x, z, r, y: 0 });
+  }
+
+  inFootprint(x: number, z: number): boolean {
+    return this.footprints.some((f) => Math.hypot(x - f.x, z - f.z) < f.r);
   }
 
   /** The closest centreline sample of any ribbon (horizontally), or null when far away. */
@@ -207,6 +218,9 @@ export class Ground {
     const covered = Math.abs(near.d) < view.shape.outer[sideIndex(near.d)][near.k] - 2;
     if (!covered) return h;
     if (smp.gap) return smp.pos.y - CHASM_DEPTH - CHASM_FLOOR_EXTRA - 4;
+    // Inside a landmark's footprint the boundary dressing is hidden, so the ground shows.
+    const edge = near.d > 0 ? smp.edgeR : smp.edgeL;
+    if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
     return Math.min(h, smp.pos.y - Math.abs(smp.right.y) * smp.width * 0.5) - TERRAIN_SINK;
   }
 

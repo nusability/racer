@@ -13,7 +13,13 @@ export interface PlacedLandmark {
   /** World centre and footprint radius after scaling, for culling. */
   centre: THREE.Vector3;
   radius: number;
+  /** Allowed to reach over the boundary; skipped by the clearance check. */
+  straddle: boolean;
 }
+
+/** Landmarks nearer the boundary than this sit flush with the road edge. */
+const CLOSE = 60;
+const FLUSH_DROP = 0.35;
 
 /**
  * Instantiates and positions every landmark. Must run before the corridor and terrain are
@@ -22,22 +28,27 @@ export interface PlacedLandmark {
 export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Ground, quality: Quality): PlacedLandmark[] {
   const placed: PlacedLandmark[] = [];
   scenery.landmarks.forEach((p, i) => {
+    const ribbon = p.branch === undefined ? track : branchRibbon(track, p.branch);
     const factory = LANDMARKS[p.kind];
     const landmark = factory({ seed: track.def.seed * 131 + i * 17, palette: track.def.palette, quality });
     const scale = p.scale ?? 1;
     const radius = landmark.radius * scale;
-    const s = track.paramToS(p.at);
-    const f = track.frameAt(s);
+    if (p.distance < 0 && !p.straddle) throw new Error(`landmark ${p.kind} on ${track.def.id}: negative distance needs straddle`);
+    const s = ribbon.paramToS(p.at);
+    const f = ribbon.frameAt(s);
     const rl = Math.hypot(f.right.x, f.right.z);
     const rx = f.right.x / rl;
     const rz = f.right.z / rl;
-    const edge = p.side > 0 ? track.maxXAt(s) : -track.minXAt(s);
+    const edge = p.side > 0 ? ribbon.maxXAt(s) : -ribbon.minXAt(s);
     const out = edge + p.distance + radius;
     const x = f.pos.x + rx * p.side * out;
     const z = f.pos.z + rz * p.side * out;
-    const y = ground.height(x, z);
+    // Close to the course, level the ground with the road edge so the landmark meets it flush.
+    const foot = ribbon.toWorld(s, p.side * edge, 0);
+    const y = p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
     ground.addPad(x, z, radius * LANDMARK_PAD, y);
-    // Local -Z faces the track: toward the course is -side along the right vector.
+    ground.addFootprint(x, z, radius);
+    // Local -Z faces the course: toward it is -side along the right vector.
     const tx = -rx * p.side;
     const tz = -rz * p.side;
     const g = landmark.group;
@@ -45,14 +56,21 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.rotation.y = Math.atan2(-tx, -tz) + (p.heading ?? 0);
     g.scale.setScalar(scale);
     g.name = `landmark:${p.kind}`;
-    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius });
+    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true });
   });
   return placed;
+}
+
+function branchRibbon(track: Track, id: string) {
+  const b = track.branches.find((x) => x.def.id === id);
+  if (!b) throw new Error(`Track ${track.def.id}: no branch "${id}" for a landmark`);
+  return b.ribbon;
 }
 
 /** Warns (dev aid) about landmarks whose footprint reaches onto some part of the course. */
 export function checkLandmarkClearance(placed: PlacedLandmark[], ground: Ground): void {
   for (const p of placed) {
+    if (p.straddle) continue;
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       const x = p.centre.x + Math.cos(a) * p.radius * 0.9;
       const z = p.centre.z + Math.sin(a) * p.radius * 0.9;

@@ -37,4 +37,11 @@ export interface LandmarkPlacement {
   /** Extra rotation about Y, radians (0 = facing the track). */
   heading?: number;
   scale?: number;
+  /** Stand beside this shortcut instead of the main loop; `at` is then in its parameter space. */
+  branch?: string;
+  /**
+   * Let the footprint reach over the hard boundary (distance may be negative). Only for layouts
+   * with a clear lane where the course runs, e.g. a market street a shortcut runs down.
+   */
+  straddle?: boolean;
 }

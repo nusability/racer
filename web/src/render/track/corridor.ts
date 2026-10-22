@@ -28,6 +28,8 @@ const TUNNEL_ROAD_SHADE = 0.42;
 const JUNCTION_OVERLAP = 1.2;
 /** Atlas split of the road texture: u below this is paved road, above it is run-off sand. */
 export const ROAD_ATLAS_SPLIT = 0.5;
+/** A side is hidden when a landmark covers its lip crest or this far past the boundary. */
+const HIDE_PROBE = 2;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
 
@@ -55,6 +57,8 @@ interface Profile {
   cols: THREE.Color[];
   /** Run-off lip (sand) or wall (rock). */
   sand: boolean;
+  /** Inside a landmark's footprint: the landmark marks the boundary, nothing is drawn. */
+  hidden: boolean;
 }
 
 /** The dressed corridor of one ribbon, in chunks for culling. */
@@ -104,6 +108,7 @@ export class Corridor {
         if (this.open(k, side)) continue;
         const out = { x: this.shape.rx[k] * side, y: 0, z: this.shape.rz[k] * side };
         const sand = this.shape.run[sideIndex(side)][k] >= RUNOFF_MIN;
+        if (this.profile(k, side).hidden) continue;
         if (sand && k % every === 0) this.scatter.pylons.push({ p: this.profile(k, side).pts[2], out, side, k, view: this.vi });
         if (!sand && k % lamps === 0) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
       }
@@ -242,6 +247,8 @@ export class Corridor {
     if (hit) return hit;
     const run = this.shape.run[sideIndex(side)][kk];
     const prof = run >= RUNOFF_MIN ? this.lipProfile(kk, side) : this.wallProfile(kk, side);
+    const probe = this.beside(kk, side, HIDE_PROBE, 0);
+    prof.hidden = this.ground.inFootprint(prof.pts[2].x, prof.pts[2].z) || this.ground.inFootprint(probe.x, probe.z);
     this.profiles.set(key, prof);
     return prof;
   }
@@ -275,7 +282,7 @@ export class Corridor {
       else this.ground.color(p.x, p.z, p.y, i === 1 ? 0.5 : 0.15, col);
       cols.push(col);
     }
-    return { pts, cols, sand: !rock };
+    return { pts, cols, sand: !rock, hidden: false };
   }
 
   /** Walled side: a rock wall at the road edge, growing into a full canyon where tall. */
@@ -301,12 +308,13 @@ export class Corridor {
       else this.paint.strata(p.y, 0.62 + 0.38 * Math.min(1, dy[i] / Math.max(1, h)), col);
       cols.push(col);
     }
-    return { pts, cols, sand: false };
+    return { pts, cols, sand: false, hidden: false };
   }
 
   private sideStrip(c: Chunk, ka: number, kb: number, side: number) {
     const A = this.profile(ka, side);
     const B = this.profile(kb, side);
+    if (A.hidden || B.hidden) return;
     const kk = this.idx(ka);
     const dir = { x: -side * this.shape.rx[kk] * 0.3, y: 1, z: -side * this.shape.rz[kk] * 0.3 };
     const both = A.sand && B.sand;
