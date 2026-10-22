@@ -1,15 +1,17 @@
 // Lateral path planner for the AI: a dynamic program over a grid of (steps along s) x
-// (lateral cells) ahead of the racer. Obstacles block the cells their circle covers, walls
-// bound each row, and a cell may only reach cells within the racer's swerve rate in the next
-// row. The cheapest path stays near the racing line and threads boulder fields, which greedy
-// "dodge the next rock" rules can't do.
+// (lateral cells) ahead of the racer. Obstacles block the cells their capsule covers, hard
+// boundaries bound each row, sand costs extra, and a cell may only reach cells within the
+// racer's swerve rate in the next row. The cheapest path stays near the racing line and
+// threads boulder fields, which greedy "dodge the next rock" rules can't do.
 
-import type { Track } from './track.ts';
+import type { Ribbon } from './track.ts';
 import {
   AI_PLAN_BLOCK_COST,
+  AI_PLAN_HALF_SPAN,
   AI_PLAN_LATERAL,
   AI_PLAN_LINE_COST,
   AI_PLAN_MAX_SLOPE,
+  AI_PLAN_SAND_COST,
   AI_PLAN_STEP,
   AI_PLAN_SWERVE_COST,
   RACER_HALF_WIDTH,
@@ -23,42 +25,56 @@ export interface Blocker {
   radius: number;
 }
 
+export interface PlanRequest {
+  ribbon: Ribbon;
+  s: number;
+  x: number;
+  /** Current sideways motion as metres of x per metre of s. */
+  slope0: number;
+  /** For this many metres the racer is committed to slope0 (its response lag). */
+  lagDist: number;
+  /** Lateral offset the racer would like to hold (racing line). */
+  line: number;
+  /** How far ahead to plan, metres. */
+  look: number;
+  /** Extra space kept around blockers, metres. */
+  clearance: number;
+  blockers: readonly Blocker[];
+  /**
+   * Blockers also block this many metres in front of and behind them: the path is clear
+   * before arriving and stays clear until the racer, which lags it, is past.
+   */
+  stretch: number;
+  /** Return the path's x this many metres after the lag. */
+  lead: number;
+}
+
 export class PathPlanner {
   private cost = new Float64Array(0);
   private node = new Float64Array(0);
 
-  /**
-   * Plans ahead of the racer at (s, x). For the first `lagDist` metres the racer is committed
-   * to its current lateral slope `slope0` (steering takes that long to bite); from there the
-   * path is free. Returns the path's mean lateral slope (metres of x per metre of s) over the
-   * `window` metres after the lag: the heading the racer should be steering toward now.
-   * @param line lateral offset the racer would like to hold (racing line)
-   * @param look how far ahead to plan, metres
-   * @param clearance extra space kept around obstacles, metres
-   * @param lead obstacles also block this many metres in front of and behind them: the path
-   *   is clear before arriving and stays clear until the racer, which lags it, is past
-   */
-  plan(
-    track: Track,
-    s: number,
-    x: number,
-    slope0: number,
-    lagDist: number,
-    line: number,
-    look: number,
-    clearance: number,
-    obstacles: readonly Blocker[],
-    lead: number,
-    window: number,
-  ): number {
+  /** Lateral position of the cheapest path `lead` metres past the racer's committed lag. */
+  plan(q: PlanRequest): number {
+    const { ribbon, s, clearance, stretch } = q;
     // Nothing past the farthest blocker changes the answer, so plan only that far.
-    let far = lagDist + window;
-    for (const o of obstacles) far = Math.max(far, track.delta(s, o.s) + o.radius + RACER_RADIUS + clearance + lead);
-    const rows = Math.max(2, Math.ceil(Math.min(look, far) / AI_PLAN_STEP) + 1);
-    let half = 0;
-    for (let k = 0; k < rows; k++) half = Math.max(half, track.widthAt(s + k * AI_PLAN_STEP) / 2 - RACER_HALF_WIDTH);
-    const cols = Math.floor((2 * half) / AI_PLAN_LATERAL) + 1;
-    const xAt = (j: number) => -half + j * AI_PLAN_LATERAL;
+    let far = q.lagDist + q.lead;
+    for (const o of q.blockers) far = Math.max(far, ribbon.delta(s, o.s) + o.radius + RACER_RADIUS + clearance + stretch);
+    const rows = Math.max(2, Math.ceil(Math.min(q.look, far) / AI_PLAN_STEP) + 1);
+    // Plan within a window around the racer: run-off can make the ribbon very wide.
+    let lo = q.x - AI_PLAN_HALF_SPAN;
+    let hi = q.x + AI_PLAN_HALF_SPAN;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (let k = 0; k < rows; k++) {
+      const sk = s + k * AI_PLAN_STEP;
+      minX = Math.min(minX, ribbon.minXAt(sk) + RACER_HALF_WIDTH);
+      maxX = Math.max(maxX, ribbon.maxXAt(sk) - RACER_HALF_WIDTH);
+    }
+    lo = Math.max(lo, minX);
+    hi = Math.min(hi, maxX);
+    if (hi < lo) hi = lo;
+    const cols = Math.floor((hi - lo) / AI_PLAN_LATERAL) + 1;
+    const xAt = (j: number) => lo + j * AI_PLAN_LATERAL;
     const n = rows * cols;
     if (this.cost.length < n) {
       this.cost = new Float64Array(n);
@@ -67,25 +83,30 @@ export class PathPlanner {
     const node = this.node;
     const cost = this.cost;
 
-    // Cell costs: blocked by walls or obstacles, otherwise distance from the line.
+    // Cell costs: blocked past the boundaries or by blockers, dearer on sand, else off-line.
     for (let k = 0; k < rows; k++) {
       const sk = s + k * AI_PLAN_STEP;
-      const room = track.widthAt(sk) / 2 - RACER_HALF_WIDTH;
+      const rowLo = ribbon.minXAt(sk) + RACER_HALF_WIDTH;
+      const rowHi = ribbon.maxXAt(sk) - RACER_HALF_WIDTH;
+      const road = ribbon.widthAt(sk) / 2;
       for (let j = 0; j < cols; j++) {
         const xj = xAt(j);
-        node[k * cols + j] =
-          Math.abs(xj) > room ? AI_PLAN_BLOCK_COST : Math.abs(xj - line) * AI_PLAN_LINE_COST * AI_PLAN_STEP;
+        let c = Math.abs(xj - q.line) * AI_PLAN_LINE_COST * AI_PLAN_STEP;
+        if (xj < rowLo || xj > rowHi) c += AI_PLAN_BLOCK_COST;
+        else if (Math.abs(xj) > road) c += AI_PLAN_SAND_COST;
+        node[k * cols + j] = c;
       }
-      for (const o of obstacles) {
+      for (const o of q.blockers) {
         const reach = o.radius + RACER_RADIUS + clearance;
-        const ds = track.delta(o.s, sk);
-        // A capsule: the obstacle's circle stretched by `lead` both ways along s.
-        const along = Math.max(0, Math.abs(ds) - lead);
+        // A capsule: the blocker's circle stretched both ways along s.
+        const along = Math.max(0, Math.abs(ribbon.delta(o.s, sk)) - stretch);
         if (along >= reach) continue;
         const hw = Math.sqrt(reach * reach - along * along);
-        const j0 = Math.max(0, Math.ceil((o.x - hw + half) / AI_PLAN_LATERAL));
-        const j1 = Math.min(cols - 1, Math.floor((o.x + hw + half) / AI_PLAN_LATERAL));
-        for (let j = j0; j <= j1; j++) node[k * cols + j] += AI_PLAN_BLOCK_COST;
+        const j0 = Math.max(0, Math.ceil((o.x - hw - lo) / AI_PLAN_LATERAL));
+        const j1 = Math.min(cols - 1, Math.floor((o.x + hw - lo) / AI_PLAN_LATERAL));
+        // Dearer toward the centre: if contact can't be avoided, a glance off the edge beats
+        // a dead-centre hit (the only kind that crashes).
+        for (let j = j0; j <= j1; j++) node[k * cols + j] += AI_PLAN_BLOCK_COST * (2 - Math.abs(xAt(j) - o.x) / reach);
       }
     }
 
@@ -99,10 +120,10 @@ export class PathPlanner {
       const next = row + cols;
       for (let j = 0; j < cols; j++) {
         let best = Infinity;
-        const lo = Math.max(0, j - span);
-        const hi = Math.min(cols - 1, j + span);
-        for (let q = lo; q <= hi; q++) {
-          const c = cost[next + q] + Math.abs(q - j) * swerve;
+        const a = Math.max(0, j - span);
+        const b = Math.min(cols - 1, j + span);
+        for (let r = a; r <= b; r++) {
+          const c = cost[next + r] + Math.abs(r - j) * swerve;
           if (c < best) best = c;
         }
         cost[row + j] = node[row + j] + best;
@@ -110,26 +131,25 @@ export class PathPlanner {
     }
 
     // Forward: ride the committed motion through the lag, then follow the cheapest successors.
-    const cellOf = (px: number) => Math.min(cols - 1, Math.max(0, Math.round((px + half) / AI_PLAN_LATERAL)));
-    const lagRow = Math.min(rows - 2, Math.round(lagDist / AI_PLAN_STEP));
-    let j = cellOf(x + slope0 * lagRow * AI_PLAN_STEP);
-    const j0 = j;
-    const endRow = Math.min(rows - 1, lagRow + Math.max(1, Math.round(window / AI_PLAN_STEP)));
+    const cellOf = (px: number) => Math.min(cols - 1, Math.max(0, Math.round((px - lo) / AI_PLAN_LATERAL)));
+    const lagRow = Math.min(rows - 2, Math.round(q.lagDist / AI_PLAN_STEP));
+    let j = cellOf(q.x + q.slope0 * lagRow * AI_PLAN_STEP);
+    const endRow = Math.min(rows - 1, lagRow + Math.max(1, Math.round(q.lead / AI_PLAN_STEP)));
     for (let k = lagRow + 1; k <= endRow; k++) {
       const next = k * cols;
       let best = Infinity;
       let pick = j;
-      const lo = Math.max(0, j - span);
-      const hi = Math.min(cols - 1, j + span);
-      for (let q = lo; q <= hi; q++) {
-        const c = cost[next + q] + Math.abs(q - j) * swerve;
+      const a = Math.max(0, j - span);
+      const b = Math.min(cols - 1, j + span);
+      for (let r = a; r <= b; r++) {
+        const c = cost[next + r] + Math.abs(r - j) * swerve;
         if (c < best) {
           best = c;
-          pick = q;
+          pick = r;
         }
       }
       j = pick;
     }
-    return ((j - j0) * AI_PLAN_LATERAL) / ((endRow - lagRow) * AI_PLAN_STEP);
+    return xAt(j);
   }
 }

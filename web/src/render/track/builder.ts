@@ -33,15 +33,39 @@ export class FlatBuilder {
     this.tri(a, c, d, lo, hi, hi);
   }
 
-  build(): THREE.BufferGeometry | null {
+  /**
+   * `tile` (metres) adds box-projected UVs: each face takes the world plane it faces most, so
+   * one tiling texture wraps cliffs, ledges and tops without stretching or hand-made seams.
+   */
+  build(tile?: number): THREE.BufferGeometry | null {
     if (this.pos.length === 0) return null;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.computeVertexNormals();
+    if (tile !== undefined) g.setAttribute('uv', new THREE.Float32BufferAttribute(boxUv(this.pos, g.attributes.normal.array, tile), 2));
     g.computeBoundingSphere();
     return g;
   }
+}
+
+function boxUv(pos: number[], nrm: ArrayLike<number>, tile: number): number[] {
+  const uv: number[] = [];
+  for (let t = 0; t < pos.length; t += 9) {
+    const nx = Math.abs(nrm[t]);
+    const ny = Math.abs(nrm[t + 1]);
+    const nz = Math.abs(nrm[t + 2]);
+    for (let v = 0; v < 9; v += 3) {
+      const x = pos[t + v] / tile;
+      const y = pos[t + v + 1] / tile;
+      const z = pos[t + v + 2] / tile;
+      // Vertical faces keep v = height, so strata in the texture run level all round a cliff.
+      if (ny >= nx && ny >= nz) uv.push(x, z);
+      else if (nx >= nz) uv.push(z, y);
+      else uv.push(x, y);
+    }
+  }
+  return uv;
 }
 
 /** Indexed grid-like surfaces with smooth normals (road, terrain). */

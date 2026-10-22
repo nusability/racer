@@ -21,6 +21,7 @@ import {
   BANK_PER_CURVATURE,
   BOOST_PAD_LENGTH,
   BOOST_PAD_WIDTH,
+  BRANCH_EDGE_FADE,
   BRANCH_JUNCTION_LENGTH,
   CHASM_DEPTH,
   DEFAULT_NARROW_BLEND,
@@ -53,6 +54,11 @@ interface EdgeOverride {
   side: -1 | 1;
   /** The edge sits this far beyond that side's road edge (0 = a wall at the road edge). */
   extra: number;
+  /**
+   * Blend from the ribbon's own edge into this one along the range ('in') or back out of it
+   * ('out'), so run-off narrows gradually instead of stepping into a wall.
+   */
+  fade?: 'in' | 'out';
 }
 
 export class Ribbon {
@@ -165,8 +171,11 @@ export class Ribbon {
     const edgeL = width.map((w, k) => w / 2 + runL[k]);
     const edgeR = width.map((w, k) => w / 2 + runR[k]);
     for (const o of edgeOverrides) {
-      this.forRange(o.s0, o.s1, (k) => {
-        const edge = width[k] / 2 + o.extra;
+      this.forRange(o.s0, o.s1, (k, t) => {
+        const own = o.side < 0 ? edgeL[k] : edgeR[k];
+        const target = width[k] / 2 + o.extra;
+        const w = o.fade === 'in' ? smoothstep(t) : o.fade === 'out' ? 1 - smoothstep(t) : 1;
+        const edge = own + (target - own) * w;
         if (o.side < 0) edgeL[k] = edge;
         else edgeR[k] = edge;
       });
@@ -596,9 +605,12 @@ export class Track extends Ribbon {
       if (exitS - entryS < 4 * BRANCH_JUNCTION_LENGTH) {
         throw new Error(`Track ${def.id}: branch ${b.id} must leave and rejoin in order and be longer than its junctions`);
       }
+      const fadeIn = Math.max(0, entryS - BRANCH_EDGE_FADE);
+      overrides.push({ s0: fadeIn, s1: entryS, side: b.side, extra: b.width, fade: 'in' });
       overrides.push({ s0: entryS, s1: entryS + BRANCH_JUNCTION_LENGTH, side: b.side, extra: b.width });
       overrides.push({ s0: entryS + BRANCH_JUNCTION_LENGTH, s1: exitS - BRANCH_JUNCTION_LENGTH, side: b.side, extra: 0 });
       overrides.push({ s0: exitS - BRANCH_JUNCTION_LENGTH, s1: exitS, side: b.side, extra: b.width });
+      overrides.push({ s0: exitS, s1: Math.min(probe.length, exitS + BRANCH_EDGE_FADE), side: b.side, extra: b.width, fade: 'out' });
     }
     super(mainSpec(def), overrides);
     this.def = def;

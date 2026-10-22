@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mulberry32 } from '../../core/rng.ts';
 import type { Obstacle } from '../../core/types.ts';
 import type { FlatBuilder, P3 } from './builder.ts';
+import { RUNOFF_MIN } from './config.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing } from './paint.ts';
 
@@ -38,13 +39,13 @@ const ROCK_SIDES = 9;
 
 export function buildRockFeatures(cor: Corridor, seed: number): void {
   const rng = mulberry32(seed ^ 0x51ab);
-  const track = cor.track;
+  const track = cor.ribbon;
   for (const o of track.obstacles) {
-    if (o.kind === 'pillar') column(cor, cor.envAt(o.s), o, PILLAR_RINGS, rng);
+    if (o.kind === 'pillar') column(cor, cor.chunkAt(o.s).rock, o, PILLAR_RINGS, rng);
   }
   for (const a of track.arches) {
     const legs = track.obstacles.filter((o) => o.kind === 'archLeg' && Math.abs(track.delta(o.s, a.s)) < 0.01);
-    const env = cor.envAt(a.s);
+    const env = cor.chunkAt(a.s).rock;
     const top = a.height + ARCH_THICKNESS;
     for (const leg of legs) {
       // Legs: straight-sided columns up into the span.
@@ -62,7 +63,7 @@ export function buildRockFeatures(cor: Corridor, seed: number): void {
 
 /** A rock column around an obstacle cylinder, following the banked road frame. */
 function column(cor: Corridor, b: FlatBuilder, o: Obstacle, rings: [number, number][], rng: () => number) {
-  const track = cor.track;
+  const track = cor.ribbon;
   const col = new THREE.Color();
   const col2 = new THREE.Color();
   const twist = rng() * Math.PI;
@@ -111,10 +112,14 @@ function span(
   legs: Obstacle[],
   rng: () => number,
 ) {
-  const track = cor.track;
-  const half = track.widthAt(s) / 2;
-  const xMin = Math.min(-half - ARCH_OVERHANG, ...legs.map((l) => l.x - l.radius));
-  const xMax = Math.max(half + ARCH_OVERHANG, ...legs.map((l) => l.x + l.radius));
+  const track = cor.ribbon;
+  // The span ties into the walls where the course is walled; over open run-off it ends just
+  // past the legs, so the sand round the outside stays open sky.
+  const walled = (x: number) => (x < 0 ? -track.minXAt(s) : track.maxXAt(s)) - track.widthAt(s) / 2 < RUNOFF_MIN;
+  const legMin = Math.min(...legs.map((l) => l.x - l.radius));
+  const legMax = Math.max(...legs.map((l) => l.x + l.radius));
+  const xMin = walled(-1) ? Math.min(legMin, track.minXAt(s) - ARCH_OVERHANG) : legMin - 1;
+  const xMax = walled(1) ? Math.max(legMax, track.maxXAt(s) + ARCH_OVERHANG) : legMax + 1;
   const steps = 14;
   const xs: number[] = [];
   for (let i = 0; i <= steps; i++) xs.push(xMin + ((xMax - xMin) * i) / steps);

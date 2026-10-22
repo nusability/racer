@@ -27,6 +27,7 @@ import {
   SESSION_GO_SHOWN,
   SESSION_HARD_LANDING,
   SESSION_INVULNERABLE_BLINK,
+  SESSION_OFFROAD_DUST,
   SESSION_MAX_FRAME_DT,
   SESSION_SHAKE_HIT,
   SESSION_SHAKE_LAND,
@@ -48,6 +49,7 @@ interface RacerView {
   curr: PoseSnapshot;
   draw: PoseSnapshot;
   wasBoosting: boolean;
+  offroad: boolean;
 }
 
 export class RaceSession {
@@ -103,7 +105,7 @@ export class RaceSession {
         detail: e.isPlayer || ctx.settings.quality === 'high' ? 'high' : 'low',
       });
       this.scene.add(model.root);
-      this.views.push({ model, prev: emptySnapshot(), curr: emptySnapshot(), draw: emptySnapshot(), wasBoosting: false });
+      this.views.push({ model, prev: emptySnapshot(), curr: emptySnapshot(), draw: emptySnapshot(), wasBoosting: false, offroad: false });
     }
     this.syncSnapshots(true);
 
@@ -299,6 +301,9 @@ export class RaceSession {
         return;
       case 'launch':
         return;
+      case 'offroad':
+        this.views[this.indexOf(ev.id)].offroad = ev.on;
+        return;
     }
   }
 
@@ -363,7 +368,8 @@ export class RaceSession {
       if (r.crashed <= 0 && !r.airborne && this.nearCamera(i)) {
         // Dust inherits the racer's velocity so it streams past the chase camera.
         this.tmpVel.set(0, 0, -1).applyQuaternion(v.model.root.quaternion).multiplyScalar(r.speed);
-        this.effects.dust(v.model.root.position, this.tmpVel, Math.min(1, r.speed / stats.topSpeed), this.track.def.palette.sand);
+        const amount = Math.min(1, r.speed / stats.topSpeed) * (v.offroad ? SESSION_OFFROAD_DUST : 1);
+        this.effects.dust(v.model.root.position, this.tmpVel, amount, this.track.def.palette.sand);
       }
     });
 

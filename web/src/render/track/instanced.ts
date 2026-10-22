@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mulberry32, range, type Rng } from '../../core/rng.ts';
 import type { TrackScenery } from '../../data/tracks/scenery.ts';
 import { FlatBuilder, type P3 } from './builder.ts';
-import type { Quality } from './config.ts';
+import { RIDGE_RISE, RUNOFF_MIN, type Quality } from './config.ts';
+import { sideIndex } from './shape.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing } from './paint.ts';
 
@@ -18,7 +19,7 @@ const LOW_SCATTER = 0.5;
 const PALMS_PER_OASIS = 26;
 const POOL_RADIUS = 34;
 /** Oasis pools sit this far past the road edge. */
-const POOL_SETBACK = 75;
+const POOL_SETBACK = 55;
 
 interface Placement {
   pos: P3;
@@ -48,17 +49,13 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: Placeme
 /** Spots off the corridor (clear of every part of the lap) for decorative props. */
 function scatterSpots(cor: Corridor, count: number, rng: Rng, minOut: number, spread: number): { pos: P3; k: number }[] {
   const out: { pos: P3; k: number }[] = [];
-  const n = cor.track.samples.length;
+  const n = cor.n;
   for (let tries = 0; out.length < count && tries < count * 6; tries++) {
     const k = Math.floor(rng() * n);
     const side = rng() < 0.5 ? -1 : 1;
-    const dx = cor.shape.reach[k] + minOut + rng() * rng() * spread;
-    const p = cor.beside(k, side, dx, 0);
-    const near = cor.ground.nearest(p.x, p.z);
-    if (near) {
-      const half = cor.track.samples[near.k].width / 2;
-      if (Math.abs(near.d) < half + cor.shape.reach[near.k] + SCATTER_CLEAR) continue;
-    }
+    const reach = cor.shape.outer[sideIndex(side)][k] - cor.edge(k, side);
+    const p = cor.beside(k, side, reach + minOut + rng() * rng() * spread, 0);
+    if (!cor.ground.clearOfCourse(p.x, p.z, SCATTER_CLEAR)) continue;
     p.y = cor.ground.meshHeight(p.x, p.z);
     out.push({ pos: p, k });
   }
@@ -67,7 +64,7 @@ function scatterSpots(cor: Corridor, count: number, rng: Rng, minOut: number, sp
 
 export function buildInstanced(cor: Corridor, scenery: TrackScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
   const rng = mulberry32(seed ^ 0x1ce);
-  const track = cor.track;
+  const track = cor.ribbon;
   const meshes: THREE.InstancedMesh[] = [];
   const keep = quality === 'high' ? 1 : LOW_SCATTER;
   const scatterCount = Math.round((scenery.scatterPerKm * track.length * keep) / 1000);
@@ -96,7 +93,7 @@ export function buildInstanced(cor: Corridor, scenery: TrackScenery, quality: Qu
     const geo = scenery.scatter === 'cacti' ? cactus() : scenery.scatter === 'bones' ? rib() : shard();
     const list: Placement[] = scatterSpots(cor, scatterCount, rng, SCATTER_CLEAR, SCATTER_SPREAD).map((spot) => {
       const sc = range(rng, 0.7, 1.4);
-      const k = cor.track.samples[spot.k];
+      const k = track.samples[spot.k];
       // Ribs lean in toward the road like a ribcage the course runs through.
       const yaw = scenery.scatter === 'bones' ? Math.atan2(k.right.x, k.right.z) + (rng() < 0.5 ? 0 : Math.PI) : rng() * 6.3;
       return { pos: { ...spot.pos, y: spot.pos.y - 1 }, yaw, scale: { x: sc, y: sc * range(rng, 0.8, 1.3), z: sc } };
@@ -116,16 +113,15 @@ export function buildInstanced(cor: Corridor, scenery: TrackScenery, quality: Qu
       const rr = POOL_RADIUS + 4 + rng() * 40;
       const x = pool.x + Math.cos(ang) * rr;
       const z = pool.z + Math.sin(ang) * rr;
-      const near = cor.ground.nearest(x, z);
-      if (near && Math.abs(near.d) < cor.track.samples[near.k].width / 2 + 5) continue;
+      if (!cor.ground.clearOfCourse(x, z, 2)) continue;
       const sc = range(rng, 0.8, 1.25);
       palms.push({ pos: { x, y: cor.ground.meshHeight(x, z) - 0.5, z }, yaw: rng() * 6.3, scale: { x: sc, y: sc, z: sc } });
     }
     // A line of palms along the road edge too, so the oasis is felt at speed.
     for (let d = -150; d <= 150; d += 22) {
       const kk = (k + Math.round(d / track.step) + track.samples.length) % track.samples.length;
-      if (cor.track.samples[kk].gap || cor.shape.tunnel[kk]) continue;
-      const p = cor.beside(kk, o.side, 9 + rng() * 6, 0);
+      if (track.samples[kk].gap || cor.tunnel(kk) || cor.shape.run[sideIndex(o.side)][kk] < RUNOFF_MIN) continue;
+      const p = cor.beside(kk, o.side, RIDGE_RISE + 4 + rng() * 6, 0);
       palms.push({ pos: { ...p, y: cor.ground.meshHeight(p.x, p.z) }, yaw: rng() * 6.3, scale: { x: 1, y: range(rng, 0.9, 1.2), z: 1 } });
     }
   }

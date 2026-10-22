@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Track } from '../../core/track.ts';
+import { Track, type Ribbon } from '../../core/track.ts';
 import { TRACKS, trackById } from '../../data/tracks/index.ts';
 import { applyEnvironment, buildTrackScene } from '../trackScene.ts';
 import { FOG_FAR, type Quality } from './config.ts';
@@ -36,6 +36,8 @@ let speed = Number(params.get('speed') ?? 150);
 let paused = params.get('pause') === '1';
 let view = params.get('view') ?? 'fly';
 let lateral = Number(params.get('x') ?? 0);
+/** Which ribbon the camera flies: -1 the main loop, else a shortcut. */
+let ribbon: Ribbon = track.ribbon(Number(params.get('branch') ?? -1));
 const orbit = { yaw: 0.6, pitch: 0.35, dist: 140 };
 
 const hud = document.createElement('div');
@@ -69,7 +71,14 @@ function drawMap() {
     ctx.fillStyle = p.gap ? '#f33' : Number.isFinite(p.ceiling) ? '#222' : p.wallHeight > 0 ? '#c84' : '#fff';
     ctx.fillRect(8 + (p.pos.x - mx0) * mScale, 8 + (p.pos.z - mz0) * mScale, 2, 2);
   }
-  const me = track.toWorld(s, 0, 0);
+  ctx.fillStyle = '#e6c';
+  for (const b of track.branches) {
+    for (let k = 0; k < b.ribbon.samples.length; k += 4) {
+      const p = b.ribbon.samples[k].pos;
+      ctx.fillRect(8 + (p.x - mx0) * mScale, 8 + (p.z - mz0) * mScale, 2, 2);
+    }
+  }
+  const me = ribbon.toWorld(s, 0, 0);
   ctx.fillStyle = '#0f0';
   ctx.beginPath();
   ctx.arc(8 + (me.x - mx0) * mScale, 8 + (me.z - mz0) * mScale, 4, 0, Math.PI * 2);
@@ -106,13 +115,13 @@ window.addEventListener('resize', () => {
 
 const look = new THREE.Vector3();
 function placeCamera() {
-  const at = track.toWorld(s, lateral, RACER_HEIGHT);
+  const at = ribbon.toWorld(s, lateral, RACER_HEIGHT);
   if (view === 'fly') {
-    const p = track.toWorld(s - CAM_BACK, lateral, CAM_UP);
+    const p = ribbon.toWorld(s - CAM_BACK, lateral, CAM_UP);
     camera.position.set(p.x, p.y, p.z);
-    const l = track.toWorld(s + LOOK_AHEAD, lateral * 0.5, RACER_HEIGHT);
+    const l = ribbon.toWorld(s + LOOK_AHEAD, lateral * 0.5, RACER_HEIGHT);
     look.set(l.x, l.y, l.z);
-    const up = track.frameAt(s).up;
+    const up = ribbon.frameAt(s).up;
     camera.up.set(up.x, up.y, up.z);
   } else if (view === 'top') {
     camera.position.set(at.x, at.y + orbit.dist * 4, at.z + 1);
@@ -138,7 +147,16 @@ function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   fps += (1 / Math.max(1e-3, dt) - fps) * 0.05;
-  if (!paused) s = track.wrap(s + speed * dt);
+  if (!paused) {
+    s += speed * dt;
+    // A shortcut ends: rejoin the main loop where it does.
+    if (!ribbon.closed && s >= ribbon.length) {
+      const b = track.branches.find((x) => x.ribbon === ribbon);
+      s = b ? b.exitS : 0;
+      ribbon = track;
+    }
+    s = ribbon.wrap(s);
+  }
   placeCamera();
   ts.update(now / 1000, camera.position);
   renderer.render(scene, camera);
@@ -170,8 +188,9 @@ function totals() {
 }
 Object.assign(window, {
   viewer: {
-    set(next: { s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number }) {
-      if (next.s !== undefined) s = track.wrap(next.s);
+    set(next: { branch?: number; s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number }) {
+      if (next.branch !== undefined) ribbon = track.ribbon(next.branch);
+      if (next.s !== undefined) s = ribbon.wrap(next.s);
       if (next.view) view = next.view;
       if (next.speed !== undefined) speed = next.speed;
       if (next.paused !== undefined) paused = next.paused;

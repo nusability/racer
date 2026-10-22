@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Landmark Viewer (dev)</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      // ?set=a (default) or ?set=b picks which landmark set's viewer runs; a set-B kind implies b.
+      const query = new URLSearchParams(location.search);
+      const B_KINDS = ['bazaar', 'fair', 'grandstand', 'oasisTown', 'cliffVillage', 'colossus', 'windfarm', 'balloons'];
+      const set = query.get('set') === 'b' || B_KINDS.includes(query.get('kind')) ? 'B' : 'A';
+      import(`/src/render/landmarks/viewer${set}.ts`);
+    </script>
+  </body>
+</html>

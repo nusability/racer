@@ -15,3 +15,5 @@ export const SESSION_HARD_LANDING = 50;
 export const SESSION_SHAKE_LAND = 0.5;
 /** Blinks per second while a respawned racer passes through obstacles. */
 export const SESSION_INVULNERABLE_BLINK = 8;
+/** Dust multiplier while a racer is on the sand run-off. */
+export const SESSION_OFFROAD_DUST = 2.5;

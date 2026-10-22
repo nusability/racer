@@ -6,6 +6,9 @@ import type { LandmarkKind } from '../../render/landmarks/types.ts';
 
 export type ScatterKind = 'rocks' | 'cacti' | 'bones' | 'shards';
 
+/** What marks the hard boundary at the outside of the run-off sand. */
+export type BoundaryStyle = 'dune' | 'rock' | 'fence';
+
 export interface TrackScenery {
   /** Flat-topped mesas and buttes on the horizon. */
   mesas: number;
@@ -19,6 +22,7 @@ export interface TrackScenery {
   scatterPerKm: number;
   /** Palm groves around a pool beside the road; side -1 = left, 1 = right. */
   oases: { at: TrackParam; side: -1 | 1 }[];
+  boundary: BoundaryStyle;
   /** Unique set pieces beside the course. */
   landmarks: LandmarkPlacement[];
 }

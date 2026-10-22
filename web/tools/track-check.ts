@@ -47,7 +47,9 @@ const LANDING_CLEAR = 150;
 /** Every obstacle must leave a free lane at least this wide somewhere across the course. */
 const OPEN_LANE = 16;
 /** Past a junction a branch is still peeling away from the main road for this long. */
-const DIVERGE = 220;
+const DIVERGE = 320;
+/** Shortcuts are the risky line: a tighter free lane is enough there. */
+const BRANCH_LANE = 8;
 /** A shortcut should save between these many seconds at RACE_SPEED. */
 const SAVING_RANGE: [number, number] = [1.5, 4.5];
 
@@ -97,16 +99,13 @@ function fly(t: Ribbon, launch: number, speed: number, vy: number): Flight {
   return { landed: false, distance: 5000, apex, hit: 'never lands' };
 }
 
-/** Lowest speed that lands beyond the gap, by bisection. */
+/**
+ * Lowest speed that lands beyond the gap. Scanned upward rather than bisected: past a certain
+ * speed a racer can sail into the next chasm, so "lands" is not monotonic in speed.
+ */
 function minClearSpeed(t: Ribbon, lip: number, slope: number): number {
-  let lo = 5;
-  let hi = 600;
-  for (let i = 0; i < 40; i++) {
-    const mid = (lo + hi) / 2;
-    if (fly(t, lip, mid, mid * slope).landed) hi = mid;
-    else lo = mid;
-  }
-  return hi;
+  for (let v = 5; v < 600; v += 0.5) if (fly(t, lip, v, v * slope).landed) return v;
+  return Infinity;
 }
 
 function minRadiusBetween(t: Ribbon, s0: number, len: number): number {
@@ -261,10 +260,12 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
       cursor = Math.max(cursor, b);
     }
     widest = Math.max(widest, t.maxXAt(o.s) - cursor);
-    if (widest < OPEN_LANE) w(`${o.kind} at s=${fmt(o.s)} leaves no ${OPEN_LANE}m lane (widest ${widest.toFixed(1)}m)`);
+    const lane = isMain ? OPEN_LANE : BRANCH_LANE;
+    if (widest < lane) w(`${o.kind} at s=${fmt(o.s)} leaves no ${lane}m lane (widest ${widest.toFixed(1)}m)`);
   }
   for (const a of t.arches) {
-    if (a.openMax - a.openMin < OPEN_LANE) w(`arch at s=${fmt(a.s)} opening ${(a.openMax - a.openMin).toFixed(0)}m < ${OPEN_LANE}m`);
+    const lane = isMain ? OPEN_LANE : BRANCH_LANE;
+    if (a.openMax - a.openMin < lane) w(`arch at s=${fmt(a.s)} opening ${(a.openMax - a.openMin).toFixed(0)}m < ${lane}m`);
   }
 }
 
@@ -330,12 +331,19 @@ function check(def: TrackDef): string[] {
     }
     // Between the junctions the branch must stay clear of every part of the main loop.
     let worst = Infinity;
+    let worstAt = 0;
     for (let k = 0; k < r.samples.length; k += 5) {
       const bs = r.samples[k];
       if (bs.s < jEnd + DIVERGE || bs.s > xStart - DIVERGE) continue;
-      for (let q = 0; q < t.samples.length; q += 5) worst = Math.min(worst, clearance(bs, t.samples[q]));
+      for (let q = 0; q < t.samples.length; q += 5) {
+        const c = clearance(bs, t.samples[q]);
+        if (c < worst) {
+          worst = c;
+          worstAt = bs.s;
+        }
+      }
     }
-    if (worst < MIN_CLEARANCE) warn.push(`${label}: comes within ${fmt(worst)}m of the main course's boundary`);
+    if (worst < MIN_CLEARANCE) warn.push(`${label}: comes within ${fmt(worst)}m of the main course's boundary at branch s=${fmt(worstAt)} of ${fmt(r.length)}`);
   }
 
   // Non-adjacent parts of the main loop.

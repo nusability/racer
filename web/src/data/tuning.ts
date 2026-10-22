@@ -72,7 +72,7 @@ export const SLOPE_SPEED_FACTOR = 0.5;
 /** Top speed lost at full damage (fraction): damage hurts but never strands you. */
 export const DAMAGE_TOP_SPEED_LOSS = 0.08;
 /** Top speed multiplier while overheated. */
-export const OVERHEAT_TOP_SPEED = 0.85;
+export const OVERHEAT_TOP_SPEED = 0.95;
 
 // Lateral control: the craft flies along the track and the player sets where across it it is.
 /** Handling (racer stat) at which the lateral numbers below apply as written. */
@@ -80,9 +80,9 @@ export const HANDLING_REF = 1.6;
 /** Full steer moves the lateral target this fast, m/s (scaled by handling). */
 export const STEER_TARGET_RATE = 45;
 /** Natural frequency of the critically damped chase of the target, rad/s (by handling). */
-export const LATERAL_RESPONSE = 9;
+export const LATERAL_RESPONSE = 15;
 /** Fastest the craft moves sideways, m/s (by handling): snappy, never a teleport. */
-export const LATERAL_SPEED_MAX = 55;
+export const LATERAL_SPEED_MAX = 60;
 /** The target may sit this far past a hard boundary, so pushing into a wall grinds it. */
 export const TARGET_OVERREACH = 1;
 /** Corners drift the target outward: m/s of drift per m/s² of speed²·curvature at GRIP_REF. */
@@ -140,11 +140,11 @@ export const ARCH_HALF_DEPTH = 3;
 /** Search distance for obstacles around a racer, metres (exceeds any radius sum). */
 export const OBSTACLE_QUERY_RANGE = 30;
 /** A hit closer to dead centre than this fraction of the combined radius can be a crash. */
-export const OBSTACLE_CRASH_OFFSET = 0.35;
+export const OBSTACLE_CRASH_OFFSET = 0.2;
 /** ...but only above this fraction of top speed. */
 export const OBSTACLE_CRASH_SPEED_FRACTION = 0.7;
 /** Forward speed lost by a glancing hit, as a fraction, at its most central. */
-export const OBSTACLE_SPEED_LOSS = 0.25;
+export const OBSTACLE_SPEED_LOSS = 0.15;
 /** Damage of a glancing hit at its most central (before armour). */
 export const OBSTACLE_DAMAGE = 0.12;
 /** Sideways speed a glancing hit throws the racer off with, m/s. */
@@ -174,7 +174,7 @@ export const RESPAWN_INVULNERABLE = 1.5;
 /** Heat gained per second of boost (heat is 0..1). */
 export const BOOST_HEAT_RATE = 0.32;
 /** Forced cool-down after overheating, seconds. */
-export const OVERHEAT_DURATION = 3;
+export const OVERHEAT_DURATION = 2.5;
 /** Free boost from a pad, seconds. */
 export const BOOST_PAD_DURATION = 1.2;
 /** A pad only works for a racer at most this high above it, metres. */
@@ -189,6 +189,8 @@ export const ROLL_PER_LATERAL_SPEED = 0.012;
 export const MAX_LEAN = 0.6;
 
 // AI driver (src/core/ai.ts). Skill 0..1 interpolates the *_LO/_HI pairs.
+/** Skill is raised to this power before interpolating: early cups beatable, 0.9 still sharp. */
+export const AI_SKILL_CURVE = 1.6;
 /** Spacing of the AI's look-ahead samples, metres. */
 export const AI_SAMPLE_STEP = 10;
 /** Racing-line look-ahead in seconds of travel at current speed. */
@@ -200,8 +202,6 @@ export const AI_LINE_FULL_CURVATURE = 1 / 300;
 export const AI_WALL_MARGIN = 3;
 /** The AI closes the gap between its target and where it wants it in about this long, s. */
 export const AI_TARGET_TIME = 0.08;
-/** The AI sets its target to the planned path this many seconds ahead: the chase lag. */
-export const AI_TARGET_LEAD = 0.15;
 /** Obstacle look-ahead in seconds of travel. */
 export const AI_OBSTACLE_LOOK_TIME_LO = 0.8;
 export const AI_OBSTACLE_LOOK_TIME_HI = 1.5;
@@ -211,6 +211,8 @@ export const AI_PLAN_INTERVAL = 3;
 export const AI_PLAN_STEP = 5;
 /** Obstacle path planner: lateral resolution, metres. */
 export const AI_PLAN_LATERAL = 0.5;
+/** The planner only considers this far either side of the racer, metres. */
+export const AI_PLAN_HALF_SPAN = 30;
 /** Lateral metres per metre of travel the planner assumes the racer can swerve. */
 export const AI_PLAN_MAX_SLOPE = 0.25;
 /** Obstacles block this many seconds of travel in front of and behind them. */
@@ -228,19 +230,19 @@ export const AI_PLAN_SAND_COST = 40;
 /** Response lag the AI plans around: it is committed to its current sideways motion. */
 export const AI_PATH_LAG = 0.08;
 /** Extra clearance the AI leaves around obstacles, metres. */
-export const AI_CLEARANCE_LO = 2.5;
-export const AI_CLEARANCE_HI = 1.2;
+export const AI_CLEARANCE_LO = 5;
+export const AI_CLEARANCE_HI = 1.6;
 /** Fraction of the theoretical cornering limit the AI dares to carry. */
-export const AI_CORNER_FACTOR_LO = 0.7;
+export const AI_CORNER_FACTOR_LO = 0.45;
 export const AI_CORNER_FACTOR_HI = 0.95;
 /** Braking reaction delay, seconds of travel lost before the AI starts braking. */
 export const AI_BRAKE_REACTION_LO = 0.35;
 export const AI_BRAKE_REACTION_HI = 0.05;
 /** Straight needed before the AI boosts, as a multiple of the braking distance it needs. */
-export const AI_BOOST_CAUTION_LO = 3;
+export const AI_BOOST_CAUTION_LO = 8;
 export const AI_BOOST_CAUTION_HI = 1;
 /** Heat at which the AI stops boosting. */
-export const AI_HEAT_LIMIT_LO = 0.75;
+export const AI_HEAT_LIMIT_LO = 0.6;
 export const AI_HEAT_LIMIT_HI = 0.93;
 /** The AI resumes boosting once heat has fallen this far below its limit. */
 export const AI_HEAT_HYSTERESIS = 0.35;
@@ -253,7 +255,7 @@ export const AI_MISTAKE_RATE = 0.3;
 /** Length of a lapse, seconds. */
 export const AI_MISTAKE_DURATION = 0.6;
 /** Seconds a cold engine idles before the AI boosts again: novices waste cooling. */
-export const AI_BOOST_REST_LO = 2.5;
+export const AI_BOOST_REST_LO = 9;
 export const AI_BOOST_REST_HI = 0;
 /** Approaching a jump below this multiple of its minimum clearing speed, the AI won't brake. */
 export const AI_JUMP_SPEED_MARGIN = 1.3;
@@ -272,3 +274,5 @@ export const AI_SHORTCUT_LOOK_TIME = 2;
 // --- Shortcuts (src/core/track.ts) ---
 /** Length of the side-by-side run where a branch leaves or rejoins the main road. */
 export const BRANCH_JUNCTION_LENGTH = 60;
+/** Distance over which the main loop's run-off narrows to meet a branch junction and widens after it. */
+export const BRANCH_EDGE_FADE = 150;

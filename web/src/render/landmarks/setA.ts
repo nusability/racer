@@ -2,6 +2,12 @@
 
 import * as THREE from 'three';
 import type { Landmark, LandmarkFactory, LandmarkOptions } from './types.ts';
+import { createSpaceport } from './a/spaceport.ts';
+import { createInvasion } from './a/invasion.ts';
+import { createWreck } from './a/wreck.ts';
+import { createSkyfleet } from './a/skyfleet.ts';
+import { createMine } from './a/mine.ts';
+import { createStormwall } from './a/stormwall.ts';
 
 type SetAKind = 'spaceport' | 'invasion' | 'wreck' | 'skyfleet' | 'mine' | 'stormwall' | 'sandbeast';
 
@@ -25,11 +31,11 @@ function placeholder(w: number, h: number, d: number): LandmarkFactory {
 }
 
 export const LANDMARKS_A: Record<SetAKind, LandmarkFactory> = {
-  spaceport: placeholder(400, 60, 300),
-  invasion: placeholder(500, 40, 400),
-  wreck: placeholder(450, 80, 120),
-  skyfleet: placeholder(300, 20, 300),
-  mine: placeholder(400, 70, 300),
-  stormwall: placeholder(3000, 400, 200),
+  spaceport: createSpaceport,
+  invasion: createInvasion,
+  wreck: createWreck,
+  skyfleet: createSkyfleet,
+  mine: createMine,
+  stormwall: createStormwall,
   sandbeast: placeholder(300, 60, 100),
 };

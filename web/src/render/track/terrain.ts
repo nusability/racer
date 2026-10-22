@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SmoothBuilder } from './builder.ts';
 import {
+  SAND_TILE,
   TERRAIN_CELLS_FAR,
   TERRAIN_CELLS_NEAR,
   TERRAIN_MARGIN,
@@ -23,7 +24,7 @@ const UP = { x: 0, y: 1, z: 0 };
  * changes between neighbours never open a crack.
  */
 export function buildTerrain(ground: Ground, quality: Quality, material: THREE.Material): THREE.Mesh[] {
-  const samples = ground.track.samples;
+  const samples = ground.views.flatMap((v) => v.ribbon.samples);
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -69,7 +70,7 @@ export function buildTerrain(ground: Ground, quality: Quality, material: THREE.M
 }
 
 function toMesh(b: SmoothBuilder, material: THREE.Material): THREE.Mesh {
-  const g = b.build(false);
+  const g = b.build(true);
   if (!g) throw new Error('terrain tile produced no geometry');
   const m = new THREE.Mesh(g, material);
   m.matrixAutoUpdate = false;
@@ -97,7 +98,7 @@ function addTile(b: SmoothBuilder, ground: Ground, tx: number, tz: number, n: nu
       const dx = h(i + 1, j) - h(i - 1, j);
       const dz = h(i, j + 1) - h(i, j - 1);
       nrm.set(-dx, 2 * step, -dz).normalize();
-      b.vertex({ x, y, z }, ground.color(x, z, y, Math.hypot(dx, dz) / (2 * step), col), 0, 0, nrm);
+      b.vertex({ x, y, z }, ground.color(x, z, y, Math.hypot(dx, dz) / (2 * step), col), x / SAND_TILE, z / SAND_TILE, nrm);
     }
   }
   const at = (i: number, j: number) => first + j * (n + 1) + i;
@@ -149,13 +150,13 @@ function addApron(b: SmoothBuilder, ground: Ground, x0: number, z0: number, w: n
   const outer: number[] = [];
   for (const p of ring) {
     const y = ground.meshHeight(p.x, p.z);
-    inner.push(b.vertex({ x: p.x, y, z: p.z }, ground.color(p.x, p.z, y, 0, col), 0, 0, UP));
+    inner.push(b.vertex({ x: p.x, y, z: p.z }, ground.color(p.x, p.z, y, 0, col), p.x / SAND_TILE, p.z / SAND_TILE, UP));
     const dx = p.x - cx;
     const dz = p.z - cz;
     const l = Math.hypot(dx, dz);
     const ox = p.x + (dx / l) * APRON;
     const oz = p.z + (dz / l) * APRON;
-    outer.push(b.vertex({ x: ox, y: ground.base, z: oz }, ground.color(ox, oz, ground.base, 0, col), 0, 0, UP));
+    outer.push(b.vertex({ x: ox, y: ground.base, z: oz }, ground.color(ox, oz, ground.base, 0, col), ox / SAND_TILE, oz / SAND_TILE, UP));
   }
   for (let q = 0; q < ring.length; q++) {
     const r = (q + 1) % ring.length;

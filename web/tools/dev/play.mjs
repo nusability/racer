@@ -11,7 +11,7 @@ await page.goto(url);
 await page.click('#title_start_button');
 await page.click('#menu_quick_button');
 await page.click(`#quick_track_${track}_button`);
-await page.click('#quick_race_button');
+if (await page.locator('#quick_race_button').count()) await page.click('#quick_race_button');
 const t0 = Date.now();
 let i = 0;
 await page.keyboard.down('ArrowUp');

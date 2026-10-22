@@ -16,12 +16,16 @@ export const FOG_FAR = { low: 1700, high: 2600 } as const;
 // --- Corridor ---
 /** Every n-th sample becomes a cross-section station for walls and shoulders. */
 export const STATION_STRIDE = { low: 3, high: 2 } as const;
-/** Height of the low barrier that marks the road edge when there's no canyon wall. */
-export const BERM_HEIGHT = 1.3;
-/** Length of one painted block on the edge barrier, metres. */
-export const BERM_BLOCK = 8;
-/** How far the sand shoulder runs out from the barrier before the open terrain takes over. */
-export const SHOULDER_WIDTH = 42;
+/** Run-off narrower than this is treated as a wall at the road edge. */
+export const RUNOFF_MIN = 2;
+/** The boundary at the far side of the run-off: a rising lip, its height and how far it runs. */
+export const RIDGE_HEIGHT = 3.2;
+export const RIDGE_RISE = 7;
+/** Reach of the run-off side past the hard boundary (lip, back slope and sand shoulder). */
+export const RIDGE_OUTER = 46;
+/** Walled sides that are not canyons: a low rock wall this tall, reaching this far out. */
+export const WALL_LOW = 5;
+export const WALL_OUTER = 40;
 /** Lateral reach of a canyon cross-section (wall, rim plateau and back slope). */
 export const CANYON_OUTER = 95;
 /** Width of the flat rim on top of a canyon wall. */
@@ -29,17 +33,26 @@ export const CANYON_RIM = 32;
 /** A canyon wall rises/falls this many metres per metre at its ends, so it never pops up. */
 export const WALL_TAPER = 0.9;
 /** Walls taller than this are drawn as full canyon cross-sections. */
-export const CANYON_MIN_HEIGHT = 4;
+export const CANYON_MIN_HEIGHT = 7;
 /** Mesa rock around a tunnel: lateral reach past the road edge and rise over the ceiling. */
 export const TUNNEL_ROCK_WIDTH = 75;
 export const TUNNEL_ROCK_ABOVE = 34;
 /** Spacing of the lit ceiling ribs inside tunnels, metres. */
 export const TUNNEL_RIB_SPACING = 18;
-/** How far a chasm's crack runs out past the road edge, and how deep its glowing floor sits. */
-export const CHASM_SIDE = 110;
+/** How far a chasm's crack runs past the hard boundary, and how deep its glowing floor sits. */
+export const CHASM_SIDE = 45;
 export const CHASM_FLOOR_EXTRA = 12;
-/** Road texture repeats every this many metres along the lap. */
+/** Painted kerb block length along the road edge, metres. */
+export const KERB_BLOCK = 8;
+
+// --- Texture tiling (metres per repeat) ---
 export const ROAD_TEXTURE_LENGTH = 64;
+export const SAND_TILE = 22;
+export const ROCK_TILE = 36;
+/** Requested anisotropic filtering; three clamps to what the GPU offers. */
+export const ANISOTROPY = 8;
+/** Procedural texture resolution (square, power of two). */
+export const TEXTURE_SIZE = { low: 512, high: 1024 } as const;
 
 // --- Terrain ---
 /** Terrain extends this far past the course's bounding box. */
@@ -61,7 +74,7 @@ export const GROUND_BLEND_MIN = 140;
 export const GROUND_BLEND_PER_M = 2.6;
 /** Coarse grid used to find the nearest centreline sample for any ground point. */
 export const FIELD_CELL = 24;
-export const FIELD_REACH = 520;
+export const FIELD_REACH = 560;
 
 // --- Props ---
 export const MARKER_SPACING = 500;
@@ -69,6 +82,10 @@ export const MARKER_SPACING = 500;
 export const CHEVRON_RADIUS = 260;
 export const CHEVRON_SPACING = 36;
 export const FLAG_SPACING = 30;
+/** Pylons along the crest of a run-off lip, metres apart. */
+export const PYLON_SPACING = 32;
+/** Light posts along walled sections and the start straight, metres apart. */
+export const LIGHT_SPACING = 48;
 /** Start-straight dressing spans this far either side of the line. */
 export const START_ZONE = 260;
 /** Boost pad chevrons scroll this many texture repeats per second. */
@@ -78,3 +95,9 @@ export const BOOST_SCROLL = 2.2;
 /** Mesas and spires stand this far beyond the course's bounding box. */
 export const HORIZON_MIN = 450;
 export const HORIZON_MAX = 1700;
+
+// --- Landmarks ---
+/** Landmarks within this of the camera animate; past it they are hidden too. */
+export const LANDMARK_VIEW = { low: 1700, high: 2600 } as const;
+/** Ground under a landmark is levelled out to this multiple of its radius. */
+export const LANDMARK_PAD = 1.1;

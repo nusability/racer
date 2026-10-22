@@ -1,66 +1,119 @@
-import type { Track } from '../../core/track.ts';
+import type { Branch, Ribbon, Track } from '../../core/track.ts';
+import type { TrackFeature } from '../../core/types.ts';
+import { BRANCH_JUNCTION_LENGTH } from '../../data/tuning.ts';
 import {
-  BERM_HEIGHT,
   CANYON_MIN_HEIGHT,
   CANYON_OUTER,
   CHASM_SIDE,
-  SHOULDER_WIDTH,
+  RIDGE_OUTER,
+  RUNOFF_MIN,
   TUNNEL_ROCK_WIDTH,
+  WALL_LOW,
+  WALL_OUTER,
   WALL_TAPER,
 } from './config.ts';
 import { smoothstep } from './noise.ts';
 
+/** One drivable ribbon to dress: the main loop or a shortcut, with its authored features. */
+export interface RibbonView {
+  ribbon: Ribbon;
+  features: TrackFeature[];
+  branch: Branch | null;
+  shape: CorridorShape;
+}
+
 /**
  * Per-sample cross-section facts shared by the corridor and the ground, so the terrain knows
  * exactly how far the corridor geometry reaches and can tuck itself underneath.
+ * Arrays indexed [side][k] use side 0 = left, 1 = right.
  */
 export interface CorridorShape {
-  /** Visual side height above the road edge: berm, or a canyon wall tapered at its ends. */
+  /** Visual wall height above the road edge where walled: canyon walls tapered at their ends. */
   wall: Float32Array;
-  /** 0 = berm and sand shoulder, 1 = full canyon cross-section. */
+  /** 0 = low rock wall, 1 = full canyon cross-section. */
   canyon: Float32Array;
-  /** Lateral reach of the corridor geometry past the road edge, metres. */
-  reach: Float32Array;
   tunnel: Uint8Array;
+  /** Drivable sand between road edge and hard boundary, metres. */
+  run: [Float32Array, Float32Array];
+  /** Lateral reach of the corridor geometry from the centreline, metres. */
+  outer: [Float32Array, Float32Array];
+  /** The side opens onto a neighbouring ribbon (a junction): no side geometry at all. */
+  open: [Uint8Array, Uint8Array];
   /** Horizontal unit right vector (bank removed): side geometry stands on world up. */
   rx: Float32Array;
   rz: Float32Array;
 }
 
-/** Width over which the canyon factor ramps from berm to full wall, metres of wall height. */
+/** Width over which the canyon factor ramps from low wall to full canyon, metres of height. */
 const CANYON_RAMP = 10;
 
-export function corridorShape(track: Track): CorridorShape {
-  const n = track.samples.length;
-  const wall = new Float32Array(n);
-  for (let k = 0; k < n; k++) wall[k] = track.samples[k].wallHeight;
-  // Taper both ends: two passes around the loop so the decay wraps the start line too.
-  const drop = WALL_TAPER * track.step;
-  for (let pass = 0; pass < 2; pass++) {
-    for (let q = 1; q <= 2 * n; q++) {
-      const k = pass === 0 ? q % n : (2 * n - q) % n;
-      const prev = pass === 0 ? (k - 1 + n) % n : (k + 1) % n;
-      wall[k] = Math.max(wall[k], wall[prev] - drop);
+export const sideIndex = (side: number): 0 | 1 => (side > 0 ? 1 : 0);
+
+export function ribbonViews(track: Track): RibbonView[] {
+  const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track) }];
+  for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon) });
+  // Junctions: each ribbon's side facing the other opens, since the other's road covers it.
+  for (const b of track.branches) {
+    const main = views[0].shape.open[sideIndex(b.side)];
+    for (const [s0, s1] of [
+      [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH],
+      [b.exitS - BRANCH_JUNCTION_LENGTH, b.exitS],
+    ]) {
+      for (let s = s0; s <= s1; s += track.step / 2) main[Math.round(track.wrap(s) / track.step) % track.samples.length] = 1;
     }
+    const r = b.ribbon;
+    const open = views[b.index + 1].shape.open[sideIndex(-b.side)];
+    const jEnd = r.paramToS(1);
+    const xStart = r.paramToS(b.def.points.length + 2);
+    r.samples.forEach((smp, k) => {
+      if (smp.s <= jEnd + r.step || smp.s >= xStart - r.step) open[k] = 1;
+    });
+  }
+  return views;
+}
+
+export function corridorShape(r: Ribbon): CorridorShape {
+  const n = r.samples.length;
+  const wall = new Float32Array(n);
+  for (let k = 0; k < n; k++) wall[k] = r.samples[k].wallHeight;
+  // Taper both ends with a forward and a backward pass (twice round when the ribbon loops).
+  const drop = WALL_TAPER * r.step;
+  if (r.closed) {
+    for (let q = 1; q <= 2 * n; q++) wall[q % n] = Math.max(wall[q % n], wall[(q - 1) % n] - drop);
+    for (let q = 2 * n; q >= 1; q--) wall[(q - 1) % n] = Math.max(wall[(q - 1) % n], wall[q % n] - drop);
+  } else {
+    for (let k = 1; k < n; k++) wall[k] = Math.max(wall[k], wall[k - 1] - drop);
+    for (let k = n - 2; k >= 0; k--) wall[k] = Math.max(wall[k], wall[k + 1] - drop);
   }
   const canyon = new Float32Array(n);
-  const reach = new Float32Array(n);
   const tunnel = new Uint8Array(n);
+  const run: [Float32Array, Float32Array] = [new Float32Array(n), new Float32Array(n)];
+  const outer: [Float32Array, Float32Array] = [new Float32Array(n), new Float32Array(n)];
+  const open: [Uint8Array, Uint8Array] = [new Uint8Array(n), new Uint8Array(n)];
   const rx = new Float32Array(n);
   const rz = new Float32Array(n);
   for (let k = 0; k < n; k++) {
-    const smp = track.samples[k];
-    wall[k] = Math.max(BERM_HEIGHT, wall[k]);
+    const smp = r.samples[k];
+    const half = smp.width / 2;
     canyon[k] = smoothstep((wall[k] - CANYON_MIN_HEIGHT) / CANYON_RAMP);
+    wall[k] = Math.max(WALL_LOW, wall[k]);
     tunnel[k] = Number.isFinite(smp.ceiling) ? 1 : 0;
-    reach[k] = smp.gap
-      ? CHASM_SIDE
-      : tunnel[k]
-        ? TUNNEL_ROCK_WIDTH
-        : SHOULDER_WIDTH + (CANYON_OUTER - SHOULDER_WIDTH) * canyon[k];
+    run[0][k] = smp.edgeL - half;
+    run[1][k] = smp.edgeR - half;
+    for (const i of [0, 1] as const) {
+      const sand = run[i][k] >= RUNOFF_MIN;
+      const reach = smp.gap
+        ? run[i][k] + CHASM_SIDE
+        : tunnel[k]
+          ? TUNNEL_ROCK_WIDTH
+          : sand
+            ? run[i][k] + RIDGE_OUTER
+            : WALL_OUTER + (CANYON_OUTER - WALL_OUTER) * canyon[k];
+      outer[i][k] = half + reach;
+    }
     const l = Math.hypot(smp.right.x, smp.right.z);
     rx[k] = smp.right.x / l;
     rz[k] = smp.right.z / l;
   }
-  return { wall, canyon, reach, tunnel, rx, rz };
+  return { wall, canyon, tunnel, run, outer, open, rx, rz };
 }

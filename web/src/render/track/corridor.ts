@@ -1,87 +1,132 @@
 import * as THREE from 'three';
-import type { Track } from '../../core/track.ts';
+import type { Ribbon } from '../../core/track.ts';
+import type { BoundaryStyle } from '../../data/tracks/scenery.ts';
 import { FlatBuilder, SmoothBuilder, type P3 } from './builder.ts';
 import {
-  BERM_BLOCK,
-  BERM_HEIGHT,
   CANYON_RIM,
   CHUNK_LENGTH,
+  KERB_BLOCK,
+  LIGHT_SPACING,
+  PYLON_SPACING,
+  RIDGE_HEIGHT,
+  RIDGE_OUTER,
+  RIDGE_RISE,
   ROAD_TEXTURE_LENGTH,
+  RUNOFF_MIN,
   STATION_STRIDE,
-  TUNNEL_RIB_SPACING,
-  TUNNEL_ROCK_ABOVE,
-  TUNNEL_ROCK_WIDTH,
   type Quality,
 } from './config.ts';
 import type { Ground } from './ground.ts';
 import { valueNoise } from './noise.ts';
 import { quadFacing, rockQuad, type Paint } from './paint.ts';
-import type { CorridorShape } from './shape.ts';
+import { sideIndex, type RibbonView } from './shape.ts';
+import { portal, tunnelStrip } from './tunnel.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
 const TUNNEL_ROAD_SHADE = 0.42;
-/** Tunnel bore cross-section: walls rise to this fraction of the ceiling, then chamfer in. */
-const TUNNEL_WALL_FRACTION = 0.62;
-const TUNNEL_CHAMFER = 0.72;
-/** The mesa foot sits this far under the road so the terrain never shows below it. */
-const TUNNEL_FOOT = 8;
-/** Walls this close to berm height still get the painted barrier. */
-const KERB_TOLERANCE = 0.3;
-/** Lift of tunnel light strips off their rock face, metres. */
-const LIGHT_INSET = 0.08;
+/** A branch road reaches this far under the main road in a junction so no crack shows. */
+const JUNCTION_OVERLAP = 1.2;
+/** Atlas split of the road texture: u below this is paved road, above it is run-off sand. */
+export const ROAD_ATLAS_SPLIT = 0.5;
+/** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
+const RUNOFF_DROP = 0.12;
+
+export type { BoundaryStyle as Boundary } from '../../data/tracks/scenery.ts';
 
 export interface Chunk {
   k0: number;
   k1: number;
   road: SmoothBuilder;
-  env: FlatBuilder;
+  sand: FlatBuilder;
+  rock: FlatBuilder;
 }
 
-/** Side cross-section of one station: 7 points from road edge outward, with colours. */
+/** Things the corridor scatters that another module turns into instanced meshes. */
+export interface Scatter {
+  /** Boundary pylons on run-off lips: base point, outward direction, side and sample. */
+  pylons: { p: P3; out: P3; side: number; k: number; view: number }[];
+  /** Lamp posts on top of walls: base point and the direction toward the road. */
+  lights: { p: P3; inward: P3 }[];
+}
+
+/** Side cross-section of one station: 7 points from the boundary foot outward. */
 interface Profile {
   pts: P3[];
   cols: THREE.Color[];
+  /** Run-off lip (sand) or wall (rock). */
+  sand: boolean;
 }
 
+/** The dressed corridor of one ribbon, in chunks for culling. */
 export class Corridor {
   readonly chunks: Chunk[] = [];
   readonly stride: number;
-  private readonly n: number;
+  readonly ribbon: Ribbon;
+  readonly n: number;
   private readonly chunkSamples: number;
-  private readonly noise = valueNoise(911);
+  readonly noise = valueNoise(911);
   private readonly profiles = new Map<number, Profile>();
 
   constructor(
-    readonly track: Track,
-    readonly shape: CorridorShape,
+    readonly view: RibbonView,
+    readonly vi: number,
     readonly ground: Ground,
     readonly paint: Paint,
+    readonly boundary: BoundaryStyle,
     quality: Quality,
     readonly glow: FlatBuilder,
+    readonly scatter: Scatter,
   ) {
-    this.n = track.samples.length;
+    this.ribbon = view.ribbon;
+    this.n = this.ribbon.samples.length;
     this.stride = STATION_STRIDE[quality];
-    this.chunkSamples = Math.round(CHUNK_LENGTH / track.step);
-    for (let k0 = 0; k0 < this.n; k0 += this.chunkSamples) {
-      const k1 = Math.min(this.n, k0 + this.chunkSamples);
-      const chunk: Chunk = { k0, k1, road: new SmoothBuilder(), env: new FlatBuilder() };
+    this.chunkSamples = Math.round(CHUNK_LENGTH / this.ribbon.step);
+    const last = this.ribbon.closed ? this.n : this.n - 1;
+    for (let k0 = 0; k0 < last; k0 += this.chunkSamples) {
+      const k1 = Math.min(last, k0 + this.chunkSamples);
+      const chunk: Chunk = { k0, k1, road: new SmoothBuilder(), sand: new FlatBuilder(), rock: new FlatBuilder() };
       this.chunks.push(chunk);
       this.buildRoad(chunk);
       this.buildSides(chunk);
     }
+    this.collectPylons();
   }
 
-  /** The chunk whose env mesh should hold something standing at s. */
-  envAt(s: number): FlatBuilder {
-    const k = Math.floor(this.track.wrap(s) / this.track.step);
-    return this.chunks[Math.min(this.chunks.length - 1, Math.floor(k / this.chunkSamples))].env;
+  /** Marker pylons along the crest of every run-off lip; lamp posts along the top of walls. */
+  private collectPylons() {
+    const every = Math.round(PYLON_SPACING / this.ribbon.step);
+    const lamps = Math.round(LIGHT_SPACING / this.ribbon.step);
+    for (let k = 0; k < this.n; k++) {
+      if (this.gap(k) || this.tunnel(k)) continue;
+      for (const side of [-1, 1]) {
+        if (this.open(k, side)) continue;
+        const out = { x: this.shape.rx[k] * side, y: 0, z: this.shape.rz[k] * side };
+        const sand = this.shape.run[sideIndex(side)][k] >= RUNOFF_MIN;
+        if (sand && k % every === 0) this.scatter.pylons.push({ p: this.profile(k, side).pts[2], out, side, k, view: this.vi });
+        if (!sand && k % lamps === 0) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
+      }
+    }
+  }
+
+  get shape() {
+    return this.view.shape;
+  }
+
+  /** The chunk that should hold something standing at s. */
+  chunkAt(s: number): Chunk {
+    const k = Math.floor(this.ribbon.wrap(s) / this.ribbon.step);
+    return this.chunks[Math.min(this.chunks.length - 1, Math.floor(k / this.chunkSamples))];
   }
 
   // --- Frames -----------------------------------------------------------------------------
 
+  idx(k: number): number {
+    return this.ribbon.closed ? ((k % this.n) + this.n) % this.n : Math.max(0, Math.min(this.n - 1, k));
+  }
+
   /** Point in the banked road frame of sample k. */
   banked(k: number, x: number, y: number): P3 {
-    const s = this.track.samples[k % this.n];
+    const s = this.ribbon.samples[this.idx(k)];
     return {
       x: s.pos.x + s.right.x * x + s.up.x * y,
       y: s.pos.y + s.right.y * x + s.up.y * y,
@@ -89,55 +134,84 @@ export class Corridor {
     };
   }
 
-  /** Point dx metres horizontally out from the road edge on `side`, at absolute height y. */
+  /** Lateral distance of the hard boundary on `side`. */
+  edge(k: number, side: number): number {
+    const s = this.ribbon.samples[this.idx(k)];
+    return side > 0 ? s.edgeR : s.edgeL;
+  }
+
+  /** Point dx metres horizontally out from the hard boundary on `side`, at absolute height y. */
   beside(k: number, side: number, dx: number, y: number): P3 {
-    const kk = k % this.n;
-    const e = this.banked(kk, (side * this.track.samples[kk].width) / 2, 0);
+    const kk = this.idx(k);
+    const e = this.banked(kk, side * this.edge(kk, side), 0);
     return { x: e.x + this.shape.rx[kk] * side * dx, y, z: e.z + this.shape.rz[kk] * side * dx };
   }
 
-  private gap(k: number): boolean {
-    return this.track.samples[((k % this.n) + this.n) % this.n].gap;
+  gap(k: number): boolean {
+    return this.ribbon.samples[this.idx(k)].gap;
   }
-  private tunnel(k: number): boolean {
-    return this.shape.tunnel[((k % this.n) + this.n) % this.n] === 1;
+  tunnel(k: number): boolean {
+    return this.shape.tunnel[this.idx(k)] === 1;
+  }
+  open(k: number, side: number): boolean {
+    return this.shape.open[sideIndex(side)][this.idx(k)] === 1;
   }
 
-  // --- Road ribbon --------------------------------------------------------------------------
+  // --- Road and run-off ribbon ---------------------------------------------------------------
 
   private buildRoad(c: Chunk) {
-    const white = new THREE.Color();
+    const shade = new THREE.Color();
+    const branch = this.view.branch;
+    const towardMain = branch ? -branch.side : 0;
     let prev: number[] | null = null;
     for (let k = c.k0; k <= c.k1; k++) {
       if (this.gap(k)) {
         prev = null;
         continue;
       }
-      const smp = this.track.samples[k % this.n];
+      const smp = this.ribbon.samples[this.idx(k)];
       const half = smp.width / 2;
-      const v = (k * this.track.step) / ROAD_TEXTURE_LENGTH;
-      white.setScalar(this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1);
-      const row = [-half, 0, half].map((x, i) => c.road.vertex(this.banked(k, x, 0), white, i / 2, v));
+      const v = (k * this.ribbon.step) / ROAD_TEXTURE_LENGTH;
+      shade.setScalar(this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1);
+      // Paved road on u 0..split; each run-off strip maps across the sand half of the atlas.
+      const extL = towardMain < 0 && this.open(k, -1) ? JUNCTION_OVERLAP : 0;
+      const extR = towardMain > 0 && this.open(k, 1) ? JUNCTION_OVERLAP : 0;
+      const runL = this.open(k, -1) ? extL : Math.max(0, smp.edgeL - half);
+      const runR = this.open(k, 1) ? extR : Math.max(0, smp.edgeR - half);
+      const S = ROAD_ATLAS_SPLIT;
+      const row = [
+        c.road.vertex(this.banked(k, -half - runL, runL > RUNOFF_MIN ? -RUNOFF_DROP : 0), shade, 1, v),
+        c.road.vertex(this.banked(k, -half, 0), shade, S, v),
+        c.road.vertex(this.banked(k, -half, 0), shade, 0, v),
+        c.road.vertex(this.banked(k, 0, 0), shade, S / 2, v),
+        c.road.vertex(this.banked(k, half, 0), shade, S, v),
+        c.road.vertex(this.banked(k, half, 0), shade, S, v),
+        c.road.vertex(this.banked(k, half + runR, runR > RUNOFF_MIN ? -RUNOFF_DROP : 0), shade, 1, v),
+      ];
       if (prev) {
-        for (let i = 0; i < 2; i++) {
-          c.road.tri(prev[i], prev[i + 1], row[i + 1]);
-          c.road.tri(prev[i], row[i + 1], row[i]);
+        // Pairs: [0-1] left run-off, [2-3] [3-4] road, [5-6] right run-off.
+        for (const [i, j] of [[0, 1], [2, 3], [3, 4], [5, 6]]) {
+          c.road.tri(prev[i], prev[j], row[j]);
+          c.road.tri(prev[i], row[j], row[i]);
         }
       }
       prev = row;
     }
   }
 
-  // --- Sides: berms, canyon walls, shoulders, tunnels -------------------------------------
+  // --- Sides: run-off lips, walls, canyons, tunnels ----------------------------------------
 
   private isStation(k: number, c: Chunk): boolean {
     if (k === c.k0 || k === c.k1 || k % this.stride === 0) return true;
-    return (
-      this.gap(k) !== this.gap(k - 1) ||
-      this.gap(k) !== this.gap(k + 1) ||
-      this.tunnel(k) !== this.tunnel(k - 1) ||
-      this.tunnel(k) !== this.tunnel(k + 1)
-    );
+    for (const d of [-1, 1]) {
+      if (this.gap(k) !== this.gap(k + d) || this.tunnel(k) !== this.tunnel(k + d)) return true;
+      if (this.open(k, -1) !== this.open(k + d, -1) || this.open(k, 1) !== this.open(k + d, 1)) return true;
+      for (const side of [-1, 1]) {
+        const a = this.shape.run[sideIndex(side)][this.idx(k)] >= RUNOFF_MIN;
+        if (a !== this.shape.run[sideIndex(side)][this.idx(k + d)] >= RUNOFF_MIN) return true;
+      }
+    }
+    return false;
   }
 
   private buildSides(c: Chunk) {
@@ -145,214 +219,111 @@ export class Corridor {
     for (let k = c.k0; k <= c.k1; k++) {
       if (!this.isStation(k, c)) continue;
       if (a >= 0 && !this.gap(a) && !this.gap(k)) {
-        if (this.tunnel(a) && this.tunnel(k)) this.tunnelStrip(c.env, a, k);
+        if (this.tunnel(a) && this.tunnel(k)) tunnelStrip(this, c.rock, a, k);
         else if (!this.tunnel(a) && !this.tunnel(k)) {
-          this.sideStrip(c.env, a, k, -1);
-          this.sideStrip(c.env, a, k, 1);
+          for (const side of [-1, 1]) if (!this.open(a, side) && !this.open(k, side)) this.sideStrip(c, a, k, side);
         }
       }
       if (this.tunnel(k) && !this.gap(k)) {
-        if (!this.tunnel(k - 1)) this.portal(c.env, k, -1);
-        if (!this.tunnel(k + 1)) this.portal(c.env, k, 1);
+        if (!this.tunnel(k - 1)) portal(this, c.rock, k, -1);
+        if (!this.tunnel(k + 1)) portal(this, c.rock, k, 1);
       }
       a = k;
     }
   }
 
-  /** Cross-section of one side at sample k: barrier + shoulder, or canyon wall + rim + slope. */
+  /** Cross-section of one side at sample k, from the boundary foot outward. */
   profile(k: number, side: number): Profile {
-    const kk = k % this.n;
-    const key = kk * 2 + (side > 0 ? 1 : 0);
+    const kk = this.idx(k);
+    const key = kk * 2 + sideIndex(side);
     const hit = this.profiles.get(key);
     if (hit) return hit;
-    const { wall, canyon, reach } = this.shape;
-    const h = wall[kk];
-    const c = canyon[kk];
-    const out = reach[kk];
-    const s = kk * this.track.step;
-    const ey = this.banked(kk, (side * this.track.samples[kk].width) / 2, 0).y;
-    const nz = (i: number) => Math.abs(this.noise(s / 15 + i * 3.1, side * 5 + i * 1.7)) * h * 0.09;
-    const lean = 2 + h * 0.12;
-    const ground = (dx: number) => {
-      const p = this.beside(kk, side, dx, 0);
-      return this.ground.height(p.x, p.z) - ey;
-    };
-    const g6 = ground(out);
-    const bermDx = [0, 0.12, 0.25, 1.7, 3.4, out * 0.45, out];
-    const bermDy = [0, h * 0.55, h, h, -0.35, ground(out * 0.45), g6];
-    const rimEnd = Math.min(out - 8, lean + CANYON_RIM);
-    const canDx = [0, lean * 0.35 + nz(1), lean * 0.7 + nz(2), lean + nz(3), rimEnd, rimEnd + (out - rimEnd) * 0.5, out];
-    const canDy = [0, h * 0.33, h * 0.66, h, h + nz(4) * 0.4, h + (g6 - h) * 0.6, g6];
-    const pts: P3[] = [];
-    const cols: THREE.Color[] = [];
-    for (let i = 0; i < 7; i++) {
-      const dx = bermDx[i] + (canDx[i] - bermDx[i]) * c;
-      const dy = bermDy[i] + (canDy[i] - bermDy[i]) * c;
-      const p = this.beside(kk, side, dx, ey + dy);
-      pts.push(p);
-      const col = new THREE.Color();
-      if (i >= 4 && c < 0.5) this.ground.color(p.x, p.z, p.y, i === 4 ? 0.6 : 0.2, col);
-      else if (i >= 5) this.ground.color(p.x, p.z, p.y, 0.6, col).lerp(this.paint.strata(p.y, 0.8, new THREE.Color()), c * 0.6);
-      else this.paint.strata(p.y, 0.62 + 0.38 * Math.min(1, dy / Math.max(1, h)), col);
-      cols.push(col);
-    }
-    const prof = { pts, cols };
+    const run = this.shape.run[sideIndex(side)][kk];
+    const prof = run >= RUNOFF_MIN ? this.lipProfile(kk, side) : this.wallProfile(kk, side);
     this.profiles.set(key, prof);
     return prof;
   }
 
-  private sideStrip(b: FlatBuilder, ka: number, kb: number, side: number) {
+  /** Height of the ground at dx past the boundary, relative to the boundary foot. */
+  private groundAt(kk: number, side: number, dx: number, footY: number): number {
+    const p = this.beside(kk, side, dx, 0);
+    return this.ground.height(p.x, p.z) - footY;
+  }
+
+  /** Run-off side: a rising lip of sand or rock just past the boundary, then back to the dunes. */
+  private lipProfile(kk: number, side: number): Profile {
+    const s = kk * this.ribbon.step;
+    const foot = this.banked(kk, side * this.edge(kk, side), -RUNOFF_DROP);
+    const outer = RIDGE_OUTER;
+    const n = (i: number) => this.noise(s / 21 + i * 3.7, side * 9 + i) * 0.8;
+    const rock = this.boundary === 'rock';
+    const h = RIDGE_HEIGHT * (rock ? 1.3 : 1) + n(0);
+    const g5 = this.groundAt(kk, side, outer * 0.6, foot.y);
+    const g6 = this.groundAt(kk, side, outer, foot.y);
+    const dx = [0, RIDGE_RISE * 0.4, RIDGE_RISE, RIDGE_RISE + 5 + n(1), RIDGE_RISE + 14, outer * 0.6, outer];
+    const dy = [0, h * (rock ? 0.75 : 0.45), h, h * 0.92, Math.max(g5, h * 0.4), g5, g6];
+    const pts: P3[] = [];
+    const cols: THREE.Color[] = [];
+    for (let i = 0; i < 7; i++) {
+      const p = this.beside(kk, side, dx[i], foot.y + dy[i]);
+      if (i === 0) Object.assign(p, foot);
+      pts.push(p);
+      const col = new THREE.Color();
+      if (rock && i >= 1 && i <= 3) this.paint.strata(p.y, 0.95, col);
+      else this.ground.color(p.x, p.z, p.y, i === 1 ? 0.5 : 0.15, col);
+      cols.push(col);
+    }
+    return { pts, cols, sand: !rock };
+  }
+
+  /** Walled side: a rock wall at the road edge, growing into a full canyon where tall. */
+  private wallProfile(kk: number, side: number): Profile {
+    const h = this.shape.wall[kk];
+    const c = this.shape.canyon[kk];
+    const s = kk * this.ribbon.step;
+    const foot = this.banked(kk, side * this.edge(kk, side), 0);
+    const outer = this.shape.outer[sideIndex(side)][kk] - this.edge(kk, side);
+    const nz = (i: number) => Math.abs(this.noise(s / 15 + i * 3.1, side * 5 + i * 1.7)) * h * 0.09;
+    const lean = 1.2 + h * 0.12;
+    const g6 = this.groundAt(kk, side, outer, foot.y);
+    const rimEnd = Math.min(outer - 8, lean + 6 + (CANYON_RIM - 6) * c);
+    const dx = [0, lean * 0.35 + nz(1), lean * 0.7 + nz(2), lean + nz(3), rimEnd, rimEnd + (outer - rimEnd) * 0.5, outer];
+    const dy = [0, h * 0.33, h * 0.66, h, h + nz(4) * 0.4, h + (g6 - h) * 0.6, g6];
+    const pts: P3[] = [];
+    const cols: THREE.Color[] = [];
+    for (let i = 0; i < 7; i++) {
+      const p = this.beside(kk, side, dx[i], foot.y + dy[i]);
+      pts.push(p);
+      const col = new THREE.Color();
+      if (i >= 5) this.ground.color(p.x, p.z, p.y, 0.6, col).lerp(this.paint.strata(p.y, 0.8, new THREE.Color()), 0.3 + c * 0.4);
+      else this.paint.strata(p.y, 0.62 + 0.38 * Math.min(1, dy[i] / Math.max(1, h)), col);
+      cols.push(col);
+    }
+    return { pts, cols, sand: false };
+  }
+
+  private sideStrip(c: Chunk, ka: number, kb: number, side: number) {
     const A = this.profile(ka, side);
     const B = this.profile(kb, side);
-    const kk = ka % this.n;
+    const kk = this.idx(ka);
     const dir = { x: -side * this.shape.rx[kk] * 0.3, y: 1, z: -side * this.shape.rz[kk] * 0.3 };
-    const block = Math.floor((((ka + kb) / 2) * this.track.step) / BERM_BLOCK) % 2 === 0;
-    const kerb = block ? this.paint.accent : this.paint.white;
-    // Painted barrier only where it is still a low berm; tapering canyon ends are bare rock.
-    const kerbOn = this.shape.wall[kk] <= BERM_HEIGHT + KERB_TOLERANCE;
+    const both = A.sand && B.sand;
+    const target = both ? c.sand : c.rock;
     for (let i = 0; i < 6; i++) {
-      if (kerbOn && i < 2) {
-        // Unlit, so the edge reads at full contrast whichever way the wall faces the sun.
-        quadFacing(this.glow, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, kerb);
-      } else if (kerbOn && i === 2) {
-        quadFacing(b, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, kerb);
-      } else if (i < 4 && this.shape.canyon[kk] > 0) {
-        rockQuad(b, this.paint, A.pts[i], B.pts[i], B.pts[i + 1], A.pts[i + 1], dir, i === 0 ? 0.75 : 0.92);
+      const lipFace = i < 3;
+      if (!A.sand && !B.sand && i < 4) {
+        rockQuad(c.rock, this.paint, A.pts[i], B.pts[i], B.pts[i + 1], A.pts[i + 1], dir, i === 0 ? 0.75 : 0.92);
+      } else if (!both && lipFace) {
+        quadFacing(c.rock, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, A.cols[i], A.cols[i + 1], B.cols[i + 1], B.cols[i]);
       } else {
-        quadFacing(b, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, A.cols[i], A.cols[i + 1], B.cols[i + 1], B.cols[i]);
+        quadFacing(i >= 4 ? c.sand : target, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, A.cols[i], A.cols[i + 1], B.cols[i + 1], B.cols[i]);
       }
     }
-  }
-
-  // --- Tunnels --------------------------------------------------------------------------------
-
-  /** Bore (inner) and mesa (outer) outlines in the banked frame, left to right. */
-  private tunnelRing(k: number): { inner: P3[]; outer: P3[]; axis: P3 } {
-    const kk = k % this.n;
-    const smp = this.track.samples[kk];
-    const h = smp.width / 2;
-    const c = smp.ceiling;
-    const top = c + TUNNEL_ROCK_ABOVE * (0.85 + 0.3 * Math.abs(this.noise(kk * 0.01, 7)));
-    const w = TUNNEL_ROCK_WIDTH;
-    const wobble = (i: number) => this.noise(kk * 0.06 + i, i * 2.3) * 4;
-    const inner: [number, number][] = [
-      [-h, 0],
-      [-h, c * TUNNEL_WALL_FRACTION],
-      [-h * TUNNEL_CHAMFER, c],
-      [h * TUNNEL_CHAMFER, c],
-      [h, c * TUNNEL_WALL_FRACTION],
-      [h, 0],
-    ];
-    // A mesa: talus foot, near-vertical cliffs, broad flat top.
-    const outer: [number, number][] = [
-      [-h - w, -TUNNEL_FOOT],
-      [-h - w * 0.86 + wobble(1), top * 0.3],
-      [-h - w * 0.8 + wobble(2), top + wobble(3) * 0.3],
-      [h + w * 0.8 + wobble(4), top + wobble(5) * 0.3],
-      [h + w * 0.86 + wobble(6), top * 0.3],
-      [h + w, -TUNNEL_FOOT],
-    ];
-    return {
-      inner: inner.map(([x, y]) => this.banked(kk, x, y)),
-      outer: outer.map(([x, y]) => this.banked(kk, x, y)),
-      axis: this.banked(kk, 0, c * 0.5),
-    };
-  }
-
-  private tunnelStrip(b: FlatBuilder, ka: number, kb: number) {
-    const A = this.tunnelRing(ka);
-    const B = this.tunnelRing(kb);
-    const col = new THREE.Color();
-    for (let i = 0; i < 5; i++) {
-      const mid = mean(A.inner[i], A.inner[i + 1], B.inner[i], B.inner[i + 1]);
-      const shade = i === 2 ? 0.28 : 0.38;
-      quadFacing(b, A.inner[i], A.inner[i + 1], B.inner[i + 1], B.inner[i], sub(A.axis, mid), this.paint.strata(mid.y, shade, col));
-      const mo = mean(A.outer[i], A.outer[i + 1], B.outer[i], B.outer[i + 1]);
-      if (i === 2) quadFacing(b, A.outer[i], A.outer[i + 1], B.outer[i + 1], B.outer[i], sub(mo, A.axis), this.paint.strata(mo.y, 1.05, col));
-      else rockQuad(b, this.paint, A.outer[i], B.outer[i], B.outer[i + 1], A.outer[i + 1], sub(mo, A.axis), 0.95);
-    }
-    this.tunnelLights(ka, kb);
-  }
-
-  private tunnelLights(ka: number, kb: number) {
-    const g = this.glow;
-    const warm = new THREE.Color(0xfff1c8);
-    const edge = this.paint.accent;
-    for (const side of [-1, 1]) {
-      // Continuous strip along each upper chamfer and a guide line low on each wall.
-      const strip = (k: number, x: number, y: number) => this.banked(k, side * x, y);
-      for (const [x0, y0, x1, y1, color] of this.lightLines()) {
-        const a0 = strip(ka, x0(ka), y0(ka));
-        const a1 = strip(ka, x1(ka), y1(ka));
-        const b0 = strip(kb, x0(kb), y0(kb));
-        const b1 = strip(kb, x1(kb), y1(kb));
-        const axis = this.banked(ka, 0, this.track.samples[ka % this.n].ceiling * 0.5);
-        quadFacing(g, a0, a1, b1, b0, sub(axis, a0), color === 'warm' ? warm : edge);
-      }
-    }
-    // Ceiling ribs: bright bars across the roof that strobe past at speed.
-    const s0 = ka * this.track.step;
-    const s1 = kb * this.track.step;
-    const first = Math.ceil(s0 / TUNNEL_RIB_SPACING) * TUNNEL_RIB_SPACING;
-    for (let s = first; s < s1; s += TUNNEL_RIB_SPACING) {
-      const smp = this.track.sampleAt(s);
-      const h = (smp.width / 2) * TUNNEL_CHAMFER;
-      const y = smp.ceiling - LIGHT_INSET;
-      const p = (ds: number, x: number) => this.track.toWorld(s + ds, x, y);
-      quadFacing(g, p(0, -h), p(0, h), p(1.4, h), p(1.4, -h), sub(this.track.toWorld(s, 0, 0), p(0, 0)), warm);
+    // Walls get an unlit hazard kerb along their foot so they read at speed.
+    if (!A.sand && !B.sand) {
+      const block = Math.floor((((ka + kb) / 2) * this.ribbon.step) / KERB_BLOCK) % 2 === 0;
+      const lift = (p: P3, y: number): P3 => ({ x: p.x - side * this.shape.rx[kk] * 0.05, y: p.y + y, z: p.z - side * this.shape.rz[kk] * 0.05 });
+      quadFacing(this.glow, lift(A.pts[0], 0), lift(B.pts[0], 0), lift(B.pts[0], 1.1), lift(A.pts[0], 1.1), dir, block ? this.paint.accent : this.paint.white);
     }
   }
-
-  /** Light lines as lateral/height functions of the sample (both ends of each strip). */
-  private lightLines(): [(k: number) => number, (k: number) => number, (k: number) => number, (k: number) => number, 'warm' | 'edge'][] {
-    const half = (k: number) => this.track.samples[k % this.n].width / 2;
-    const ceil = (k: number) => this.track.samples[k % this.n].ceiling;
-    const t = 0.35;
-    return [
-      [
-        (k) => half(k) - LIGHT_INSET - (1 - TUNNEL_CHAMFER) * half(k) * (0.5 - t / 2),
-        (k) => ceil(k) * (TUNNEL_WALL_FRACTION + (1 - TUNNEL_WALL_FRACTION) * (0.5 - t / 2)),
-        (k) => half(k) - LIGHT_INSET - (1 - TUNNEL_CHAMFER) * half(k) * (0.5 + t / 2),
-        (k) => ceil(k) * (TUNNEL_WALL_FRACTION + (1 - TUNNEL_WALL_FRACTION) * (0.5 + t / 2)),
-        'warm',
-      ],
-      [(k) => half(k) - LIGHT_INSET, () => 0.6, (k) => half(k) - LIGHT_INSET, () => 1.2, 'edge'],
-    ];
-  }
-
-  /** The cliff face where the bore enters (dir -1) or leaves (dir 1) the mesa. */
-  private portal(b: FlatBuilder, k: number, dir: number) {
-    const R = this.tunnelRing(k);
-    const t = this.track.samples[k % this.n].tangent;
-    const facing = { x: t.x * dir, y: t.y * dir, z: t.z * dir };
-    for (let i = 0; i < 5; i++) {
-      rockQuad(b, this.paint, R.inner[i], R.inner[i + 1], R.outer[i + 1], R.outer[i], facing, 0.85);
-    }
-    // Hazard-lit frame around the mouth so the hole reads from far away.
-    const frame = this.paint.hazard;
-    for (let i = 0; i < 5; i++) {
-      const a = R.inner[i];
-      const c2 = R.inner[i + 1];
-      const lift = (p: P3, m: number): P3 => ({
-        x: p.x + facing.x * 0.1 + (p.x - R.axis.x) * m,
-        y: p.y + facing.y * 0.1 + (p.y - R.axis.y) * m,
-        z: p.z + facing.z * 0.1 + (p.z - R.axis.z) * m,
-      });
-      quadFacing(this.glow, lift(a, 0), lift(c2, 0), lift(c2, 0.08), lift(a, 0.08), facing, frame);
-    }
-  }
-}
-
-export function mean(...p: P3[]): P3 {
-  const o = { x: 0, y: 0, z: 0 };
-  for (const q of p) {
-    o.x += q.x / p.length;
-    o.y += q.y / p.length;
-    o.z += q.z / p.length;
-  }
-  return o;
-}
-
-export function sub(a: P3, b: P3): P3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
 }

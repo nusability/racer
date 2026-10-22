@@ -1,11 +1,12 @@
-// AI driver: reads the track ahead and produces the same PlayerInput a thumb would. It drives
-// the same Vehicle model as the player, so it can only be as fast as physics allows.
+// AI driver: reads the ribbon ahead and produces the same PlayerInput a thumb would. It
+// drives the same Vehicle model as the player, so it can only be as fast as physics allows.
 
-import type { Obstacle, PlayerInput, RacerState, RacerStats } from './types.ts';
-import type { Track } from './track.ts';
+import type { Jump, Obstacle, PlayerInput, RacerState, RacerStats } from './types.ts';
+import type { Ribbon, Track } from './track.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { PathPlanner, type Blocker } from './aiPlanner.ts';
-import { currentTopSpeed, minJumpSpeed, steerAuthority, type Vehicle } from './vehicle.ts';
+import { junctionBounds } from './junction.ts';
+import { cornerPull, currentTopSpeed, minJumpSpeed, steerRate, type Vehicle } from './vehicle.ts';
 import {
   AI_BOOST_CAUTION_HI,
   AI_BOOST_CAUTION_LO,
@@ -24,7 +25,6 @@ import {
   AI_LINE_FULL_CURVATURE,
   AI_LINE_LOOK_TIME_HI,
   AI_LINE_LOOK_TIME_LO,
-  AI_MAX_YAW,
   AI_MISTAKE_DURATION,
   AI_MISTAKE_RATE,
   AI_NOISE_TAU,
@@ -34,31 +34,37 @@ import {
   AI_OVERHEAT_GAMBLE,
   AI_PAD_DETOUR,
   AI_PATH_LAG,
-  AI_PATH_WINDOW,
   AI_PLAN_INTERVAL,
-  AI_PLAN_STEP,
-  AI_POS_GAIN,
   AI_RACER_LOOK_TIME,
   AI_SAMPLE_STEP,
+  AI_SHORTCUT_HI,
+  AI_SHORTCUT_LO,
+  AI_SHORTCUT_LOOK_TIME,
+  AI_SKILL_CURVE,
   AI_START_BOOST_CHANCE,
-  AI_STEER_NOISE,
+  AI_TARGET_NOISE,
+  AI_TARGET_TIME,
   AI_WALL_MARGIN,
-  AI_YAW_GAIN,
   BRAKE_DECEL,
-  FRENET_MIN_DENOM,
+  CORNER_PULL,
+  GRIP_REF,
+  HANDLING_REF,
+  LATERAL_RESPONSE,
   RACER_HALF_WIDTH,
   RACER_LENGTH,
   RACER_RADIUS,
   SIM_DT,
-  STEER_FADE_SPEED,
-  STEER_SPEED_FADE,
-  YAW_SELF_CENTER,
 } from '../data/tuning.ts';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function profileAt(track: Track, profile: Float64Array, s: number): number {
-  return profile[Math.floor(track.wrap(s) / track.step) % profile.length];
+interface SpeedProfiles {
+  brake: Float64Array;
+  boost: Float64Array;
+}
+
+function profileAt(ribbon: Ribbon, profile: Float64Array, s: number): number {
+  return profile[Math.min(profile.length - 1, Math.floor(ribbon.wrap(s) / ribbon.step) % profile.length)];
 }
 
 /** Mixes a race seed and an entrant index into an independent per-driver seed. */
@@ -66,8 +72,14 @@ export function driverSeed(raceSeed: number, index: number): number {
   return (Math.imul(raceSeed ^ 0x9e3779b9, 0x85ebca6b) + Math.imul(index + 1, 0xc2b2ae35)) >>> 0;
 }
 
+export interface AiOptions {
+  /** Whether this driver ever takes shortcuts. */
+  shortcuts: boolean;
+}
+
 export class AiDriver {
   readonly skill: number;
+  private readonly options: AiOptions;
   private readonly rng: Rng;
   private readonly heatLimit: number;
   private readonly boostRest: number;
@@ -78,27 +90,31 @@ export class AiDriver {
   private pushing = false;
   /** Seconds the engine has sat fully cooled. */
   private coldTime = 0;
-  /** Steering held through a lapse. */
-  private frozenSteer = 0;
   private readonly obstacleBuf: Obstacle[] = [];
   private readonly planner = new PathPlanner();
   private readonly blockers: Blocker[] = [];
-  /** Steps since the path was last planned, and its heading (lateral m per m). */
+  /** Steps since the path was last planned, and the target it gave. */
   private planAge = Infinity;
-  private planSlope = 0;
-  private profiles: { track: Track; brake: Float64Array; boost: Float64Array } | null = null;
+  private planTarget = 0;
+  /** Where across the ribbon this driver last wanted to be (its target before steering). */
+  aimX = 0;
+  private readonly profiles = new Map<Ribbon, SpeedProfiles>();
+  /** Per branch: the lap a shortcut was last decided on and whether it is being taken. */
+  private readonly shortcut = new Map<number, { lap: number; take: boolean }>();
 
-  constructor(skill: number, seed: number) {
+  constructor(skill: number, seed: number, options: AiOptions = { shortcuts: true }) {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
     this.skill = skill;
+    this.options = options;
     this.rng = mulberry32(seed);
     this.heatLimit = this.bySkill(AI_HEAT_LIMIT_LO, AI_HEAT_LIMIT_HI);
     // A rest only means something once the engine has fully cooled.
     this.boostRest = this.bySkill(AI_BOOST_REST_LO, AI_BOOST_REST_HI);
   }
 
+  /** Interpolates a lo/hi behaviour by eased skill: the low end weaker, the top end intact. */
   private bySkill(lo: number, hi: number): number {
-    return lo + (hi - lo) * this.skill;
+    return lo + (hi - lo) * this.skill ** AI_SKILL_CURVE;
   }
 
   /** Whether this driver holds boost at the exact moment of GO. */
@@ -113,38 +129,28 @@ export class AiDriver {
   drive(veh: Vehicle, track: Track, field: readonly RacerState[]): PlayerInput {
     this.evolveNoise();
     const st = veh.state;
-    if (st.crashed > 0) return { steer: 0, brake: false, boost: false };
+    if (st.crashed > 0) return { steer: 0, nudge: 0, brake: false, boost: false };
+    const ribbon = track.ribbon(st.branch);
     const v = Math.max(st.speed, 1);
     const stats = veh.stats;
 
-    // 1. The racing line: the inside of what is coming, scaled by how hard it bends.
+    // 1. Where across the ribbon to be: the racing line, a pad, an arch, a shortcut.
+    let target = this.racingLine(ribbon, st.s, v);
     const lineLook = v * this.bySkill(AI_LINE_LOOK_TIME_LO, AI_LINE_LOOK_TIME_HI);
-    let curvSum = 0;
-    let n = 0;
-    let half = track.widthAt(st.s) / 2;
-    for (let d = AI_SAMPLE_STEP; d <= lineLook; d += AI_SAMPLE_STEP) {
-      const s = track.wrap(st.s + d);
-      curvSum += track.curvatureAt(s);
-      half = Math.min(half, track.widthAt(s) / 2);
-      n++;
-    }
-    const lane = half - RACER_HALF_WIDTH - AI_WALL_MARGIN;
-    let target = clamp(n > 0 ? curvSum / n / AI_LINE_FULL_CURVATURE : 0, -1, 1) * Math.max(0, lane);
-
-    // 2. Boost pads close to the line are worth a detour.
-    for (const p of track.boostPads) {
-      const d = track.delta(st.s, p.s);
+    for (const p of ribbon.boostPads) {
+      const d = ribbon.delta(st.s, p.s);
       if (d > 0 && d < lineLook && Math.abs(p.x - target) < AI_PAD_DETOUR) target = p.x;
     }
+    const route = this.routeChoice(track, st, v, target);
+    target = route.x;
 
-    // 3. Arch openings pull the line in; obstacles hand steering to the path planner.
+    // 2. Obstacles, arches and racers ahead hand the target to the path planner.
     const obsLook = v * this.bySkill(AI_OBSTACLE_LOOK_TIME_LO, AI_OBSTACLE_LOOK_TIME_HI);
     const clearance = this.bySkill(AI_CLEARANCE_LO, AI_CLEARANCE_HI);
-    // Lateral velocity the racer wants; obstacles replace the gentle approach to the line.
-    let xdotWanted: number | null = null;
-    if (this.lapse <= 0) {
-      for (const a of track.arches) {
-        const d = track.delta(st.s, a.s);
+    // Crossing onto another ribbon, this one's arches and walls further on no longer apply.
+    if (this.lapse <= 0 && !route.crossing) {
+      for (const a of ribbon.arches) {
+        const d = ribbon.delta(st.s, a.s);
         if (d < 0 || d > obsLook) continue;
         const lo = a.openMin + RACER_RADIUS + clearance;
         const hi = a.openMax - RACER_RADIUS - clearance;
@@ -152,64 +158,52 @@ export class AiDriver {
       }
       const blockers = this.blockers;
       blockers.length = 0;
-      for (const o of track.obstaclesNear(st.s, RACER_LENGTH, obsLook, this.obstacleBuf)) blockers.push(o);
-      this.addRacerBlockers(st, track, field, blockers);
+      for (const o of ribbon.obstaclesNear(st.s, RACER_LENGTH, obsLook, this.obstacleBuf)) blockers.push(o);
+      this.addRacerBlockers(st, ribbon, field, blockers);
       if (blockers.length === 0) this.planAge = Infinity;
       else {
         // Replanning every few steps is plenty: the plan is already lag-aware.
         if (this.planAge >= AI_PLAN_INTERVAL) {
-          // The racer keeps its current lateral motion until steering bites, so the plan is
-          // free only after that; then hold the path's heading rather than chase a point,
-          // which would ring against the slide lag.
-          const xdot = st.speed * Math.sin(st.yaw) + st.vx;
-          this.planSlope = this.planner.plan(
-            track,
-            st.s,
-            st.x,
-            xdot / v,
-            v * AI_PATH_LAG,
-            target,
-            obsLook,
+          this.planTarget = this.planner.plan({
+            ribbon,
+            s: st.s,
+            x: st.x,
+            slope0: st.vx / v,
+            lagDist: v * AI_PATH_LAG,
+            line: target,
+            look: obsLook,
             clearance,
             blockers,
-            v * AI_OBSTACLE_LEAD_TIME,
-            Math.max(AI_PLAN_STEP, v * AI_PATH_WINDOW),
-          );
+            stretch: v * AI_OBSTACLE_LEAD_TIME,
+            // A critically damped chase trails a moving target by 2/ω: aim that far ahead.
+            lead: (v * 2) / (LATERAL_RESPONSE * (stats.handling / HANDLING_REF)),
+          });
           this.planAge = 0;
         }
         this.planAge++;
-        xdotWanted = this.planSlope * v;
+        target = this.planTarget;
       }
     }
+    target += this.noise;
+    this.aimX = target;
 
-    // 4. Speed: brake when a bend ahead can't be taken at this speed in the distance left.
+    // 3. Speed: brake when a bend ahead can't be held at this speed in the distance left.
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);
-    const profiles = this.profilesFor(track, stats);
-    const seen = track.wrap(st.s + v * reaction);
+    const profiles = this.profilesFor(ribbon, stats);
+    const seen = ribbon.wrap(st.s + v * reaction);
     const top = currentTopSpeed(stats, st, true);
-    let brakeNeeded = v > Math.min(profileAt(track, profiles.brake, st.s), profileAt(track, profiles.brake, seen));
-    const boostRoom = top <= profileAt(track, profiles.boost, seen);
-    const horizon = (top * top) / (2 * BRAKE_DECEL) + top * reaction;
-    const jump = this.nextJump(track, st.s, horizon);
-    const jumpSpeed = jump === null ? 0 : minJumpSpeed(track, jump) * AI_JUMP_SPEED_MARGIN;
-    if (v < jumpSpeed) brakeNeeded = false;
+    let brake = v > Math.min(profileAt(ribbon, profiles.brake, st.s), profileAt(ribbon, profiles.brake, seen));
+    const boostRoom = top <= profileAt(ribbon, profiles.boost, seen);
+    const jump = nextJump(ribbon, st.s, (top * top) / (2 * BRAKE_DECEL) + top * reaction);
+    const jumpSpeed = jump === null ? 0 : minJumpSpeed(ribbon, jump) * AI_JUMP_SPEED_MARGIN;
+    if (v < jumpSpeed || st.airborne) brake = false;
 
-    // 5. Steering: cascade from lateral error to heading to yaw rate, with curvature feed-forward.
-    const maxLat = v * Math.sin(AI_MAX_YAW);
-    const xdotDes = clamp(xdotWanted ?? (target - st.x) * AI_POS_GAIN, -maxLat, maxLat);
-    const yawDes = Math.asin(clamp((xdotDes - st.vx) / v, -Math.sin(AI_MAX_YAW), Math.sin(AI_MAX_YAW)));
-    const curvature = track.curvatureAt(st.s);
-    const sdot = (v * Math.cos(st.yaw)) / Math.max(FRENET_MIN_DENOM, 1 - curvature * st.x);
-    const omegaDes = curvature * sdot + AI_YAW_GAIN * (yawDes - st.yaw) + st.yaw * YAW_SELF_CENTER;
-    const airborne = st.airborne;
-    // Running out of steering is the other reason to brake: the brake-drift adds authority.
-    if (!airborne && Math.abs(omegaDes) > steerAuthority(stats, v, false, false) && v > jumpSpeed) brakeNeeded = true;
-    const brake = brakeNeeded && !airborne;
-    const steer =
-      this.lapse > 0 ? this.frozenSteer : clamp(omegaDes / steerAuthority(stats, v, brake, airborne) + this.noise, -1, 1);
-    if (this.lapse <= 0) this.frozenSteer = steer;
+    // 4. Steer the target onto where it should be, cancelling the corner drift.
+    const pull = cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, brake);
+    const rate = steerRate(stats);
+    const steer = this.lapse > 0 ? 0 : clamp(((target - veh.targetX) / AI_TARGET_TIME - pull) / rate, -1, 1);
 
-    // 6. Boost with a heat margin; never while braking.
+    // 5. Boost with a heat margin; never while braking.
     this.coldTime = st.heat > 0 ? 0 : this.coldTime + SIM_DT;
     // At the limit a novice may keep pushing into overheat; the call is made once per cycle.
     if (st.heat >= this.heatLimit && this.boostLatched && !this.pushing) {
@@ -218,64 +212,101 @@ export class AiDriver {
     } else if (st.overheat > 0) {
       this.pushing = false;
       this.boostLatched = false;
-    } else if (st.heat <= this.heatLimit - AI_HEAT_HYSTERESIS && this.coldTime >= this.boostRest) this.boostLatched = true;
-    const wantSpeed = boostRoom || v < jumpSpeed;
-    const boost = !brake && wantSpeed && this.boostLatched && st.overheat <= 0;
+    } else if (st.heat <= this.heatLimit - AI_HEAT_HYSTERESIS && this.coldTime >= this.boostRest) {
+      this.boostLatched = true;
+    }
+    const boost = !brake && (boostRoom || v < jumpSpeed) && this.boostLatched && st.overheat <= 0;
 
-    return { steer, brake, boost };
+    return { steer, nudge: 0, brake, boost };
+  }
+
+  /** The inside of what is coming, scaled by how hard it bends, kept on the road. */
+  private racingLine(ribbon: Ribbon, s: number, v: number): number {
+    const look = v * this.bySkill(AI_LINE_LOOK_TIME_LO, AI_LINE_LOOK_TIME_HI);
+    let curvSum = 0;
+    let n = 0;
+    let half = ribbon.widthAt(s) / 2;
+    for (let d = AI_SAMPLE_STEP; d <= look; d += AI_SAMPLE_STEP) {
+      const sd = ribbon.wrap(s + d);
+      curvSum += ribbon.curvatureAt(sd);
+      half = Math.min(half, ribbon.widthAt(sd) / 2);
+      n++;
+    }
+    const lane = Math.max(0, half - RACER_HALF_WIDTH - AI_WALL_MARGIN);
+    return clamp(n > 0 ? curvSum / n / AI_LINE_FULL_CURVATURE : 0, -1, 1) * lane;
   }
 
   /**
-   * Per-sample speed limits, built once per track: `brake` is the fastest speed from which
-   * every bend ahead can still be made with full braking; `boost` is the same with braking
-   * scaled down by the driver's caution, so a cautious driver needs a longer straight to boost.
+   * Shortcuts: decided once per lap as one comes up (skilled drivers gamble on them more),
+   * then lined up through the entry junction; on a branch, merge back in its exit junction.
    */
-  private profilesFor(track: Track, stats: RacerStats): { brake: Float64Array; boost: Float64Array } {
-    if (this.profiles !== null && this.profiles.track === track) return this.profiles;
-    // Authority fades linearly with speed, so the cornering limit has a closed form.
-    const h = this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * stats.handling;
-    const corner = track.samples.map((p) => h / (Math.abs(p.curvature) + (h * STEER_SPEED_FADE) / STEER_FADE_SPEED));
+  private routeChoice(track: Track, st: RacerState, v: number, line: number): { x: number; crossing: boolean } {
+    if (st.branch >= 0) {
+      const b = track.branches[st.branch];
+      if (st.s < junctionBounds(b).outStart) return { x: line, crossing: false };
+      // The main road lies across the branch's main-facing edge.
+      return { x: -b.side * (b.ribbon.widthAt(st.s) / 2 + RACER_HALF_WIDTH + AI_WALL_MARGIN), crossing: true };
+    }
+    if (!this.options.shortcuts) return { x: line, crossing: false };
+    for (const b of track.branches) {
+      const ahead = track.delta(st.s, b.entryS);
+      const inJunction = ahead <= 0 && ahead > -junctionBounds(b).inEnd;
+      if (!inJunction && (ahead < 0 || ahead > v * AI_SHORTCUT_LOOK_TIME)) continue;
+      let choice = this.shortcut.get(b.index);
+      if (choice === undefined || choice.lap !== st.lap) {
+        choice = { lap: st.lap, take: this.rng() < this.bySkill(AI_SHORTCUT_LO, AI_SHORTCUT_HI) };
+        this.shortcut.set(b.index, choice);
+      }
+      if (!choice.take) continue;
+      // Hug the road edge until the junction opens, then cross onto the branch.
+      const half = track.widthAt(st.s) / 2;
+      return { x: b.side * (inJunction ? half + b.def.width / 2 : half - RACER_HALF_WIDTH), crossing: inJunction };
+    }
+    return { x: line, crossing: false };
+  }
+
+  /**
+   * Per-sample speed limits, built once per ribbon: `brake` is the fastest speed from which
+   * every bend ahead can still be held (corner drift no faster than the steer can cancel)
+   * with full braking; `boost` is the same with braking scaled down by the driver's caution,
+   * so a cautious driver needs a longer straight to boost.
+   */
+  private profilesFor(ribbon: Ribbon, stats: RacerStats): SpeedProfiles {
+    const known = this.profiles.get(ribbon);
+    if (known) return known;
+    // Drift = |κ|·v²·CORNER_PULL·GRIP_REF/grip must stay within a share of the steer rate.
+    const budget = (this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
+    const corner = ribbon.samples.map((p) => Math.sqrt(budget / Math.max(Math.abs(p.curvature), Number.MIN_VALUE)));
     const envelope = (decel: number) => {
       const n = corner.length;
       const out = Float64Array.from(corner);
-      // Two sweeps backwards round the loop let limits propagate across the start line.
-      for (let pass = 0; pass < 2; pass++) {
+      // A loop needs two sweeps backwards so limits propagate across the start line.
+      for (let pass = 0; pass < (ribbon.closed ? 2 : 1); pass++) {
         for (let i = n - 1; i >= 0; i--) {
+          if (!ribbon.closed && i === n - 1) continue;
           const next = out[(i + 1) % n];
-          out[i] = Math.min(out[i], Math.sqrt(next * next + 2 * decel * track.step));
+          out[i] = Math.min(out[i], Math.sqrt(next * next + 2 * decel * ribbon.step));
         }
       }
       return out;
     };
     const caution = this.bySkill(AI_BOOST_CAUTION_LO, AI_BOOST_CAUTION_HI);
-    this.profiles = { track, brake: envelope(BRAKE_DECEL), boost: envelope(BRAKE_DECEL / caution) };
-    return this.profiles;
+    const made = { brake: envelope(BRAKE_DECEL), boost: envelope(BRAKE_DECEL / caution) };
+    this.profiles.set(ribbon, made);
+    return made;
   }
 
-  /** Racers we are catching, placed where we would meet them. */
-  private addRacerBlockers(st: RacerState, track: Track, field: readonly RacerState[], out: Blocker[]) {
+  /** Racers on the same ribbon we are catching, placed where we would meet them. */
+  private addRacerBlockers(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], out: Blocker[]) {
     for (const r of field) {
-      if (r === st || r.crashed > 0 || r.invulnerable > 0) continue;
-      const gap = track.delta(st.s, r.s);
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || r.invulnerable > 0) continue;
+      const gap = ribbon.delta(st.s, r.s);
       const closing = st.speed - r.speed;
       if (gap < -RACER_LENGTH) continue;
       const meet = gap <= 0 ? 0 : closing > 0 ? gap / closing : Infinity;
       if (meet > AI_RACER_LOOK_TIME) continue;
-      out.push({ s: track.wrap(r.s + r.speed * meet), x: r.x, radius: RACER_HALF_WIDTH });
+      out.push({ s: ribbon.wrap(r.s + r.speed * meet), x: r.x, radius: RACER_HALF_WIDTH });
     }
-  }
-
-  private nextJump(track: Track, s: number, horizon: number) {
-    let best = null;
-    let bestD = Infinity;
-    for (const j of track.jumps) {
-      const d = track.delta(s, j.lip);
-      if (d > 0 && d < horizon && d < bestD) {
-        best = j;
-        bestD = d;
-      }
-    }
-    return best;
   }
 
   private evolveNoise() {
@@ -283,9 +314,22 @@ export class AiDriver {
     // Ornstein-Uhlenbeck: smooth wander rather than per-step jitter. Sum of three uniforms
     // stands in for a gaussian; its variance is 1/4, hence the factor 2.
     const g = (this.rng() + this.rng() + this.rng() - 1.5) * 2;
-    const sigma = AI_STEER_NOISE * (1 - this.skill);
+    const sigma = AI_TARGET_NOISE * (1 - this.skill);
     this.noise += (-this.noise / AI_NOISE_TAU) * dt + sigma * Math.sqrt((2 / AI_NOISE_TAU) * dt) * g;
     if (this.lapse > 0) this.lapse -= dt;
     else if (this.rng() < AI_MISTAKE_RATE * (1 - this.skill) ** 2 * dt) this.lapse = AI_MISTAKE_DURATION;
   }
+}
+
+function nextJump(ribbon: Ribbon, s: number, horizon: number): Jump | null {
+  let best: Jump | null = null;
+  let bestD = Infinity;
+  for (const j of ribbon.jumps) {
+    const d = ribbon.delta(s, j.lip);
+    if (d > 0 && d < horizon && d < bestD) {
+      best = j;
+      bestD = d;
+    }
+  }
+  return best;
 }

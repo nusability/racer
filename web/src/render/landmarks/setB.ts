@@ -2,6 +2,12 @@
 
 import * as THREE from 'three';
 import type { LandmarkFactory, LandmarkOptions } from './types.ts';
+import { createBazaar } from './b/bazaar.ts';
+import { createFair } from './b/fair.ts';
+import { createGrandstand } from './b/grandstand.ts';
+import { createOasisTown } from './b/oasisTown.ts';
+import { createCliffVillage } from './b/cliffVillage.ts';
+import { createColossus } from './b/colossus.ts';
 
 type SetBKind =
   | 'bazaar'
@@ -32,12 +38,12 @@ function placeholder(w: number, h: number, d: number): LandmarkFactory {
 }
 
 export const LANDMARKS_B: Record<SetBKind, LandmarkFactory> = {
-  bazaar: placeholder(300, 20, 120),
-  fair: placeholder(260, 70, 200),
-  grandstand: placeholder(320, 45, 70),
-  oasisTown: placeholder(300, 30, 260),
-  cliffVillage: placeholder(260, 160, 160),
-  colossus: placeholder(200, 160, 200),
+  bazaar: createBazaar,
+  fair: createFair,
+  grandstand: createGrandstand,
+  oasisTown: createOasisTown,
+  cliffVillage: createCliffVillage,
+  colossus: createColossus,
   windfarm: placeholder(400, 120, 260),
   balloons: placeholder(400, 300, 400),
 };

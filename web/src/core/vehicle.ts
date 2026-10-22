@@ -223,8 +223,9 @@ export class Vehicle {
     const maxLat = LATERAL_SPEED_MAX * k;
     st.vx = clamp(st.vx + (w * w * (this.targetX - st.x) - 2 * w * st.vx) * dt, -maxLat, maxLat);
 
-    // Sideways motion borrows from forward motion, so weaving is not free.
-    const forward = Math.sqrt(Math.max(0, st.speed * st.speed - st.vx * st.vx));
+    // Sideways motion borrows from forward motion (weaving is not free), but never all of it.
+    st.yaw = clamp(Math.atan2(st.vx, Math.max(st.speed, 1)), -MAX_VISUAL_YAW, MAX_VISUAL_YAW);
+    const forward = st.speed * Math.cos(st.yaw);
     const sdot = forward / Math.max(FRENET_MIN_DENOM, 1 - curvature * st.x);
     st.s = ribbon.wrap(sOld + sdot * dt);
     st.x += st.vx * dt;
@@ -243,7 +244,6 @@ export class Vehicle {
 
     st.y = this.alt - ribbon.elevationAt(st.s);
     st.airborne = !this.grounded;
-    st.yaw = clamp(Math.atan2(st.vx, Math.max(st.speed, 1)), -MAX_VISUAL_YAW, MAX_VISUAL_YAW);
     st.roll = ribbon.bankAt(st.s) + clamp(st.vx * ROLL_PER_LATERAL_SPEED, -MAX_LEAN, MAX_LEAN);
   }
 
@@ -396,8 +396,13 @@ export class Vehicle {
   private hitObstacle(o: Obstacle, ds: number, reach: number, ribbon: Ribbon, events: RaceEvent[]): boolean {
     const st = this.state;
     const offset = Math.abs(st.x - o.x) / reach;
-    // Pass on the side the racer is already on, or failing that the side it is heading for.
-    const side = st.x !== o.x ? Math.sign(st.x - o.x) : this.targetX >= o.x ? 1 : -1;
+    // Pass on the side the racer is already on (or failing that heading for), unless a
+    // boundary leaves no room there.
+    const across = Math.sqrt(Math.max(0, reach * reach - ds * ds));
+    let side = st.x !== o.x ? Math.sign(st.x - o.x) : this.targetX >= o.x ? 1 : -1;
+    const lo = ribbon.minXAt(st.s) + RACER_HALF_WIDTH;
+    const hi = ribbon.maxXAt(st.s) - RACER_HALF_WIDTH;
+    if (o.x + side * across > hi || o.x + side * across < lo) side = -side;
     if (this.touching !== o) {
       const fast = st.speed > OBSTACLE_CRASH_SPEED_FRACTION * this.stats.topSpeed;
       if (offset < OBSTACLE_CRASH_OFFSET && fast) {
@@ -410,7 +415,7 @@ export class Vehicle {
       this.damage(OBSTACLE_DAMAGE * centrality);
       events.push({ type: 'hit', id: st.id, kind: o.kind, intensity: centrality });
     }
-    st.x = o.x + side * Math.sqrt(Math.max(0, reach * reach - ds * ds));
+    st.x = clamp(o.x + side * across, lo, hi);
     st.vx = side * Math.max(side * st.vx, OBSTACLE_DEFLECT_SPEED);
     // The target follows, or the chase would pull the racer straight back into the rock.
     if (side * (this.targetX - st.x) < 0) this.targetX = st.x;

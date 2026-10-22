@@ -69,6 +69,7 @@ export const sunpanScenery: TrackScenery = {
   duneHeight: 4,
   scatter: 'rocks',
   scatterPerKm: 10,
+  boundary: 'dune',
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },

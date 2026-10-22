@@ -9,7 +9,7 @@ import { quadFacing } from './paint.ts';
 // Distant mesas, buttes and spires that frame every view, plus the oasis pools.
 
 const POOL_RADIUS = 34;
-const POOL_SETBACK = 75;
+const POOL_SETBACK = 55;
 const WATER = new THREE.Color(0x2ab8c0);
 const WATER_DEEP = new THREE.Color(0x0e6a80);
 const REED = new THREE.Color(0x5a8a3a);
@@ -46,7 +46,7 @@ function lathe(b: FlatBuilder, c: P3, rings: [number, number][], sides: number, 
 export function buildHorizon(cor: Corridor, scenery: TrackScenery, quality: Quality, seed: number): FlatBuilder {
   const b = new FlatBuilder();
   const rng = mulberry32(seed ^ 0x3e5a);
-  const S = cor.track.samples;
+  const S = cor.ground.views.flatMap((v) => v.ribbon.samples);
   let cx = 0;
   let cz = 0;
   for (const s of S) {
@@ -91,8 +91,8 @@ export function buildHorizon(cor: Corridor, scenery: TrackScenery, quality: Qual
   });
 
   for (const o of scenery.oases) {
-    const s = cor.track.paramToS(o.at);
-    const k = Math.round(s / cor.track.step) % S.length;
+    const s = cor.ribbon.paramToS(o.at);
+    const k = cor.idx(Math.round(s / cor.ribbon.step));
     const p = cor.beside(k, o.side, POOL_SETBACK, 0);
     const y = cor.ground.meshHeight(p.x, p.z) + 0.4;
     const ring = 14;
