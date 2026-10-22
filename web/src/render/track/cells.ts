@@ -12,13 +12,14 @@ const BOB = 0.45;
 const BOB_RATE = 2.2;
 const SPIN_RATE = 1.7;
 /** Halo billboard size, metres: big enough to read from 150 m at race speed. */
-const HALO_SIZE = 9;
+const HALO_SIZE = 11;
 /** Collect effect: the core swells and vanishes, the halo flares and fades. */
 const POP_TIME = 0.35;
 const POP_SWELL = 2.2;
 const POP_FLARE = 2.6;
-const CORE_COLOUR = new THREE.Color(0xc8fbff);
-const HALO_COLOUR = new THREE.Color(0x38e8ff);
+const CORE_COLOUR = new THREE.Color(0x9ff4ff);
+/** Additive, so it is pushed past 1 to stay vivid over bright sand. */
+const HALO_COLOUR = new THREE.Color(0x1ab8ff).multiplyScalar(1.5);
 
 const HALO_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -69,7 +70,7 @@ export function buildCells(ribbons: Ribbon[]): CellField {
   });
   const n = Math.max(1, items.length);
   // A canister: capsule core with a bright band, faceted for a crisp silhouette.
-  const coreGeo = new THREE.CapsuleGeometry(0.75, 1.5, 3, 8);
+  const coreGeo = new THREE.CapsuleGeometry(0.9, 1.8, 3, 8);
   const coreMat = new THREE.MeshBasicMaterial({ color: CORE_COLOUR });
   const core = new THREE.InstancedMesh(coreGeo, coreMat, n);
   core.name = 'boostCells';

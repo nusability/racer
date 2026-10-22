@@ -178,6 +178,9 @@ function noviceVsCup1(track: Track, laps: number) {
   let crashes = 0;
   const places: number[] = [];
   const gaps: number[] = [];
+  let boostTime = 0;
+  let cells = 0;
+  let fieldCells = 0;
   for (let k = 0; k < NOVICE_RUNS; k++) {
     const seed = SEED + k;
     const field = [entrant(0, starter, 0, true)];
@@ -190,7 +193,13 @@ function noviceVsCup1(track: Track, laps: number) {
         fail(`${track.def.id}: novice race timed out`);
         break;
       }
-      race.step(race.phase === 'countdown' ? IDLE : drive(race));
+      for (const e of race.step(race.phase === 'countdown' ? IDLE : drive(race))) {
+        if (e.type === 'pickup') {
+          if (e.id === race.player().id) cells++;
+          else fieldCells++;
+        }
+      }
+      if (race.player().boosting) boostTime += SIM_DT;
     }
     const me = race.player();
     if (me.finishTime === null) fail(`${track.def.id}: novice never finished`);
@@ -203,7 +212,9 @@ function noviceVsCup1(track: Track, laps: number) {
   }
   const meanGap = gaps.length ? gaps.reduce((a, g) => a + g, 0) / gaps.length : NaN;
   console.log(`  novice bot vs cup-1 (Dustwings, skill ${CUP1_SKILL_LO}-${CUP1_SKILL_HI}): places ${places.join(', ')}, ` +
-      `${(crashes / NOVICE_RUNS).toFixed(1)} crashes/race, ${meanGap >= 0 ? '+' : ''}${meanGap.toFixed(1)} s vs the cup-1 median`);
+      `${(crashes / NOVICE_RUNS).toFixed(1)} crashes/race, ${meanGap >= 0 ? '+' : ''}${meanGap.toFixed(1)} s vs the cup-1 median; ` +
+      `boost ${(boostTime / NOVICE_RUNS).toFixed(0)} s/race, cells/lap ${(cells / NOVICE_RUNS / laps).toFixed(1)} ` +
+      `(cup-1 ${(fieldCells / NOVICE_RUNS / laps / (FIELD - 1)).toFixed(1)})`);
 }
 
 const defs: TrackDef[] = [simTestTrack, ...TRACKS];

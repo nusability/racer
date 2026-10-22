@@ -196,7 +196,7 @@ export const MAX_LEAN = 0.6;
 
 // AI driver (src/core/ai.ts). Skill 0..1 interpolates the *_LO/_HI pairs.
 /** Skill is raised to this power before interpolating: early cups beatable, 0.9 still sharp. */
-export const AI_SKILL_CURVE = 1.6;
+export const AI_SKILL_CURVE = 2.2;
 /** Spacing of the AI's look-ahead samples, metres. */
 export const AI_SAMPLE_STEP = 10;
 /** Racing-line look-ahead in seconds of travel at current speed. */
@@ -268,7 +268,7 @@ export const AI_START_BOOST_CHANCE = 0.8;
 /** The AI detours to a boost pad when it lies within this of its line, metres. */
 export const AI_PAD_DETOUR = 7;
 /** Chance per lap that an AI takes a shortcut it comes to. */
-export const AI_SHORTCUT_LO = 0.2;
+export const AI_SHORTCUT_LO = 0;
 export const AI_SHORTCUT_HI = 0.8;
 /** The AI decides on a shortcut and lines up for it this many seconds before its entry. */
 export const AI_SHORTCUT_LOOK_TIME = 2;
