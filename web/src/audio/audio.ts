@@ -10,7 +10,8 @@ export type OneShotName =
   | 'hit'
   | 'crash'
   | 'land'
-  | 'overheat'
+  | 'pickup'
+  | 'tankEmpty'
   | 'lap'
   | 'finish'
   | 'click'
@@ -21,7 +22,6 @@ export interface EngineView {
   topSpeed: number;
   boosting: boolean;
   airborne: boolean;
-  heat: number;
 }
 
 const MASTER_GAIN = 0.8;
@@ -42,6 +42,12 @@ const SMOOTH_S = 0.06;
 const MAX_ONE_SHOTS = 24;
 const ONE_SHOT_REPEAT_S = 0.04;
 const NOISE_SECONDS = 2;
+/** Pickups closer together than this climb the scale, so a line of cells rings upward. */
+const PICKUP_CHAIN_S = 0.6;
+/** Pickup chime pitch: base frequency, semitone step per chained cell, and the cap on steps. */
+const PICKUP_BASE_HZ = 880;
+const PICKUP_STEP_SEMITONES = 2;
+const PICKUP_MAX_STEPS = 12;
 
 interface EngineVoice {
   oscs: OscillatorNode[];
@@ -72,6 +78,8 @@ export class GameAudio {
   private scrape: NoiseLoop | null = null;
   private activeShots = 0;
   private lastShot = new Map<OneShotName, number>();
+  private pickupChain = 0;
+  private lastPickup = -1;
 
   /** Call from a user gesture (the title tap): browsers only start audio inside one. */
   unlock(): void {
@@ -135,7 +143,7 @@ export class GameAudio {
     if (view.airborne) cutoff *= 0.55;
     v.filter.frequency.setTargetAtTime(cutoff, t, SMOOTH_S);
     v.body.gain.setTargetAtTime(view.airborne ? 0.18 : 0.32, t, SMOOTH_S);
-    v.whineGain.gain.setTargetAtTime(0.02 + 0.05 * Math.min(r, 1) + 0.04 * view.heat, t, SMOOTH_S);
+    v.whineGain.gain.setTargetAtTime(0.02 + 0.06 * Math.min(r, 1), t, SMOOTH_S);
     v.roar.gain.setTargetAtTime((view.boosting ? 0.5 : 0.08 + 0.12 * Math.min(r, 1)) * (view.airborne ? 0.4 : 1), t, SMOOTH_S);
     v.roarFilter.frequency.setTargetAtTime(view.boosting ? 1400 : 700, t, SMOOTH_S);
   }
@@ -259,7 +267,8 @@ export class GameAudio {
     const a = this.live();
     if (!a || this.activeShots >= MAX_ONE_SHOTS) return;
     const t = a.ctx.currentTime;
-    if (t - (this.lastShot.get(name) ?? -1) < ONE_SHOT_REPEAT_S) return;
+    // A line of cells is collected faster than the repeat gate, and each one should ring.
+    if (name !== 'pickup' && t - (this.lastShot.get(name) ?? -1) < ONE_SHOT_REPEAT_S) return;
     this.lastShot.set(name, t);
     const { ctx, out, noise } = a;
     const k = clamp01(intensity);
@@ -295,11 +304,17 @@ export class GameAudio {
         this.tone(ctx, out, 'sine', 115, 42, 0.24, 0.75 * k, 0);
         this.noise(ctx, out, noise, 0.12, 'lowpass', 700, 200, 0.5 * k, 0);
         break;
-      case 'overheat':
-        for (let i = 0; i < 2; i++) {
-          this.tone(ctx, out, 'square', 880, 880, 0.12, 0.16, i * 0.3);
-          this.tone(ctx, out, 'square', 660, 660, 0.12, 0.16, i * 0.3 + 0.15);
-        }
+      case 'pickup': {
+        this.pickupChain = t - this.lastPickup < PICKUP_CHAIN_S ? Math.min(PICKUP_MAX_STEPS, this.pickupChain + 1) : 0;
+        this.lastPickup = t;
+        const f = PICKUP_BASE_HZ * 2 ** ((this.pickupChain * PICKUP_STEP_SEMITONES) / 12);
+        this.tone(ctx, out, 'triangle', f, f * 1.5, 0.12, 0.28, 0);
+        this.tone(ctx, out, 'sine', f * 2, f * 2, 0.18, 0.12, 0.03);
+        break;
+      }
+      case 'tankEmpty':
+        for (let i = 0; i < 3; i++) this.noise(ctx, out, noise, 0.07, 'bandpass', 500 - i * 120, 260, 0.22 - i * 0.05, i * 0.09);
+        this.tone(ctx, out, 'sawtooth', 120, 60, 0.3, 0.1, 0, 500);
         break;
       case 'lap':
         this.tone(ctx, out, 'triangle', 880, 880, 0.12, 0.3, 0);

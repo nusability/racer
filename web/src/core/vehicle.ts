@@ -10,7 +10,12 @@ import {
   AIR_STEER_FACTOR,
   ARCH_HALF_DEPTH,
   BOOST_ACCEL_MULT,
-  BOOST_HEAT_RATE,
+  BOOST_PASSIVE_REFILL,
+  BOOST_RESUME_FILL,
+  BOOST_START_FILL,
+  CELL_MAX_HEIGHT,
+  CELL_RADIUS,
+  CELL_VALUE,
   BOOST_PAD_DURATION,
   BOOST_PAD_MAX_HEIGHT,
   BOUNDARY_DAMAGE_FREE_SPEED,
@@ -45,8 +50,6 @@ import {
   OBSTACLE_DEFLECT_SPEED,
   OBSTACLE_QUERY_RANGE,
   OBSTACLE_SPEED_LOSS,
-  OVERHEAT_DURATION,
-  OVERHEAT_TOP_SPEED,
   OVERSPEED_DECAY,
   RACER_HALF_WIDTH,
   RACER_HEIGHT,
@@ -93,10 +96,9 @@ export function cornerPull(stats: RacerStats, curvature: number, speed: number, 
   return brake ? pull * CORNER_PULL_BRAKE : pull;
 }
 
-/** Top speed right now, given damage, overheat and whether boost is active. */
+/** Top speed right now, given damage and whether boost is active. */
 export function currentTopSpeed(stats: RacerStats, state: RacerState, boosting: boolean): number {
   let top = stats.topSpeed * (1 - DAMAGE_TOP_SPEED_LOSS * state.damage);
-  if (state.overheat > 0) top *= OVERHEAT_TOP_SPEED;
   if (boosting) top *= 1 + stats.boostPower;
   return top;
 }
@@ -146,6 +148,10 @@ export class Vehicle {
   respawnDue: boolean;
   /** Race time the current lap started. */
   lapStart: number;
+  /** The tank ran dry and has not yet refilled to the resume level. */
+  private dry = false;
+  /** Per ribbon (branch index, -1 = main): the cells taken this lap. */
+  private readonly collected = new Map<number, Uint8Array>();
   /** The obstacle currently being touched, so one contact is judged and reported once. */
   private touching: Obstacle | null = null;
 
@@ -163,8 +169,7 @@ export class Vehicle {
       vx: 0,
       yaw: 0,
       roll: ribbon.bankAt(s),
-      heat: 0,
-      overheat: 0,
+      boost: BOOST_START_FILL,
       damage: 0,
       boosting: false,
       airborne: false,
@@ -202,7 +207,7 @@ export class Vehicle {
     const brake = input.brake;
     const airborne = !this.grounded;
 
-    this.updateHeat(input.boost, events);
+    this.updateBoost(input.boost, events);
     this.updateSpeed(ribbon, brake);
 
     // Lateral target: steer moves it, a drag nudges it, corners drift it outward.
@@ -236,6 +241,7 @@ export class Vehicle {
     if (st.invulnerable <= 0) this.obstacles(ribbon, events);
     if (st.crashed > 0) return;
     this.boostPads(ribbon, sOld, events);
+    this.cells(ribbon, sOld, events);
     this.sand(ribbon, events);
     if (st.damage >= 1) {
       this.crash('destroyed', ribbon, events);
@@ -247,25 +253,22 @@ export class Vehicle {
     st.roll = ribbon.bankAt(st.s) + clamp(st.vx * ROLL_PER_LATERAL_SPEED, -MAX_LEAN, MAX_LEAN);
   }
 
-  private updateHeat(wantBoost: boolean, events: RaceEvent[]) {
+  /** Holding boost spends the tank, no strings attached; a pad or launch burst is free. */
+  private updateBoost(wantBoost: boolean, events: RaceEvent[]) {
     const st = this.state;
     const dt = SIM_DT;
     this.freeBoost = Math.max(0, this.freeBoost - dt);
-    let engineBoost = false;
-    if (st.overheat > 0) {
-      st.overheat = Math.max(0, st.overheat - dt);
-      st.heat = Math.max(0, st.heat - this.stats.cooling * dt);
-    } else if (wantBoost) {
-      st.heat += BOOST_HEAT_RATE * dt;
-      engineBoost = true;
-      if (st.heat >= 1) {
-        st.heat = 1;
-        st.overheat = OVERHEAT_DURATION;
-        engineBoost = false;
-        events.push({ type: 'overheat', id: st.id });
+    if (this.dry && st.boost >= BOOST_RESUME_FILL) this.dry = false;
+    const spend = wantBoost && this.freeBoost <= 0 && !this.dry;
+    st.boost = Math.min(1, st.boost + BOOST_PASSIVE_REFILL * dt);
+    if (spend) {
+      st.boost = Math.max(0, st.boost - dt / this.stats.boostTank);
+      if (st.boost === 0) {
+        this.dry = true;
+        events.push({ type: 'tankEmpty', id: st.id });
       }
-    } else st.heat = Math.max(0, st.heat - this.stats.cooling * dt);
-    st.boosting = engineBoost || this.freeBoost > 0;
+    }
+    st.boosting = spend || this.freeBoost > 0;
   }
 
   /** Auto-throttle toward the current top speed; sand caps it lower and drags. */
@@ -435,6 +438,34 @@ export class Vehicle {
     }
   }
 
+  private cells(ribbon: Ribbon, sOld: number, events: RaceEvent[]) {
+    const st = this.state;
+    if (ribbon.cells.length === 0 || this.alt - ribbon.elevationAt(st.s) > CELL_MAX_HEIGHT) return;
+    let taken = this.collected.get(st.branch);
+    for (const c of ribbon.cells) {
+      const crossed = ribbon.delta(sOld, c.s) > 0 && ribbon.delta(st.s, c.s) <= 0;
+      if (!crossed || Math.abs(st.x - c.x) >= CELL_RADIUS + RACER_RADIUS) continue;
+      if (taken === undefined) {
+        taken = new Uint8Array(ribbon.cells.length);
+        this.collected.set(st.branch, taken);
+      }
+      if (taken[c.index]) continue;
+      taken[c.index] = 1;
+      st.boost = Math.min(1, st.boost + CELL_VALUE);
+      events.push({ type: 'pickup', id: st.id, branch: st.branch, cell: c.index });
+    }
+  }
+
+  /** Whether this racer has taken that cell this lap (cells reappear for it each lap). */
+  hasCollected(branch: number, cell: number): boolean {
+    return this.collected.get(branch)?.[cell] === 1;
+  }
+
+  /** A new lap: every cell is there to take again. */
+  newLap() {
+    this.collected.clear();
+  }
+
   /** Starts a free boost burst (launch boost at GO). */
   grantFreeBoost(seconds: number) {
     this.freeBoost = Math.max(this.freeBoost, seconds);
@@ -488,8 +519,6 @@ export class Vehicle {
     st.airborne = false;
     st.speed = this.stats.topSpeed * RESPAWN_SPEED_FRACTION;
     st.damage = Math.min(st.damage, RESPAWN_DAMAGE);
-    st.heat = 0;
-    st.overheat = 0;
     st.crashed = 0;
     st.invulnerable = RESPAWN_INVULNERABLE;
     st.roll = ribbon.bankAt(s);

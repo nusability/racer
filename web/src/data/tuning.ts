@@ -71,8 +71,6 @@ export const BRAKE_DECEL = 85;
 export const SLOPE_SPEED_FACTOR = 0.5;
 /** Top speed lost at full damage (fraction): damage hurts but never strands you. */
 export const DAMAGE_TOP_SPEED_LOSS = 0.08;
-/** Top speed multiplier while overheated. */
-export const OVERHEAT_TOP_SPEED = 0.95;
 
 // Lateral control: the craft flies along the track and the player sets where across it it is.
 /** Handling (racer stat) at which the lateral numbers below apply as written. */
@@ -170,13 +168,21 @@ export const RESPAWN_DAMAGE = 0.3;
 /** Seconds after respawning during which obstacles and racers pass through you. */
 export const RESPAWN_INVULNERABLE = 1.5;
 
-// Boost and heat
-/** Heat gained per second of boost (heat is 0..1). */
-export const BOOST_HEAT_RATE = 0.32;
-/** Forced cool-down after overheating, seconds. */
-export const OVERHEAT_DURATION = 2.5;
-/** Free boost from a pad, seconds. */
-export const BOOST_PAD_DURATION = 1.2;
+// Boost tank
+/** Tank fill at the start of a race: enough for a launch and a first straight. */
+export const BOOST_START_FILL = 0.4;
+/** Tank refilled per second without collecting anything, so nobody is ever boost-less. */
+export const BOOST_PASSIVE_REFILL = 0.025;
+/** A tank run dry boosts again only once it holds this much: no sputtering on the trickle. */
+export const BOOST_RESUME_FILL = 0.1;
+/** Tank fill one boost cell gives. */
+export const CELL_VALUE = 0.22;
+/** Pickup radius of a boost cell, metres (added to the racer's radius). */
+export const CELL_RADIUS = 3;
+/** A cell is collected only by a racer at most this high above the road: jumps fly over. */
+export const CELL_MAX_HEIGHT = 6;
+/** Free boost from a pad, seconds: pads are a main boost source, no tank used. */
+export const BOOST_PAD_DURATION = 1.8;
 /** A pad only works for a racer at most this high above it, metres. */
 export const BOOST_PAD_MAX_HEIGHT = 3;
 
@@ -241,11 +247,12 @@ export const AI_BRAKE_REACTION_HI = 0.05;
 /** Straight needed before the AI boosts, as a multiple of the braking distance it needs. */
 export const AI_BOOST_CAUTION_LO = 8;
 export const AI_BOOST_CAUTION_HI = 1;
-/** Heat at which the AI stops boosting. */
-export const AI_HEAT_LIMIT_LO = 0.6;
-export const AI_HEAT_LIMIT_HI = 0.93;
-/** The AI resumes boosting once heat has fallen this far below its limit. */
-export const AI_HEAT_HYSTERESIS = 0.35;
+/** The AI only spends tank on a straight at least this many seconds long: skill saves it. */
+export const AI_BOOST_MIN_RUN_LO = 0;
+export const AI_BOOST_MIN_RUN_HI = 1.5;
+/** The AI swerves for a boost cell lying within this of its line, metres. */
+export const AI_CELL_DETOUR_LO = 2;
+export const AI_CELL_DETOUR_HI = 14;
 /** Wander of the AI's target at skill 0 (scaled by 1 - skill), metres. */
 export const AI_TARGET_NOISE = 4;
 /** Correlation time of the target wander, seconds. */
@@ -254,17 +261,12 @@ export const AI_NOISE_TAU = 0.5;
 export const AI_MISTAKE_RATE = 0.3;
 /** Length of a lapse, seconds. */
 export const AI_MISTAKE_DURATION = 0.6;
-/** Seconds a cold engine idles before the AI boosts again: novices waste cooling. */
-export const AI_BOOST_REST_LO = 9;
-export const AI_BOOST_REST_HI = 0;
 /** Approaching a jump below this multiple of its minimum clearing speed, the AI won't brake. */
 export const AI_JUMP_SPEED_MARGIN = 1.3;
 /** Chance per race start that an AI nails the launch boost, at skill 1. */
 export const AI_START_BOOST_CHANCE = 0.8;
 /** The AI detours to a boost pad when it lies within this of its line, metres. */
 export const AI_PAD_DETOUR = 7;
-/** Chance per boost cycle at skill 0 (scaled by 1 - skill) that an AI pushes into overheat. */
-export const AI_OVERHEAT_GAMBLE = 0.8;
 /** Chance per lap that an AI takes a shortcut it comes to. */
 export const AI_SHORTCUT_LO = 0.2;
 export const AI_SHORTCUT_HI = 0.8;

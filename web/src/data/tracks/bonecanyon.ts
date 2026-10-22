@@ -44,6 +44,18 @@ export const bonecanyon: TrackDef = {
     { kind: 'boulders', from: 10.2, to: 10.5, count: 7, radius: 3 },
     { kind: 'runoff', from: 10.1, to: 10.6, amount: 70, side: 1 },
     { kind: 'boostPad', at: 12.3, lateral: 0 },
+    { kind: 'boostCells', at: 0.1, lateral: 0, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 0.75, lateral: 8, count: 5, spacing: 35 },
+    { kind: 'boostPad', at: 1.2, lateral: 0 },
+    { kind: 'boostPad', at: 1.24, lateral: 0 },
+    { kind: 'boostCells', at: 2.17, lateral: -7, count: 3, spacing: 25 },
+    { kind: 'boostCells', at: 2.62, lateral: 7, count: 3, spacing: 25 },
+    { kind: 'boostCells', at: 4.6, lateral: -14, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 7.2, lateral: 0 },
+    { kind: 'boostCells', at: 8.5, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'boostCells', at: 10.25, lateral: 40, count: 5, spacing: 28 },
+    { kind: 'boostPad', at: 11.5, lateral: -10 },
+    { kind: 'boostPad', at: 11.54, lateral: -10 },
   ],
   branches: [
     {
@@ -63,6 +75,8 @@ export const bonecanyon: TrackDef = {
       features: [
         { kind: 'boostPad', at: 2.5, lateral: 0 },
         { kind: 'jump', at: 3.0, rampLength: 60, rampHeight: 5, gapLength: 50 },
+        { kind: 'boostCells', at: 2.1, lateral: 0, count: 5, spacing: 30 },
+        { kind: 'boostCells', at: 4.2, lateral: 0, count: 5, spacing: 35 },
       ],
     },
   ],

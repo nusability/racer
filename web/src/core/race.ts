@@ -180,6 +180,7 @@ export class Race {
     const lapTime = at - v.lapStart;
     v.lapStart = at;
     st.lap = completed;
+    v.newLap();
     if (st.bestLap === null || lapTime < st.bestLap) st.bestLap = lapTime;
     events.push({ type: 'lap', id: st.id, lap: completed, time: lapTime });
     if (completed >= this.config.laps) {

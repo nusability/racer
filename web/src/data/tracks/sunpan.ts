@@ -39,6 +39,18 @@ export const sunpan: TrackDef = {
     { kind: 'kicker', at: 11.3, length: 40, height: 2.5 },
     { kind: 'dunes', from: 12.2, to: 13.6, amplitude: 2, wavelength: 240 },
     { kind: 'boostPad', at: 13.4, lateral: 0 },
+    { kind: 'boostCells', at: 0.08, lateral: 0, count: 5, spacing: 30 },
+    { kind: 'boostCells', at: 0.86, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'boostCells', at: 2.3, lateral: -16, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 3.0, lateral: 0 },
+    { kind: 'boostPad', at: 3.05, lateral: 0 },
+    { kind: 'boostCells', at: 4.4, lateral: 20, count: 6, spacing: 30 },
+    { kind: 'boostCells', at: 6.22, lateral: 40, count: 4, spacing: 28 },
+    { kind: 'boostPad', at: 8.5, lateral: 0 },
+    { kind: 'boostCells', at: 11.62, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'boostCells', at: 12.8, lateral: -12, count: 6, spacing: 30 },
+    { kind: 'boostPad', at: 12.1, lateral: 8 },
+    { kind: 'boostPad', at: 12.14, lateral: 8 },
   ],
   branches: [
     {
@@ -57,6 +69,7 @@ export const sunpan: TrackDef = {
       features: [
         { kind: 'kicker', at: 3.3, length: 40, height: 2 },
         { kind: 'boostPad', at: 4.2, lateral: 0 },
+        { kind: 'boostCells', at: 2.4, lateral: 0, count: 6, spacing: 35 },
       ],
     },
   ],

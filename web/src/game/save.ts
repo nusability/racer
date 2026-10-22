@@ -138,12 +138,26 @@ function validate(d: Record<string, unknown>): SaveData {
   return d as unknown as SaveData;
 }
 
+/**
+ * The 'cooling' upgrade became the 'tank' upgrade (heat was replaced by a boost tank). Levels
+ * carry over so a player keeps what they paid for.
+ */
+function renameCoolingToTank(d: Record<string, unknown>): void {
+  if (!isObj(d.upgrades)) return;
+  for (const levels of Object.values(d.upgrades)) {
+    if (!isObj(levels) || !('cooling' in levels) || 'tank' in levels) continue;
+    levels.tank = levels.cooling;
+    delete levels.cooling;
+  }
+}
+
 /** Decodes a stored blob; anything unusable becomes a fresh save, loudly. */
 export function decodeSave(raw: string | null): SaveData {
   if (raw === null) return freshSave();
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isObj(parsed)) throw new SaveInvalid('not an object');
+    renameCoolingToTank(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);

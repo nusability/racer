@@ -1,6 +1,6 @@
 // A synthetic track for the headless sim check: wide open sand run-off, a walled canyon, a
-// tunnel, a jump, a boulder field and a pillar to choose a side of, and one shortcut branch
-// with its own boulders. It exercises every simulation path without waiting for real tracks.
+// tunnel, a jump, a boulder field and a pillar to choose a side of, boost pads and cells (on
+// and off the line), and one shortcut branch with its own boulders and cells. It exercises every simulation path without waiting for real tracks.
 
 import type { TrackDef } from '../src/core/types.ts';
 
@@ -27,6 +27,11 @@ export const simTestTrack: TrackDef = {
   ],
   features: [
     { kind: 'boostPad', at: 0.1, lateral: 0 },
+    { kind: 'boostPad', at: 4.1, lateral: -6 },
+    { kind: 'boostCells', at: 0.55, lateral: 0, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 4.6, lateral: -6, count: 5, spacing: 30 },
+    { kind: 'boostCells', at: 3.2, lateral: 14, count: 5, spacing: 30 },
+    { kind: 'boostCells', at: 8.3, lateral: -10, count: 4, spacing: 30 },
     { kind: 'jump', at: 0.3, rampLength: 70, rampHeight: 6, gapLength: 70 },
     { kind: 'boulders', from: 2.45, to: 2.85, count: 10, radius: 3 },
     { kind: 'dunes', from: 3.2, to: 3.8, amplitude: 3, wavelength: 150 },
@@ -51,7 +56,10 @@ export const simTestTrack: TrackDef = {
         { x: 110, z: -1520, y: 0 },
         { x: 290, z: -1740, y: 2 },
       ],
-      features: [{ kind: 'boulders', from: 2.2, to: 2.9, count: 6, radius: 2.5 }],
+      features: [
+        { kind: 'boulders', from: 2.2, to: 2.9, count: 6, radius: 2.5 },
+        { kind: 'boostCells', at: 3.1, lateral: 0, count: 5, spacing: 25 },
+      ],
     },
   ],
   palette: { sky: 0x4a8fd6, horizon: 0xf0c890, sand: 0xe0b070, road: 0xc89058, rock: 0xa0583a, accent: 0xff5a2a, sun: 0xfff0d0, dusk: 0 },

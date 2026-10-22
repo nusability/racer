@@ -51,25 +51,47 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  width: 230px;
+  width: 260px;
 }
 .hud__speed { display: flex; align-items: baseline; gap: 6px; font-style: italic; font-weight: 900; }
 .hud__speed-n { font-size: 60px; line-height: 0.9; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
 .hud__speed-u { font-size: 16px; letter-spacing: 0.1em; color: var(--sand-dim); }
 .hud.is-boosting .hud__speed-n { color: var(--cyan); text-shadow: 0 0 18px rgba(60, 242, 255, 0.8), 0 2px 0 rgba(0, 0, 0, 0.5); }
-.hud__bars { display: flex; gap: 10px; width: 100%; }
+.hud__bars { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 
-.hb { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.hb__text { font-size: 12px; font-weight: 800; letter-spacing: 0.16em; color: var(--sand-dim); }
-.hb__track { height: 10px; border-radius: 5px; background: rgba(20, 8, 2, 0.6); border: 1px solid rgba(248, 227, 192, 0.25); overflow: hidden; }
+.hb { display: flex; align-items: center; gap: 8px; }
+.hb__text { width: 46px; flex: none; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--sand-dim); }
+.hb__track { position: relative; flex: 1; height: 8px; border-radius: 4px; background: rgba(20, 8, 2, 0.6); border: 1px solid rgba(248, 227, 192, 0.25); overflow: hidden; transform-origin: 0 50%; }
 .hb__fill { height: 100%; transform-origin: 0 50%; transform: scaleX(0); will-change: transform; }
-.hb--heat .hb__fill { background: linear-gradient(90deg, var(--orange-hi), var(--orange) 60%, var(--red)); }
-.hud.is-boosting .hb--heat .hb__fill { box-shadow: 0 0 10px var(--cyan); }
+.hb__segs { display: none; }
 .hb--hull .hb__fill { background: var(--sand); }
 .hb--hull.is-warn .hb__fill { background: var(--red); }
-.hb--heat.is-warn .hb__track { animation: blink 0.35s steps(2, jump-none) infinite; border-color: var(--red); }
-.hb--heat.is-over .hb__fill { background: var(--red); }
-.hb--heat.is-over .hb__text { color: var(--red); animation: blink 0.5s steps(2, jump-none) infinite; }
+
+/* The boost tank is the main resource: big, cyan, liquid sheen while boosting, ten cells. */
+.hb--boost .hb__text { color: var(--cyan); font-size: 15px; }
+.hb--boost .hb__track { height: 18px; border-radius: 9px; border: 2px solid rgba(60, 242, 255, 0.7); background: rgba(2, 30, 36, 0.7); }
+.hb--boost .hb__fill {
+  background: linear-gradient(180deg, #b8fbff 0%, var(--cyan) 35%, #0fb6cc 100%);
+  box-shadow: 0 0 12px rgba(60, 242, 255, 0.7);
+}
+.hb--boost .hb__segs {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(2, 30, 36, 0.85) calc(10% - 2px) 10%);
+  pointer-events: none;
+}
+.hud.is-boosting .hb--boost .hb__segs {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(2, 30, 36, 0.85) calc(10% - 2px) 10%),
+    linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 45%, transparent 60%) 0 0 / 200% 100%;
+  animation: sheen 0.5s linear infinite;
+}
+.hb--boost.is-full .hb__track { animation: tankfull 0.9s ease-in-out infinite; }
+.hb--boost.is-empty { opacity: 0.45; }
+.hb--boost.is-empty .hb__track { border-color: rgba(60, 242, 255, 0.35); }
+@keyframes sheen { from { background-position: 0 0, 100% 0; } to { background-position: 0 0, -100% 0; } }
+@keyframes tankfull { 50% { box-shadow: 0 0 18px rgba(60, 242, 255, 0.9); border-color: #d6fdff; } }
 @keyframes blink { 50% { opacity: 0.35; } }
 
 .hud__count {

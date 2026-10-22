@@ -17,7 +17,7 @@ const STATS: StatSpec[] = [
   { label: 'ACCEL', get: (s) => s.accel },
   { label: 'HANDLING', get: (s) => s.handling },
   { label: 'BOOST', get: (s) => s.boostPower },
-  { label: 'COOLING', get: (s) => s.cooling },
+  { label: 'BOOST TANK', get: (s) => s.boostTank },
   { label: 'ARMOUR', get: (s) => s.armor },
 ];
 

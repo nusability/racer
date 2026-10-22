@@ -38,6 +38,17 @@ export const glasssea: TrackDef = {
     { kind: 'boulders', from: 11.3, to: 11.55, count: 6, radius: 3.5 },
     { kind: 'boostPad', at: 12.6, lateral: -12 },
     { kind: 'boostPad', at: 12.6, lateral: 12 },
+    { kind: 'boostCells', at: 0.05, lateral: 0, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 0.62, lateral: 10, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 1.38, lateral: -10, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 3.4, lateral: -20, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 4.55, lateral: 0 },
+    { kind: 'boostPad', at: 4.6, lateral: 0 },
+    { kind: 'boostCells', at: 6.0, lateral: 25, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 8.4, lateral: 0 },
+    { kind: 'boostCells', at: 11.0, lateral: 0, count: 6, spacing: 30 },
+    { kind: 'boostCells', at: 11.3, lateral: 50, count: 4, spacing: 28 },
+    { kind: 'boostPad', at: 13.2, lateral: 0 },
   ],
   branches: [
     {
@@ -57,6 +68,8 @@ export const glasssea: TrackDef = {
       features: [
         { kind: 'boostPad', at: 2.4, lateral: 0 },
         { kind: 'jump', at: 2.75, rampLength: 100, rampHeight: 6, gapLength: 75 },
+        { kind: 'boostCells', at: 2.1, lateral: 0, count: 5, spacing: 30 },
+        { kind: 'boostCells', at: 4.0, lateral: 0, count: 5, spacing: 35 },
       ],
     },
   ],

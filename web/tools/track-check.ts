@@ -269,6 +269,38 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
   }
 }
 
+/** Pickups: a boost cell's catch radius, and clearance kept from rock around pickups. */
+const CELL_RADIUS = 3;
+const PICKUP_CLEAR = 3;
+
+/** Boost cells and pads: on the drivable area, clear of chasms, rock and junction lanes. */
+function checkPickups(t: Ribbon, label: string, warn: string[], junctions: [number, number][]) {
+  const w = (m: string) => warn.push(`${label}: ${m}`);
+  const inJunction = (s: number) => junctions.some(([a, b]) => t.delta(a, s) >= 0 && t.delta(s, b) >= 0);
+  const bad = (s: number, x: number, r: number): string | null => {
+    if (t.isGap(s)) return 'over a chasm';
+    if (inJunction(s)) return 'inside a junction';
+    if (x - r < t.minXAt(s) || x + r > t.maxXAt(s)) return 'outside the drivable area';
+    for (const o of t.obstaclesNear(s, 30, 30)) {
+      if (Math.hypot(t.delta(s, o.s), x - o.x) < o.radius + r + PICKUP_CLEAR) return `on a ${o.kind} at s=${fmt(o.s)}`;
+    }
+    return null;
+  };
+  for (const c of t.cells) {
+    const why = bad(c.s, c.x, CELL_RADIUS);
+    if (why) w(`boost cell ${c.index} at s=${fmt(c.s)} x=${c.x} ${why}`);
+  }
+  for (const p of t.boostPads) {
+    for (const ds of [-p.length / 2, 0, p.length / 2]) {
+      const why = bad(p.s + ds, p.x, p.width / 2);
+      if (why) {
+        w(`boost pad at s=${fmt(p.s)} x=${p.x} ${why}`);
+        break;
+      }
+    }
+  }
+}
+
 interface Edged {
   pos: { x: number; z: number };
   right: { x: number; z: number };
@@ -291,6 +323,16 @@ function check(def: TrackDef): string[] {
   const startR = minRadiusBetween(t, t.length - 100, 300);
   console.log(`\n${def.id} "${def.name}" d${def.difficulty} ${def.laps} laps  lap@${STARTER_SPEED} ${(t.length / STARTER_SPEED).toFixed(0)}s`);
   checkRibbon(t, def.features, def.points.length, 'main', warn, true);
+  const mainJunctions = t.branches.flatMap((b): [number, number][] => [
+    [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH],
+    [b.exitS - BRANCH_JUNCTION_LENGTH, b.exitS],
+  ]);
+  checkPickups(t, 'main', warn, mainJunctions);
+  const lines = (f: TrackFeature[]) => f.filter((x) => x.kind === 'boostCells').length;
+  const allCells = t.cells.length + t.branches.reduce((n, b) => n + b.ribbon.cells.length, 0);
+  const allLines = lines(def.features) + t.branches.reduce((n, b) => n + lines(b.def.features), 0);
+  const pads = t.boostPads.length + t.branches.reduce((n, b) => n + b.ribbon.boostPads.length, 0);
+  console.log(`  pickups: ${allLines} cell lines, ${allCells} cells, ${pads} boost pads (all ribbons)`);
   if (t.length < LAP_MIN || t.length > LAP_MAX) warn.push(`lap length ${fmt(t.length)} outside ${LAP_MIN}..${LAP_MAX}`);
   if (startR < RUNOUT_MIN_RADIUS) warn.push(`start line not on a straight (radius ${fmt(startR)}m)`);
 
@@ -309,6 +351,7 @@ function check(def: TrackDef): string[] {
     const xStart = r.paramToS(b.def.points.length + 2);
     if (jEnd > J * 1.5 || r.length - xStart > J * 1.5) warn.push(`${label}: junctions stretched (${fmt(jEnd)}m, ${fmt(r.length - xStart)}m): first/last points too far off`);
     const inJunction = (s: number) => s < jEnd || s > xStart;
+    checkPickups(r, label, warn, [[0, jEnd], [xStart, r.length]]);
     for (const o of r.obstacles) if (inJunction(o.s)) warn.push(`${label}: ${o.kind} inside a junction at s=${fmt(o.s)}`);
     for (const p of r.boostPads) if (inJunction(p.s)) warn.push(`${label}: boost pad inside a junction`);
     for (const j of r.jumps) if (inJunction(j.rampStart) || inJunction(j.gapEnd)) warn.push(`${label}: jump inside a junction`);

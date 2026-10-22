@@ -53,8 +53,8 @@ export interface HudView {
   laps: number;
   time: number;
   bestLap: number | null;
-  heat: number; // 0..1
-  overheated: boolean;
+  /** Boost tank fill, 0..1. */
+  boost: number;
   damage: number; // 0..1
   boosting: boolean;
   /** 3, 2, 1, 0 (= GO) during the start; null otherwise. */
@@ -64,8 +64,10 @@ export interface HudView {
 
 export interface Hud {
   update(view: HudView): void;
-  /** Short centre-screen message, e.g. "LAP 2", "FINAL LAP", "OVERHEAT". */
+  /** Short centre-screen message, e.g. "LAP 2", "FINAL LAP", "SMUGGLER'S CUT". */
   flash(message: string): void;
+  /** A boost cell was collected: the tank meter flashes and swells briefly. */
+  pulseBoost(): void;
   dispose(): void;
 }
 

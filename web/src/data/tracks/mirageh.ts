@@ -43,6 +43,17 @@ export const mirageh: TrackDef = {
     { kind: 'kicker', at: 14.4, length: 40, height: 2 },
     { kind: 'kicker', at: 15.4, length: 40, height: 2.5 },
     { kind: 'boostPad', at: 16.5, lateral: 0 },
+    { kind: 'boostCells', at: 0.1, lateral: 0, count: 5, spacing: 30 },
+    { kind: 'boostCells', at: 1.5, lateral: -12, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 3.0, lateral: 0 },
+    { kind: 'boostPad', at: 3.04, lateral: 0 },
+    { kind: 'boostCells', at: 4.4, lateral: 15, count: 6, spacing: 35 },
+    { kind: 'boostCells', at: 5.6, lateral: 0, count: 8, spacing: 32 },
+    { kind: 'boostCells', at: 7.2, lateral: -14, count: 5, spacing: 30 },
+    { kind: 'boostPad', at: 11.6, lateral: 0 },
+    { kind: 'boostCells', at: 13.75, lateral: 0, count: 5, spacing: 30 },
+    { kind: 'boostCells', at: 15.75, lateral: 10, count: 5, spacing: 30 },
+    { kind: 'boostPad', at: 16.55, lateral: 0 },
   ],
   branches: [
     {
@@ -63,6 +74,7 @@ export const mirageh: TrackDef = {
       features: [
         { kind: 'boostPad', at: 3.85, lateral: 0 },
         { kind: 'jump', at: 4.0, rampLength: 100, rampHeight: 3, gapLength: 35 },
+        { kind: 'boostCells', at: 2.5, lateral: 0, count: 6, spacing: 30 },
       ],
     },
   ],

@@ -47,6 +47,18 @@ export const stormfront: TrackDef = {
     { kind: 'kicker', at: 10.3, length: 40, height: 3 },
     { kind: 'jump', at: 12.25, rampLength: 80, rampHeight: 6, gapLength: 70 },
     { kind: 'boostPad', at: 13.6, lateral: 0 },
+    { kind: 'boostCells', at: 0.08, lateral: 0, count: 4, spacing: 30 },
+    { kind: 'boostCells', at: 1.0, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'boostCells', at: 2.23, lateral: 5, count: 3, spacing: 25 },
+    { kind: 'boostCells', at: 2.83, lateral: -5, count: 3, spacing: 25 },
+    { kind: 'boostPad', at: 4.3, lateral: 0 },
+    { kind: 'boostPad', at: 4.34, lateral: 0 },
+    { kind: 'boostCells', at: 5.3, lateral: 0, count: 6, spacing: 30 },
+    { kind: 'boostCells', at: 8.35, lateral: -6, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 10.5, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'boostPad', at: 11.3, lateral: 0 },
+    { kind: 'boostCells', at: 12.7, lateral: -10, count: 6, spacing: 30 },
+    { kind: 'boostPad', at: 13.64, lateral: 0 },
   ],
   branches: [
     {
@@ -68,6 +80,7 @@ export const stormfront: TrackDef = {
         { kind: 'pillar', at: 3.2, lateral: 4, radius: 1.8 },
         { kind: 'pillar', at: 3.6, lateral: -4, radius: 1.8 },
         { kind: 'boostPad', at: 4.7, lateral: 0 },
+        { kind: 'boostCells', at: 2.4, lateral: 0, count: 5, spacing: 30 },
       ],
     },
     {
@@ -86,6 +99,7 @@ export const stormfront: TrackDef = {
       features: [
         { kind: 'boostPad', at: 2.15, lateral: 0 },
         { kind: 'jump', at: 2.35, rampLength: 70, rampHeight: 5, gapLength: 50 },
+        { kind: 'boostCells', at: 2.9, lateral: 0, count: 5, spacing: 35 },
       ],
     },
   ],

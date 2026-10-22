@@ -4,6 +4,7 @@ import { sceneryById } from '../data/tracks/index.ts';
 import { FlatBuilder, SmoothBuilder } from './track/builder.ts';
 import { BOOST_SCROLL, CULL_MARGIN, FOG_FAR, ROCK_TILE, SAND_TILE, type Quality } from './track/config.ts';
 import { Corridor, type Scatter } from './track/corridor.ts';
+import { buildCells } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
 import { buildRockFeatures } from './track/features.ts';
 import { Ground } from './track/ground.ts';
@@ -23,6 +24,10 @@ export { applyEnvironment } from './track/environment.ts';
 export interface TrackScene {
   group: THREE.Group;
   update(time: number, cameraPos: THREE.Vector3): void;
+  /** The player flew through a boost cell: pop it and hide it (branch -1 = main loop). */
+  collectCell(branch: number, cell: number): void;
+  /** A new lap for the player: every cell shows again. */
+  resetCells(): void;
   dispose(): void;
 }
 
@@ -113,6 +118,8 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     add(g, mats.sign, 'forkSigns');
   }
   add(glow.build(), mats.glow, 'glow');
+  const cells = buildCells(corridors.map((c) => c.ribbon));
+  for (const m of cells.meshes) group.add(m);
   for (const l of landmarks) group.add(l.landmark.group);
   checkLandmarkClearance(landmarks, ground);
 
@@ -124,13 +131,21 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       const dt = last === null ? 0 : Math.max(0, Math.min(0.1, time - last));
       last = time;
       tex.pad.offset.y = -time * BOOST_SCROLL;
+      cells.update(time);
       for (const o of cullable) {
         const bs = o.geometry.boundingSphere;
         if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < fogFar + CULL_MARGIN;
       }
       updateLandmarks(landmarks, quality, time, dt, cameraPos);
     },
+    collectCell(branch, cell) {
+      cells.collect(branch, cell);
+    },
+    resetCells() {
+      cells.reset();
+    },
     dispose() {
+      cells.dispose();
       for (const l of landmarks) l.landmark.dispose();
       group.traverse((o) => {
         if (o instanceof THREE.Mesh && !o.name.startsWith('landmark')) o.geometry.dispose();

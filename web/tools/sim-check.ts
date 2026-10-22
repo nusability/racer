@@ -61,6 +61,9 @@ interface Traversal {
 
 interface RunResult {
   race: Race;
+  /** Per racer: seconds boosting (tank or free) and cells collected. */
+  boostTime: number[];
+  cells: number[];
   fingerprint: string;
   events: Map<string, number>;
   /** Times to get from a branch's entry to its exit, on the branch and on the main road. */
@@ -80,10 +83,18 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
   const started = race.racers.map(() => track.branches.map(() => ({ at: -1, onBranch: false })));
   const prevS = race.racers.map((r) => r.s);
   const prevBranch = race.racers.map((r) => r.branch);
+  const boostTime = race.racers.map(() => 0);
+  const cells = race.racers.map(() => 0);
   let steps = 0;
   while (race.phase !== 'finished') {
     const stepEvents: RaceEvent[] = race.step(player === null ? IDLE : player(race));
-    for (const e of stepEvents) events.set(e.type, (events.get(e.type) ?? 0) + 1);
+    for (const e of stepEvents) {
+      events.set(e.type, (events.get(e.type) ?? 0) + 1);
+      if (e.type === 'pickup') cells[race.racers.findIndex((r) => r.id === e.id)]++;
+    }
+    race.racers.forEach((r, i) => {
+      if (r.boosting) boostTime[i] += SIM_DT;
+    });
     race.racers.forEach((r, i) => {
       for (const [k, v] of Object.entries(r)) {
         if (typeof v === 'number' && !Number.isFinite(v)) throw new Error(`${track.def.id}: ${r.id}.${k} = ${v} at t=${race.time.toFixed(2)}`);
@@ -109,24 +120,26 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       break;
     }
   }
-  return { race, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain };
+  return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain };
 }
 
 function report(track: Track, res: RunResult) {
   const { race } = res;
   console.log(
     `  ${'racer'.padEnd(12)} ${'skill'.padStart(5)} ${'place'.padStart(5)} ${'time'.padStart(7)} ${'best'.padStart(6)} ` +
-      `${'avg km/h'.padStart(8)} ${'scrape s'.padStart(8)} ${'sand s'.padStart(7)}  crashes`,
+      `${'avg km/h'.padStart(8)} ${'scrape s'.padStart(8)} ${'sand s'.padStart(7)} ${'boost s'.padStart(7)} ${'cells/lap'.padStart(9)}  crashes`,
   );
-  const rows = race.entrants.map((e, i) => ({ e, st: race.racers[i], v: race.vehicles[i] })).sort((a, b) => a.st.place - b.st.place);
-  for (const { e, st, v } of rows) {
+  const rows = race.entrants.map((e, i) => ({ e, i, st: race.racers[i], v: race.vehicles[i] })).sort((a, b) => a.st.place - b.st.place);
+  const laps = race.config.laps;
+  for (const { e, i, st, v } of rows) {
     const c = v.drive.crashes;
     const avg = (st.distance / Math.max(race.time, SIM_DT)) * 3.6;
     const crashText = [c.destroyed && `destroyed ${c.destroyed}`, c.fell && `fell ${c.fell}`, c.obstacle && `obstacle ${c.obstacle}`].filter(Boolean).join(', ') || '-';
     console.log(
       `  ${e.name.padEnd(12)} ${e.skill.toFixed(2).padStart(5)} ${String(st.place).padStart(5)} ` +
         `${st.finishTime === null ? '    DNF' : st.finishTime.toFixed(1).padStart(7)} ${st.bestLap === null ? '     -' : st.bestLap.toFixed(1).padStart(6)} ` +
-        `${avg.toFixed(0).padStart(8)} ${v.drive.scrapeTime.toFixed(1).padStart(8)} ${v.drive.offroadTime.toFixed(1).padStart(7)}  ${crashText}`,
+        `${avg.toFixed(0).padStart(8)} ${v.drive.scrapeTime.toFixed(1).padStart(8)} ${v.drive.offroadTime.toFixed(1).padStart(7)} ` +
+        `${res.boostTime[i].toFixed(0).padStart(7)} ${(res.cells[i] / laps).toFixed(1).padStart(9)}  ${crashText}`,
     );
     if (st.finishTime === null) fail(`${track.def.id}: ${e.name} never finished`);
   }
@@ -141,10 +154,13 @@ function report(track: Track, res: RunResult) {
   console.log(`  events: ${ev}`);
 }
 
-/** A casual player: reacts late, wobbles, boosts whenever it can, never brakes, no shortcuts. */
+/**
+ * A casual player: reacts late, wobbles, holds boost whenever there is any in the tank,
+ * never brakes, takes no shortcuts and only collects the cells that happen to be on its line.
+ */
 function noviceDriver(race: Race, seed: number): Driver {
   const index = race.entrants.findIndex((e) => e.isPlayer);
-  const eyes = new AiDriver(NOVICE_SKILL, seed, { shortcuts: false });
+  const eyes = new AiDriver(NOVICE_SKILL, seed, { shortcuts: false, cellDetours: false });
   const delay = Math.round(NOVICE_DELAY / SIM_DT);
   const seen: number[] = [];
   return (r: Race) => {
@@ -153,7 +169,7 @@ function noviceDriver(race: Race, seed: number): Driver {
     seen.push(eyes.aimX);
     // Drag control: the finger puts the target where the player saw the gap, late.
     const aim = seen.length > delay ? (seen.shift() as number) : v.targetX;
-    return { steer: 0, nudge: aim - v.targetX, brake: false, boost: v.state.overheat <= 0 };
+    return { steer: 0, nudge: aim - v.targetX, brake: false, boost: true };
   };
 }
 

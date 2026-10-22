@@ -10,17 +10,16 @@ import { cornerPull, currentTopSpeed, minJumpSpeed, steerRate, type Vehicle } fr
 import {
   AI_BOOST_CAUTION_HI,
   AI_BOOST_CAUTION_LO,
-  AI_BOOST_REST_HI,
-  AI_BOOST_REST_LO,
+  AI_BOOST_MIN_RUN_HI,
+  AI_BOOST_MIN_RUN_LO,
   AI_BRAKE_REACTION_HI,
+  AI_CELL_DETOUR_HI,
+  AI_CELL_DETOUR_LO,
   AI_BRAKE_REACTION_LO,
   AI_CLEARANCE_HI,
   AI_CLEARANCE_LO,
   AI_CORNER_FACTOR_HI,
   AI_CORNER_FACTOR_LO,
-  AI_HEAT_HYSTERESIS,
-  AI_HEAT_LIMIT_HI,
-  AI_HEAT_LIMIT_LO,
   AI_JUMP_SPEED_MARGIN,
   AI_LINE_FULL_CURVATURE,
   AI_LINE_LOOK_TIME_HI,
@@ -31,7 +30,6 @@ import {
   AI_OBSTACLE_LEAD_TIME,
   AI_OBSTACLE_LOOK_TIME_HI,
   AI_OBSTACLE_LOOK_TIME_LO,
-  AI_OVERHEAT_GAMBLE,
   AI_PAD_DETOUR,
   AI_PATH_LAG,
   AI_PLAN_INTERVAL,
@@ -46,6 +44,7 @@ import {
   AI_TARGET_TIME,
   AI_WALL_MARGIN,
   BRAKE_DECEL,
+  CELL_VALUE,
   CORNER_PULL,
   GRIP_REF,
   HANDLING_REF,
@@ -61,6 +60,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 interface SpeedProfiles {
   brake: Float64Array;
   boost: Float64Array;
+  /** Metres of road ahead of each sample on which full boost needs no braking. */
+  boostRun: Float64Array;
 }
 
 function profileAt(ribbon: Ribbon, profile: Float64Array, s: number): number {
@@ -75,21 +76,16 @@ export function driverSeed(raceSeed: number, index: number): number {
 export interface AiOptions {
   /** Whether this driver ever takes shortcuts. */
   shortcuts: boolean;
+  /** Whether this driver swerves to collect boost cells (otherwise only those on its line). */
+  cellDetours: boolean;
 }
 
 export class AiDriver {
   readonly skill: number;
   private readonly options: AiOptions;
   private readonly rng: Rng;
-  private readonly heatLimit: number;
-  private readonly boostRest: number;
   private noise = 0;
   private lapse = 0;
-  private boostLatched = true;
-  /** Ignoring the heat limit this cycle. */
-  private pushing = false;
-  /** Seconds the engine has sat fully cooled. */
-  private coldTime = 0;
   private readonly obstacleBuf: Obstacle[] = [];
   private readonly planner = new PathPlanner();
   private readonly blockers: Blocker[] = [];
@@ -102,14 +98,11 @@ export class AiDriver {
   /** Per branch: the lap a shortcut was last decided on and whether it is being taken. */
   private readonly shortcut = new Map<number, { lap: number; take: boolean }>();
 
-  constructor(skill: number, seed: number, options: AiOptions = { shortcuts: true }) {
+  constructor(skill: number, seed: number, options: AiOptions = { shortcuts: true, cellDetours: true }) {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
     this.skill = skill;
     this.options = options;
     this.rng = mulberry32(seed);
-    this.heatLimit = this.bySkill(AI_HEAT_LIMIT_LO, AI_HEAT_LIMIT_HI);
-    // A rest only means something once the engine has fully cooled.
-    this.boostRest = this.bySkill(AI_BOOST_REST_LO, AI_BOOST_REST_HI);
   }
 
   /** Interpolates a lo/hi behaviour by eased skill: the low end weaker, the top end intact. */
@@ -141,6 +134,7 @@ export class AiDriver {
       const d = ribbon.delta(st.s, p.s);
       if (d > 0 && d < lineLook && Math.abs(p.x - target) < AI_PAD_DETOUR) target = p.x;
     }
+    target = this.cellDetour(veh, ribbon, target, lineLook);
     const route = this.routeChoice(track, st, v, target);
     target = route.x;
 
@@ -203,19 +197,11 @@ export class AiDriver {
     const rate = steerRate(stats);
     const steer = this.lapse > 0 ? 0 : clamp(((target - veh.targetX) / AI_TARGET_TIME - pull) / rate, -1, 1);
 
-    // 5. Boost with a heat margin; never while braking.
-    this.coldTime = st.heat > 0 ? 0 : this.coldTime + SIM_DT;
-    // At the limit a novice may keep pushing into overheat; the call is made once per cycle.
-    if (st.heat >= this.heatLimit && this.boostLatched && !this.pushing) {
-      this.pushing = this.rng() < AI_OVERHEAT_GAMBLE * (1 - this.skill);
-      this.boostLatched = this.pushing;
-    } else if (st.overheat > 0) {
-      this.pushing = false;
-      this.boostLatched = false;
-    } else if (st.heat <= this.heatLimit - AI_HEAT_HYSTERESIS && this.coldTime >= this.boostRest) {
-      this.boostLatched = true;
-    }
-    const boost = !brake && (boostRoom || v < jumpSpeed) && this.boostLatched && st.overheat <= 0;
+    // 5. Boost when it pays: never while braking, only on a straight long enough for this
+    // driver's patience (skilled drivers save the tank for the long ones), or to clear a jump.
+    const run = profileAt(ribbon, profiles.boostRun, seen);
+    const worthIt = boostRoom && run >= v * this.bySkill(AI_BOOST_MIN_RUN_LO, AI_BOOST_MIN_RUN_HI);
+    const boost = !brake && (worthIt || v < jumpSpeed);
 
     return { steer, nudge: 0, brake, boost };
   }
@@ -234,6 +220,24 @@ export class AiDriver {
     }
     const lane = Math.max(0, half - RACER_HALF_WIDTH - AI_WALL_MARGIN);
     return clamp(n > 0 ? curvSum / n / AI_LINE_FULL_CURVATURE : 0, -1, 1) * lane;
+  }
+
+  /** The nearest untaken boost cell close enough to the line to be worth the swerve. */
+  private cellDetour(veh: Vehicle, ribbon: Ribbon, line: number, look: number): number {
+    const st = veh.state;
+    // A nearly full tank has no room for a cell.
+    if (!this.options.cellDetours || st.boost > 1 - CELL_VALUE / 2) return line;
+    const reach = this.bySkill(AI_CELL_DETOUR_LO, AI_CELL_DETOUR_HI);
+    let best = line;
+    let bestD = Infinity;
+    for (const c of ribbon.cells) {
+      const d = ribbon.delta(st.s, c.s);
+      if (d <= 0 || d > look || d >= bestD || Math.abs(c.x - line) > reach) continue;
+      if (veh.hasCollected(st.branch, c.index)) continue;
+      best = c.x;
+      bestD = d;
+    }
+    return best;
   }
 
   /**
@@ -269,7 +273,8 @@ export class AiDriver {
    * Per-sample speed limits, built once per ribbon: `brake` is the fastest speed from which
    * every bend ahead can still be held (corner drift no faster than the steer can cancel)
    * with full braking; `boost` is the same with braking scaled down by the driver's caution,
-   * so a cautious driver needs a longer straight to boost.
+   * so a cautious driver needs a longer straight to boost; `boostRun` is how long the
+   * boostable stretch ahead of each sample is.
    */
   private profilesFor(ribbon: Ribbon, stats: RacerStats): SpeedProfiles {
     const known = this.profiles.get(ribbon);
@@ -291,7 +296,16 @@ export class AiDriver {
       return out;
     };
     const caution = this.bySkill(AI_BOOST_CAUTION_LO, AI_BOOST_CAUTION_HI);
-    const made = { brake: envelope(BRAKE_DECEL), boost: envelope(BRAKE_DECEL / caution) };
+    const boost = envelope(BRAKE_DECEL / caution);
+    const boosted = stats.topSpeed * (1 + stats.boostPower);
+    const boostRun = new Float64Array(boost.length);
+    for (let pass = 0; pass < (ribbon.closed ? 2 : 1); pass++) {
+      for (let i = boost.length - 1; i >= 0; i--) {
+        const next = i + 1 < boost.length ? boostRun[i + 1] : ribbon.closed ? boostRun[0] : 0;
+        boostRun[i] = boost[i] >= boosted ? next + ribbon.step : 0;
+      }
+    }
+    const made = { brake: envelope(BRAKE_DECEL), boost, boostRun };
     this.profiles.set(ribbon, made);
     return made;
   }

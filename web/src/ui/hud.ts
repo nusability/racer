@@ -4,8 +4,10 @@ import './race.css';
 import type { Hud, HudView } from '../game/types.ts';
 import { formatTime, h } from './kit.ts';
 
-/** Heat above this blinks the bar as a warning. */
-const HEAT_WARN = 0.8;
+/** Tank at or above this reads as full (pulses); at or below the empty mark it dims. */
+const BOOST_FULL = 0.995;
+const BOOST_EMPTY = 0.01;
+const PICKUP_PULSE_MS = 260;
 /** Hull damage above this turns the bar red. */
 const DAMAGE_WARN = 0.65;
 /** How long "GO!" lingers after the countdown ends, ms. */
@@ -45,10 +47,10 @@ function barSlot(fill: HTMLElement): (v01: number) => void {
   };
 }
 
-function bar(label: string, cls: string): { el: HTMLElement; fill: HTMLElement; text: HTMLElement } {
+function bar(label: string, cls: string): { el: HTMLElement; fill: HTMLElement; track: HTMLElement } {
   const fill = h('div', 'hb__fill');
-  const text = h('span', 'hb__text', label);
-  return { el: h('div', `hb ${cls}`, text, h('div', 'hb__track', fill)), fill, text };
+  const track = h('div', 'hb__track', fill, h('div', 'hb__segs'));
+  return { el: h('div', `hb ${cls}`, h('span', 'hb__text', label), track), fill, track };
 }
 
 export function createHud(root: HTMLElement, onPause: () => void): Hud {
@@ -58,7 +60,7 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const timeEl = h('span', 'hud__time');
   const bestEl = h('span', 'hud__best');
   const speedEl = h('span', 'hud__speed-n');
-  const heat = bar('HEAT', 'hb--heat');
+  const tank = bar('BOOST', 'hb--boost');
   const hull = bar('HULL', 'hb--hull');
   const countEl = h('div', 'hud__count');
   const flashEl = h('div', 'hud__flash');
@@ -87,7 +89,7 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
     pause,
     countEl,
     flashEl,
-    h('div', 'hud__bottom', h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', heat.el, hull.el)),
+    h('div', 'hud__bottom', h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', tank.el, hull.el)),
   );
   root.append(el);
 
@@ -97,11 +99,10 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const setTime = textSlot(timeEl);
   const setBest = textSlot(bestEl);
   const setSpeed = textSlot(speedEl);
-  const setHeatText = textSlot(heat.text);
-  const setHeat = barSlot(heat.fill);
+  const setTank = barSlot(tank.fill);
   const setHull = barSlot(hull.fill);
-  const heatWarn = classSlot(heat.el, 'is-warn');
-  const heatOver = classSlot(heat.el, 'is-over');
+  const tankFull = classSlot(tank.el, 'is-full');
+  const tankEmpty = classSlot(tank.el, 'is-empty');
   const boosting = classSlot(el, 'is-boosting');
   const hullWarn = classSlot(hull.el, 'is-warn');
   const finished = classSlot(el, 'is-finished');
@@ -119,10 +120,9 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
       setTime(formatTime(v.time));
       setBest(v.bestLap === null ? '' : `BEST ${formatTime(v.bestLap)}`);
       setSpeed(String(Math.round(v.speedKmh)));
-      setHeat(v.heat);
-      heatWarn(!v.overheated && v.heat >= HEAT_WARN);
-      heatOver(v.overheated);
-      setHeatText(v.overheated ? 'OVERHEAT' : 'HEAT');
+      setTank(v.boost);
+      tankFull(v.boost >= BOOST_FULL);
+      tankEmpty(v.boost <= BOOST_EMPTY);
       setHull(1 - v.damage);
       hullWarn(v.damage >= DAMAGE_WARN);
       boosting(v.boosting);
@@ -152,6 +152,16 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
           { opacity: 0, transform: 'translate(-50%, -12px) scale(1)' },
         ],
         { duration: FLASH_MS, easing: 'ease-out' },
+      );
+    },
+    pulseBoost(): void {
+      tank.track.animate(
+        [
+          { transform: 'scale(1, 1)', filter: 'brightness(1)' },
+          { transform: 'scale(1.06, 1.6)', filter: 'brightness(2)', offset: 0.3 },
+          { transform: 'scale(1, 1)', filter: 'brightness(1)' },
+        ],
+        { duration: PICKUP_PULSE_MS, easing: 'ease-out' },
       );
     },
     dispose(): void {

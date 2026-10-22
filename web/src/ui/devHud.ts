@@ -31,6 +31,10 @@ minimap.style.cssText = 'position:absolute;right:max(14px,env(safe-area-inset-ri
 minimap.style.setProperty('--mm', window.innerWidth > window.innerHeight ? '120px' : '96px');
 root.append(minimap);
 let craftX = 0;
+const FAKE_TANK_S = 4;
+const FAKE_CELL_EVERY_S = 2.5;
+const FAKE_CELL_FILL = 0.25;
+let tankFill = 0.5;
 let nudgeTotal = 0;
 const readout = h('pre');
 readout.style.cssText = 'position:absolute;left:50%;top:8px;transform:translateX(-50%);margin:0;padding:4px 8px;background:rgba(0,0,0,.5);color:#fff;font:12px monospace;z-index:30;pointer-events:none';
@@ -65,7 +69,12 @@ function frame(now: number): void {
   nudgeTotal += inp.nudge;
   craft.style.left = `${((craftX + ROAD_HALF_WIDTH_M) / (2 * ROAD_HALF_WIDTH_M)) * 100}%`;
   lastLap = lap;
-  const heat = racing ? (Math.sin(t * 0.6) * 0.5 + 0.5) * 1.05 : 0;
+  // Fake tank: boosting drains it, and a cell arrives every few seconds.
+  if (racing && inp.boost) tankFill = Math.max(0, tankFill - dt / FAKE_TANK_S);
+  if (racing && Math.floor(t / FAKE_CELL_EVERY_S) !== Math.floor((t - dt) / FAKE_CELL_EVERY_S)) {
+    tankFill = Math.min(1, tankFill + FAKE_CELL_FILL);
+    hud.pulseBoost();
+  }
   const view: HudView = {
     speedKmh: racing ? 420 + Math.sin(t * 0.8) * 180 + (inp.boost ? 120 : 0) : 0,
     place: 1 + (Math.floor(t / 3) % 6),
@@ -74,10 +83,9 @@ function frame(now: number): void {
     laps: 3,
     time: t,
     bestLap: lap > 1 ? 19.37 : null,
-    heat: Math.min(1, heat),
-    overheated: heat >= 1,
+    boost: tankFill,
     damage: racing ? (t * 0.05) % 1 : 0,
-    boosting: inp.boost,
+    boosting: inp.boost && tankFill > 0,
     countdown: racing ? null : Math.max(0, Math.ceil(countdownLeft - 1)),
     finished: false,
   };

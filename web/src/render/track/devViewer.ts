@@ -202,6 +202,8 @@ Object.assign(window, {
       ts.update(performance.now() / 1000, camera.position);
       renderer.render(scene, camera);
     },
+    collect: (branch: number, cell: number) => ts.collectCell(branch, cell),
+    resetCells: () => ts.resetCells(),
     landmarks: () =>
       ts.group.children
         .filter((o) => o.name.startsWith('landmark:'))
