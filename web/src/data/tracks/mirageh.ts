@@ -26,7 +26,7 @@ export const mirageh: TrackDef = {
     { x: 1650, z: -100, y: 126 },
     { x: 1530, z: -250, y: 122 },
     { x: 1450, z: -800, y: 100 },
-    { x: 1050, z: -1150, y: 75 },
+    { x: 1060, z: -1300, y: 75 },
     { x: 650, z: -900, y: 45 },
     { x: 550, z: -350, y: 20 },
     { x: 450, z: 300, y: 8 },
@@ -78,10 +78,10 @@ export const miragehScenery: TrackScenery = {
   boundary: 'rock',
   oases: [],
   landmarks: [
-    { kind: 'grandstand', at: 0.1, side: 1, distance: 15 },
-    { kind: 'windfarm', at: 4.0, side: -1, distance: 60 },
-    { kind: 'cliffVillage', at: 9.6, side: -1, distance: 40, scale: 1.3 },
+    { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
+    { kind: 'windfarm', at: 4.0, side: -1, distance: 5 },
+    { kind: 'cliffVillage', at: 9.6, side: -1, distance: 10, scale: 1.3 },
     { kind: 'colossus', at: 14.5, side: 1, distance: 40, scale: 1.3 },
-    { kind: 'balloons', at: 2.0, side: 1, distance: 200 },
+    { kind: 'balloons', at: 2.0, side: -1, distance: 200 },
   ],
 };

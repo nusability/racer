@@ -30,6 +30,8 @@ const JUNCTION_OVERLAP = 1.2;
 export const ROAD_ATLAS_SPLIT = 0.5;
 /** A side is hidden when a landmark covers its lip crest or this far past the boundary. */
 const HIDE_PROBE = 2;
+/** Walls at least this far into a canyon are never hidden by a landmark. */
+const CANYON_KEEP = 0.05;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
 
@@ -247,8 +249,10 @@ export class Corridor {
     if (hit) return hit;
     const run = this.shape.run[sideIndex(side)][kk];
     const prof = run >= RUNOFF_MIN ? this.lipProfile(kk, side) : this.wallProfile(kk, side);
+    // A landmark replaces a run-off lip or a low wall it stands on; canyon walls always stay.
     const probe = this.beside(kk, side, HIDE_PROBE, 0);
-    prof.hidden = this.ground.inFootprint(prof.pts[2].x, prof.pts[2].z) || this.ground.inFootprint(probe.x, probe.z);
+    const covered = this.ground.inFootprint(prof.pts[2].x, prof.pts[2].z) || this.ground.inFootprint(probe.x, probe.z);
+    prof.hidden = covered && this.shape.canyon[kk] < CANYON_KEEP && !this.tunnel(kk);
     this.profiles.set(key, prof);
     return prof;
   }

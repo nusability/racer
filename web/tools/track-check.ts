@@ -51,7 +51,7 @@ const DIVERGE = 320;
 /** Shortcuts are the risky line: a tighter free lane is enough there. */
 const BRANCH_LANE = 8;
 /** A shortcut should save between these many seconds at RACE_SPEED. */
-const SAVING_RANGE: [number, number] = [1.5, 4.5];
+const SAVING_RANGE: [number, number] = [1.5, 6];
 
 interface Flight {
   landed: boolean;

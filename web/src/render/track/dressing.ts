@@ -141,6 +141,7 @@ function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, corne
       const s = s0 + (c + 0.5) * CROWD_CELL;
       const k = Math.round(track.wrap(s) / track.step);
       const B = basisAt(cor, k, side, 0);
+      if (!usable(cor, k, side)) continue;
       for (let t = 0; t < STAND_TIERS; t++) {
         const x = side * (STAND_SETBACK + (t + 0.5) * STAND_TIER_DEPTH);
         box(props, B, x, 0, STAND_TIER_DEPTH, CROWD_CELL, -4, 4 + t * STAND_TIER_RISE, concrete);
@@ -178,7 +179,10 @@ function flags(cor: Corridor, props: FlatBuilder) {
 /** Room beside the course for a prop: open run-off on that side, no chasm, tunnel or junction. */
 function usable(cor: Corridor, k: number, side: number): boolean {
   const kk = cor.idx(k);
-  return !cor.ribbon.samples[kk].gap && !cor.tunnel(kk) && !cor.open(kk, side) && cor.shape.run[sideIndex(side)][kk] >= RUNOFF_MIN;
+  if (cor.ribbon.samples[kk].gap || cor.tunnel(kk) || cor.open(kk, side) || cor.shape.run[sideIndex(side)][kk] < RUNOFF_MIN) return false;
+  // A landmark standing here owns the roadside.
+  const p = cor.beside(kk, side, 6, 0);
+  return !cor.ground.inFootprint(p.x, p.z);
 }
 
 /** Posts every MARKER_SPACING: tall accent boards each kilometre, white ones between. */
