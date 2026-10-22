@@ -1,0 +1,39 @@
+# OS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Web
+node_modules/
+dist/
+.vite/
+playwright-report/
+test-results/
+
+# iOS
+ios/**/*.xcodeproj/
+ios/**/xcuserdata/
+ios/**/.build/
+ios/**/DerivedData/
+*.ipa
+
+# Android
+android/**/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+
+# Secrets — never commit (AGENTS.md, Safety)
+*.p8
+*.p12
+*.mobileprovision
+*.jks
+*.keystore
+service-account*.json
+.env
+.env.*
+
+# Spec Kit local state
+.specify/feature.json
