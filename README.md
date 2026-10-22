@@ -1,21 +1,19 @@
-# game-template
+# Mirage Racer
 
-A starting point for **mobile games**: prototyped on the web, then built as **native iOS and
-Android apps in parallel**. Spec-driven with [Spec Kit](https://github.com/github/spec-kit)
-in **single-spec mode**, with work tracked on **Stori**.
+An ultra-fast desert pod-racing game for phones. Engines out front, a tiny pod behind, and
+a track that wants you dead: jumps over chasms, tunnels, narrow canyons, rock arches and
+pillar slaloms at 600–800 km/h. Boost heats your engines. Win races to earn credits, buy and
+upgrade racers, and take the championship (or just do a quick race).
 
-## Using this template
+- **Play the prototype**: GitHub Pages (published from `web/` by `.github/workflows/pages.yml`).
+- **Stage**: `prototype` (see `specs/spec.md`). Work is tracked on Stori project `MIRA`.
+- **Run locally**: `cd web && npm install && npm run dev`, then open the printed URL on a phone
+  on the same network. Headless checks: `npm run sim` and
+  `node --experimental-strip-types tools/track-check.ts`.
 
-1. On GitHub, **Use this template** → create the game's repo. Clone it and open Claude Code.
-2. Run **`/new-game "Game Name" KEY`**. It creates the Stori project (Now / Next / Later), fills
-   the placeholders, seeds a light spec, records the web stack as ADR 0003, and scaffolds `web/`.
-3. **Sketch in `web/`**, play it on your phone, and capture ideas on Stori. Keep the spec's
-   Vision, Core Loop and Tuned Numbers honest. Plenty of games end here.
-4. When it's fun and you want it in the stores, run **`/graduate`**. It harvests the full spec
-   from the prototype, flips `Stage:` to `pre-prod`, takes the apps' one-way doors as ADRs, and
-   files the riskiest first work on Stori.
-5. From then on, every change goes through the loop in [`AGENTS.md`](AGENTS.md) on both
-   platforms at once.
+Built from `game-template`: prototyped on the web, then built as native iOS and Android apps
+in parallel. Spec-driven with [Spec Kit](https://github.com/github/spec-kit) in single-spec
+mode, with work tracked on **Stori**.
 
 ## How it differs from stock Spec Kit
 

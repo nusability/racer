@@ -1,4 +1,4 @@
-# {{GAME_NAME}} Constitution
+# Mirage Racer Constitution
 
 The project's durable values. Everything in the repo complies with it: the spec, the code,
 the Stori backlog, `AGENTS.md` and `conventions.md`. If they conflict, this document wins.
@@ -56,9 +56,9 @@ either platform.
      the test that tells you whether a change serves it. When a call is ambiguous, pick the
      option that advances them. -->
 
-- **N1. {{NORTH_STAR_1}}**
-- **N2. {{NORTH_STAR_2}}**
-- **N3. {{NORTH_STAR_3}}**
+- **N1. Faster than is safe.** Speed is the thrill: every second should feel a hair beyond control. *Test: does this make the player feel faster, or closer to the edge?*
+- **N2. The track is the opponent.** Mastery is learning lines, jumps and tunnels, not shoving rivals. *Test: does this reward knowing the track over beating the pack?*
+- **N3. One more race.** From the finish line to the next start is one tap. *Test: does this add a step, a wait or a dialog between races?*
 
 ---
 

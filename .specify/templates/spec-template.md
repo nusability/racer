@@ -1,4 +1,4 @@
-# {{GAME_NAME}}: Specification
+# Mirage Racer: Specification
 
 Stage: prototype
 Platforms: web (prototype)

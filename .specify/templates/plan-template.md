@@ -1,4 +1,4 @@
-# {{GAME_NAME}}: Technical Plan
+# Mirage Racer: Technical Plan
 
 **Spec**: [spec.md](./spec.md) · **Decisions**: [../decisions/](../decisions/)
 

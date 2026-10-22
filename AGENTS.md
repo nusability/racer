@@ -8,8 +8,8 @@ Operating rules for agents and humans. Kept short on purpose.
 
 ## What this repo is
 
-**{{GAME_NAME}}**: a mobile game for the **App Store and Google Play**. Stori project:
-**`{{STORI_KEY}}`**.
+**Mirage Racer**: a mobile game for the **App Store and Google Play**. Stori project:
+**`MIRA`**.
 
 | Surface | What it is |
 |---|---|
@@ -38,7 +38,7 @@ Only the owner moves the stage.
 | How it's built now | `specs/plan.md`, `specs/data-model.md`, the code |
 | Why it's built that way | `decisions/` |
 | Values and trade-offs | `.specify/memory/constitution.md` |
-| Ideas, priorities, the plan and tasks for a change | Stori `{{STORI_KEY}}` (Now / Next / Later) |
+| Ideas, priorities, the plan and tasks for a change | Stori `MIRA` (Now / Next / Later) |
 
 ## Golden rule (from `pre-prod`)
 
@@ -53,7 +53,7 @@ platform that is behind still compiles and passes its own tests, so it won't ann
 
 The as-is is the last commit. The to-be is your uncommitted spec diff.
 
-1. **Capture**: create a Stori item in `{{STORI_KEY}}` (an `idea` stays an idea until it is
+1. **Capture**: create a Stori item in `MIRA` (an `idea` stays an idea until it is
    picked up), bucket Now / Next / Later. Claim it when you start.
 2. **`/speckit-specify`**: edit `specs/spec.md` to the desired state. `git diff -- specs/` is
    the scope. Review it before coding.
