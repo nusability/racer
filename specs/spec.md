@@ -48,11 +48,14 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 ## Core Game Loop
 
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track.
-2. **Race**: six racers, 2–3 laps. Throttle is automatic; the player steers, air-brakes into
-   tight corners and boosts. Boost heats the engines, and overheating locks boost out for a
-   few seconds. The track does the damage: walls scrape speed and hull, pillars and arch legs
-   wreck you, and chasms swallow a racer who leaves a jump too slow. A wreck costs about three
-   seconds and a respawn.
+2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
+   track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
+   buttons), air-brakes into hairpins and boosts. Boost heats the engines; overheating locks
+   boost out for a moment. Open terrain is wide, with drivable sand beyond the road that is
+   slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
+   choices with a clear way round, and only a dead-centre hit at speed wrecks you. Chasms
+   swallow a racer who leaves a jump too slow. Every track has a walled, risky shortcut that
+   saves a second or two. A wreck costs about three seconds and a respawn.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades.
 
@@ -72,12 +75,18 @@ the third cup, the Mirage Grand Prix, makes you Mirage Champion.
 | Starter top speed | 150 m/s (540 km/h) | Dustwing; racers range 150–198 m/s, up to ~240 m/s upgraded |
 | Boost | ×(1 + 0.22–0.32) top speed | Racer's boostPower; thrusters add 0.03 per level |
 | Boost heat | 0.32 heat/s | About 3 s of boost from cold; cooling 0.2–0.3 heat/s |
-| Overheat | 3 s at 85% top speed | Boost locked out |
+| Overheat | 2.5 s at 95% top speed | Boost locked out |
+| Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
+| Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
+| Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 80% top speed, no damage |
+| Obstacle wreck | Hit within 20% of dead centre above 70% top speed | Anything else deflects (≤ 15% speed) |
+| Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1–2 s when driven well |
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | No heat |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
-| Laps | 2–3 per track, 7.4–9.8 km | Lap times 45–65 s on the starter racer |
+| Laps | 2–3 per track, 9.3–10 km | Lap times 54–65 s on the starter racer |
+| Cup rival skill | Dust 0.20–0.45, Canyon 0.40–0.65, Grand Prix 0.70–0.95 | One strong rival per cup, the rest beatable |
 | Championship pay | 1000/750/550/400/250/150 × 1/4/12 | By place, per cup tier; cup bonus 2k/6k/25k |
 | Quick race pay | 50% of current tier | Scaled by laps |
 | Racer prices | 0 / 3k / 6.5k / 11k / 18k / 30k | Second racer after the first cup |
