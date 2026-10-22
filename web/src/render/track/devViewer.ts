@@ -202,6 +202,13 @@ Object.assign(window, {
       ts.update(performance.now() / 1000, camera.position);
       renderer.render(scene, camera);
     },
+    landmarks: () =>
+      ts.group.children
+        .filter((o) => o.name.startsWith('landmark:'))
+        .map((o) => {
+          const size = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+          return `${o.name} ${size.x.toFixed(0)}x${size.y.toFixed(0)}x${size.z.toFixed(0)}`;
+        }),
     stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, buildMs, length: track.length, ...totals() }),
     track,
   },
