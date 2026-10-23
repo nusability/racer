@@ -92,7 +92,7 @@ export function createVolcano(opts: LandmarkOptions): Landmark {
   // Crater: a molten floor and a column of glow above it, much stronger at dusk.
   const floorY = height(0, 0) + 3;
   kit.lamp(new THREE.CircleGeometry(RIM.r * 0.62, 16).rotateX(-Math.PI / 2), [0, floorY, 0], LAVA, 0, undefined, { depth: 0.3, freq: 1.1, phase: 0 });
-  kit.lamp(new THREE.CircleGeometry(RIM.r * 0.3, 10).rotateX(-Math.PI / 2), [0, floorY + 1, 0], LAVA_HOT, 70, undefined, { depth: 0.4, freq: 2.3, phase: 1 });
+  kit.lamp(new THREE.CircleGeometry(RIM.r * 0.3, 10).rotateX(-Math.PI / 2), [0, floorY + 1, 0], LAVA_HOT, 25 + 55 * kit.dusk, undefined, { depth: 0.4, freq: 2.3, phase: 1 });
   const glow = new THREE.Color(0xff6a20).multiplyScalar(0.06 + 0.16 * kit.dusk);
   kit.beams.add(new THREE.CylinderGeometry(RIM.r * 1.3, RIM.r * 0.6, 160, 14, 1, true).translate(0, 80, 0), glow, T(0, floorY, 0), undefined, { depth: 0.3, freq: 0.9, phase: 0 });
 
