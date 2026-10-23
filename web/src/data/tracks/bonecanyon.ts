@@ -56,6 +56,11 @@ export const bonecanyon: TrackDef = {
     { kind: 'boostCells', at: 10.25, lateral: 40, count: 5, spacing: 28 },
     { kind: 'boostPad', at: 11.5, lateral: -10 },
     { kind: 'boostPad', at: 11.54, lateral: -10 },
+    // A young sand beast's neck sweeps across the road out of the bone field and back.
+    {
+      kind: 'hazard',
+      hazard: { type: 'sweeper', id: 'neck', at: 11.0, radius: 8, height: 14, xFrom: -92, xTo: 92, cross: 3.2, hold: 1, period: 13, phase: 0 },
+    },
   ],
   branches: [
     {
@@ -98,5 +103,6 @@ export const bonecanyonScenery: TrackScenery = {
     { kind: 'cliffVillage', at: 2.5, side: 1, distance: 10, scale: 1.2, straddle: true },
     { kind: 'wreck', at: 9.5, side: 1, distance: 30 },
     { kind: 'mine', at: 3.4, side: -1, distance: 30 },
+    { kind: 'sandbeast', at: 11.0, side: -1, distance: 40, hazard: 'neck' },
   ],
 };

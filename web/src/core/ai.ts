@@ -19,6 +19,7 @@ import {
   AI_BRAKE_REACTION_HI,
   AI_CELL_DETOUR_HI,
   AI_PLAN_RATE_SHARE,
+  AI_HAZARD_TIME_MARGIN,
   AI_CELL_DETOUR_LO,
   AI_BRAKE_REACTION_LO,
   AI_CLEARANCE_HI,
@@ -331,7 +332,11 @@ export class AiDriver {
       const beyond = ribbon.delta(st.s, h.s1);
       if (beyond < -RACER_LENGTH || ahead > look) continue;
       const eta = Math.max(0, ahead) / v;
-      for (const o of hazardObstacles([h], time + eta, this.hazardBuf)) out.push({ s: o.s, x: o.x, radius: o.radius });
+      // Where it will be on arrival, and a little either side: arrival time drifts with speed,
+      // and a gate that drops just after the plan was made is as solid as one already down.
+      for (const dt of [-AI_HAZARD_TIME_MARGIN, 0, AI_HAZARD_TIME_MARGIN]) {
+        for (const o of hazardObstacles([h], time + Math.max(0, eta + dt), this.hazardBuf)) out.push({ s: o.s, x: o.x, radius: o.radius });
+      }
     }
   }
 

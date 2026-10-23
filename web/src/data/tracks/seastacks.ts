@@ -53,6 +53,12 @@ export const seastacks: TrackDef = {
     { kind: 'boostPad', at: 12.54, lateral: 0 },
     { kind: 'boostCells', at: 12.7, lateral: 20, count: 6, spacing: 30 },
     { kind: 'boostPad', at: 9.4, lateral: 0 },
+    // A freighter steams out of the harbour channel across the causeway: only the far end of
+    // the water run-off stays open while her hull is across.
+    {
+      kind: 'hazard',
+      hazard: { type: 'blocker', id: 'freighter', at: 9.95, opening: 22, offset: 52, height: 12, warn: 6, up: 5, period: 22, phase: 4 },
+    },
   ],
   branches: [
     {
@@ -99,7 +105,8 @@ export const seastacksScenery: TrackScenery = {
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
     { kind: 'lighthouse', at: 4.6, side: -1, distance: 40, afloat: true },
     { kind: 'cliffVillage', at: 3.2, side: 1, distance: 10, scale: 1.2 },
-    { kind: 'whales', at: 11.0, side: 1, distance: 200, afloat: true },
+    { kind: 'whales', at: 11.6, side: 1, distance: 300, afloat: true },
+    { kind: 'cruiseliner', at: 9.95, side: -1, distance: 30, afloat: true, scale: 0.35, hazard: 'freighter' },
     { kind: 'regatta', at: 1.3, side: 1, distance: 180, afloat: true },
   ],
 };

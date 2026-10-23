@@ -53,6 +53,8 @@ const BAND_WIDTH = 6;
 const BAND_LIFT = 0.03;
 /** Gust streaks: per hazard, their size, speed per unit of push and height band. */
 const STREAKS_PER_GUST = 70;
+/** Beacons stand this far before and after a flat X on both roads. */
+const CROSS_WARN = 110;
 const STREAK_LENGTH = 9;
 const STREAK_THICK = 0.22;
 const STREAK_SPEED = 9;
@@ -136,7 +138,7 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
 
   // --- Static dressing: beacon posts and painted bands for blockers and sweepers ---
   const posts = new FlatBuilder();
-  const lampSpots: { r: Ribbon; s: number; x: number; kind: 'edge' | 'open'; slot: Slot }[] = [];
+  const lampSpots: { r: Ribbon; s: number; x: number; kind: 'edge' | 'open' | 'cross'; slot: Slot | null }[] = [];
   for (const slot of [...blockers, ...sweepers]) {
     const { r, h } = slot;
     for (const x of [h.minX - 2, h.maxX + 2]) {
@@ -148,6 +150,26 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
       for (const x of [h.def.offset - h.def.opening / 2, h.def.offset + h.def.opening / 2]) lampSpots.push({ r, s: h.s0, x, kind: 'open', slot });
     }
     band(glow, paint, r, h.s0, h.minX, h.maxX);
+  }
+  // A flat X: danger bands framing the box where the roads overlap, and beacons flashing at
+  // every approach, so cross-traffic is expected long before it arrives.
+  const main = ribbons[0];
+  for (const c of main.crossings) {
+    if (c.style !== 'flat') continue;
+    for (const [s0, other] of [
+      [c.s, c.other],
+      [c.other, c.s],
+    ]) {
+      const half = main.widthAt(other) / 2 + BAND_WIDTH;
+      for (const ds of [-half, half]) band(glow, paint, main, s0 + ds, -main.widthAt(s0 + ds) / 2, main.widthAt(s0 + ds) / 2);
+      for (const ds of [-CROSS_WARN, CROSS_WARN]) {
+        for (const side of [-1, 1]) {
+          const x = side * (main.widthAt(s0 + ds) / 2 + 3);
+          post(posts, main, s0 + ds, x);
+          lampSpots.push({ r: main, s: s0 + ds, x, kind: 'cross', slot: null });
+        }
+      }
+    }
   }
   const postGeo = posts.build();
   if (postGeo) {
@@ -242,9 +264,13 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
 
     // Beacons: amber flashing in a warning, red while the road is blocked, dim otherwise.
     lampSpots.forEach((l, k) => {
-      const d = l.slot.h.def;
       let c = DIM;
       const flash = Math.sin(time * Math.PI * 2 * FLASH_RATE) > 0;
+      if (!l.slot) {
+        lamps.setColorAt(k, flash ? AMBER : DIM);
+        return;
+      }
+      const d = l.slot.h.def;
       if (d.type === 'blocker') {
         const st = blockerStage(d, time).stage;
         if (l.kind === 'open') c = st === 'idle' ? DIM : GREEN;

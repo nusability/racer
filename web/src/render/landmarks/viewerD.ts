@@ -48,10 +48,10 @@ const PLACE: Record<Kind, Placement> = {
   glacierWall: { distance: 8, hazards: [{ type: 'blocker', id: 'calve', at: 0, opening: 8, offset: -5, height: 7, warn: 5, up: 5, period: 18, phase: 0 }] },
   mammothHerd: { distance: 20, hazards: [sweeper('herd', 6, 9, -70, 20, 9, 3, 26)] },
   iceStation: { distance: 20, hazards: [{ type: 'gust', id: 'wash', from: 0, to: 0, strength: -9, on: 6, period: 16, phase: 0 }] },
-  skiJump: { distance: -300, hazards: [] },
+  skiJump: { distance: -292, hazards: [] },
   icePalace: { distance: 40, hazards: [] },
   frozenFalls: { distance: 30, hazards: [] },
-  auroraSky: { distance: 0, hazards: [] },
+  auroraSky: { distance: -3012, hazards: [] },
   snowcatConvoy: { distance: 25, hazards: [sweeper('cat', 5, 6, -60, 22, 6, 2, 18)] },
 };
 /** Droppers and gusts span this much road (s), centred on the landmark. */

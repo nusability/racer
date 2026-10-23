@@ -313,6 +313,8 @@ export const AI_DROP_MARGIN_LO = 6;
 export const AI_DROP_MARGIN_HI = 2;
 /** With a loop's top this close ahead the AI won't brake and boosts: stalling there is a wreck. */
 export const AI_LOOP_LOOK = 500;
+/** The AI keeps clear of where a hazard will be this many seconds either side of its arrival. */
+export const AI_HAZARD_TIME_MARGIN = 0.3;
 /** Hull damage at which an AI starts going for repair cells. */
 export const AI_REPAIR_WANT = 0.35;
 /** It swerves for a repair cell within this of its line, metres. */

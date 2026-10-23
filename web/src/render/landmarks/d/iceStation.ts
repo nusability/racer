@@ -17,6 +17,7 @@ const SALT = 0x57a71;
 const RADIUS = 170;
 const DOMES: readonly (readonly [number, number, number])[] = [[-40, 30, 22], [10, 55, 28], [55, 20, 18], [-85, 70, 16]];
 const PAD: V3 = [80, 0, -70];
+const RADOME = { x: 28, z: 75, r: 17, tower: 34 } as const;
 const PAD_R = 22;
 const RADAR: V3 = [-30, 0, -40];
 const DERRICK: V3 = [-110, 0, -10];
@@ -64,7 +65,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
     for (let k = 0; k < 6; k++) kit.solid.add(box(0.5, r * 0.75, 0.5), shade(white, 0.85), T(x, 3, z, (k / 6) * Math.PI, 0.6, 0).multiply(T(0, 0, r * 0.62)));
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2;
-      kit.lamp(box(2.2, 1.1, 0.3), [x + Math.cos(a) * (r * 1.02 + 0.1), 1.8, z + Math.sin(a) * (r * 1.02 + 0.1)], WARM_LIGHT, 0, undefined, { depth: 0.2, freq: 0.3, phase: k });
+      kit.lamp(box(2.2, 1.1, 0.3), [x + Math.cos(a) * (r * 1.02 + 0.1), 1.8, z + Math.sin(a) * (r * 1.02 + 0.1)], WARM_LIGHT, k % 2 ? 0 : 3 * dusk, undefined, { depth: 0.2, freq: 0.3, phase: k });
     }
   }
   for (let i = 0; i + 1 < DOMES.length; i++) {
@@ -74,7 +75,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   }
   // Hangar, fuel tanks and a row of snowmobiles in festive colours.
   kit.solid.add(box(40, 12, 24), shade(white, 0.9), T(40, 0, -25));
-  kit.solid.add(prism(12, 12, 40, 8, false).rotateZ(Math.PI / 2).translate(20, 12, 0), STEEL, T(40, 0, -25, 0, 0, 0, [1, 0.35, 1]));
+  kit.solid.add(new THREE.CylinderGeometry(12, 12, 40, 8).rotateZ(Math.PI / 2).scale(1, 0.35, 1).translate(0, 12, 0), STEEL, T(40, 0, -25));
   kit.lamp(box(18, 9, 0.3), [40, 0.2, -37.2], mix(WARM_LIGHT, 0xffffff, 0.3), 0);
   for (let k = 0; k < 3; k++) kit.solid.add(prism(4, 4, 9, 10), k ? white : orange, T(-60 + k * 10, 0, -50));
   for (let k = 0; k < ik.q(7, 4); k++) {
@@ -93,8 +94,10 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   kit.moving.add(new THREE.SphereGeometry(9, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.45).rotateX(-Math.PI / 2).scale(1, 1, 0.45), white, T(RADAR[0], 20, RADAR[2] + 2), spin);
   kit.moving.add(box(1, 1, 7), STEEL, T(RADAR[0], 20, RADAR[2] + 3.5), spin);
   kit.moving.add(box(0.6, 0.6, 3), DARK, T(RADAR[0], 20, RADAR[2] + 7), spin);
-  kit.solid.add(dome(10, 12, 6), white, T(DOMES[1][0] + 18, 26, DOMES[1][1] + 6, 0, 0, 0, [1, 1, 1]));
-  kit.solid.add(prism(6, 7, 26, 8), shade(white, 0.85), T(DOMES[1][0] + 18, 0, DOMES[1][1] + 6));
+  // The tracking radome: a white ball on a tower, the station's mark on the skyline.
+  kit.solid.add(new THREE.IcosahedronGeometry(RADOME.r, 1), white, T(RADOME.x, RADOME.tower + RADOME.r * 0.8, RADOME.z));
+  kit.solid.add(prism(7, 9, RADOME.tower, 8), shade(white, 0.85), T(RADOME.x, 0, RADOME.z));
+  kit.lamp(new THREE.OctahedronGeometry(1), [RADOME.x, RADOME.tower + RADOME.r * 1.8 + 1, RADOME.z], RED_LIGHT, 9, undefined, { depth: 0.95, freq: 2, phase: 1, sharp: 7 });
 
   // --- Lattice masts with blinking red lights ---
   for (const [x, z, h] of MASTS) {
@@ -136,7 +139,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   for (const [fx, fz] of [[-20, -20], [60, -60], [-90, 30]]) {
     kit.solid.add(prism(0.5, 0.6, 18, 5), STEEL, T(fx, 0, fz));
     kit.lamp(box(3, 1.5, 1.5), [fx, 18, fz], 0xfff4dc, 6);
-    lightCone(kit.beams, T(fx, 18, fz, 0, Math.PI * 0.75, 0), 26, 1, 14, 4, mix(0xfff0d0, 0x000000, 0.85 - 0.6 * dusk));
+    lightCone(kit.beams, T(fx, 18, fz, 0, Math.PI * 0.75, 0), 26, 1, 14, 4, mix(0xfff0d0, 0x000000, 0.97 - 0.72 * dusk));
   }
   // Fuel drums and snowdrifts scattered round the camp.
   for (let k = 0; k < ik.q(18, 9); k++) {
@@ -161,7 +164,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   }
   rig.add(new THREE.OctahedronGeometry(0.5), RED_LIGHT, { bone: craft, layer: 'glow', m: T(-12, 3, 0) });
   rig.add(new THREE.OctahedronGeometry(0.5), 0x40ff80, { bone: craft, layer: 'glow', m: T(10, 3, 3.6) });
-  addBeam(rig, 30, 6, 0xfff2d0, 0.06 + 0.25 * dusk, { bone: craft, m: T(11, 0, 0, 0, 0, 0.5) });
+  addBeam(rig, 30, 6, 0xfff2d0, 0.02 + 0.25 * dusk, { bone: craft, m: T(11, 0, 0, 0, 0, 0.5) });
 
   const snow = ik.cloud(ik.q(WASH.high, WASH.low), 0, false, 0.8);
   const sheet = brush({ life: 1.6, size0: 4, size1: 16, c0: mix(ik.snow, 0xffffff, 0.5), c1: mix(ik.snow, opts.palette.horizon, 0.5), alpha: 0.7, keep: 0.75, lift: -1 });

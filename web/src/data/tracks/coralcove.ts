@@ -46,6 +46,11 @@ export const coralcove: TrackDef = {
     { kind: 'boostPad', at: 10.34, lateral: 0 },
     { kind: 'kicker', at: 11.2, length: 40, height: 2 },
     { kind: 'boostCells', at: 11.5, lateral: 0, count: 5, spacing: 35 },
+    // The air display's jets scream low over the lagoon road: their wash pushes you aside.
+    {
+      kind: 'hazard',
+      hazard: { type: 'gust', id: 'flypast', from: 10.4, to: 10.7, strength: -4, on: 4, period: 14, phase: 0 },
+    },
   ],
   branches: [
     {
@@ -87,5 +92,6 @@ export const coralcoveScenery: TrackScenery = {
     { kind: 'regatta', at: 3.6, side: 1, distance: 150, afloat: true },
     { kind: 'whales', at: 9.8, side: -1, distance: 200, afloat: true },
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
+    { kind: 'airshow', at: 10.55, side: -1, distance: 150, hazard: 'flypast' },
   ],
 };

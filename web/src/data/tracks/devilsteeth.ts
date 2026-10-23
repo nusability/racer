@@ -61,6 +61,11 @@ export const devilsteeth: TrackDef = {
     { kind: 'boostCells', at: 11.2, lateral: 12, count: 5, spacing: 30 },
     { kind: 'boostCells', at: 12.8, lateral: -14, count: 6, spacing: 30 },
     { kind: 'boostPad', at: 13.5, lateral: 0 },
+    // The bucket-wheel digger works the gulch rim and its spill rains onto the road.
+    {
+      kind: 'hazard',
+      hazard: { type: 'dropper', id: 'spill', from: 5.95, to: 6.7, count: 3, radius: 3.5, period: 8, warn: 2, stay: 4, phase: 1 },
+    },
   ],
   branches: [
     {
@@ -102,7 +107,7 @@ export const devilsteethScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
-    { kind: 'mine', at: 5.45, side: 1, distance: 10, straddle: true },
+    { kind: 'mine', at: 6.3, side: 1, distance: 150, hazard: 'spill' },
     { kind: 'wreck', at: 3.5, side: -1, distance: 5 },
     { kind: 'cliffVillage', at: 9.0, side: -1, distance: 60, scale: 1.3 },
     { kind: 'balloons', at: 12.5, side: -1, distance: 150 },

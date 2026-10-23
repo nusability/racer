@@ -1,12 +1,13 @@
 import type { TrackDef } from '../../core/types.ts';
 import type { TrackScenery } from './scenery.ts';
 
-// A storm rolling in over a smoking volcano: black-sand beaches, a climb round the crater's
-// flank, stacks in the surf and two cuts that leap the lava-black channels.
+// The coast's gimmick track: a loop off the start line, then a cliff road up the volcano's
+// flank under its lava bombs, a knife-edge over the summit bore, stacks in the surf and two
+// cuts through the lava tube and across the black channel.
 export const volcanoisle: TrackDef = {
   id: 'volcanoisle',
   name: 'Volcano Isle',
-  blurb: 'Storm surf, black sand and a smoking crater. Climb the flank, leap the channels.',
+  blurb: 'Loop off the line, climb the cliff road under the lava bombs, cross the summit ridge.',
   difficulty: 5,
   laps: 3,
   seed: 1606,
@@ -31,6 +32,15 @@ export const volcanoisle: TrackDef = {
   ],
   features: [
     { kind: 'boostCells', at: 0.1, lateral: 0, count: 4, spacing: 30 },
+    { kind: 'narrow', from: 0.3, to: 0.86, width: 26, blend: 70 },
+    { kind: 'runoff', from: 0.33, to: 0.83, amount: 0 },
+    { kind: 'loop', at: 0.42, radius: 28, span: 124, shift: 32, settle: 140 },
+    { kind: 'drop', from: 3.0, to: 4.9, side: -1 },
+    {
+      kind: 'hazard',
+      hazard: { type: 'dropper', id: 'bombs', from: 4.0, to: 4.8, count: 3, radius: 3, period: 9, warn: 2.5, stay: 4, phase: 0 },
+    },
+    { kind: 'drop', from: 6.05, to: 7.0 },
     { kind: 'boostPad', at: 0.9, lateral: 0 },
     { kind: 'boostPad', at: 0.94, lateral: 0 },
     { kind: 'boostCells', at: 1.6, lateral: -12, count: 6, spacing: 35 },
@@ -122,7 +132,7 @@ export const volcanoisleScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
     { kind: 'harbor', at: 1.0, side: -1, distance: 30, afloat: true },
-    { kind: 'volcano', at: 5.5, side: -1, distance: 250, afloat: true },
+    { kind: 'volcano', at: 5.0, side: -1, distance: 250, afloat: true, hazard: 'bombs' },
     { kind: 'whales', at: 11.5, side: -1, distance: 250, afloat: true },
     { kind: 'lighthouse', at: 13.0, side: -1, distance: 40, afloat: true },
   ],
