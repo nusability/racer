@@ -168,7 +168,7 @@ export class GameAudio {
       o.start();
       return o;
     });
-    // The podracer whine: a high partial with a slow wobble.
+    // The fan whine: a high partial with a slow wobble.
     const whine = ctx.createOscillator();
     whine.type = 'triangle';
     const whineGain = ctx.createGain();

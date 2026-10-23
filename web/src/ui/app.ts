@@ -5,7 +5,7 @@ import type { GameAudio } from '../audio/audio.ts';
 import { Career } from '../game/career.ts';
 import type { RaceLauncher, RaceRequest, ShowroomApi } from '../game/types.ts';
 import { h } from './kit.ts';
-import { championshipScreen, cupScreen } from './screens/championship.ts';
+import { championshipScreen, cupScreen, worldScreen } from './screens/championship.ts';
 import type { AppCtx, Nav, Screen } from './screens/context.ts';
 import { garageScreen } from './screens/garage.ts';
 import { mainMenuScreen } from './screens/mainMenu.ts';
@@ -29,10 +29,12 @@ function build(ctx: AppCtx, nav: Nav): Screen {
       return mainMenuScreen(ctx);
     case 'championship':
       return championshipScreen(ctx);
+    case 'world':
+      return worldScreen(ctx, nav.worldId);
     case 'cup':
       return cupScreen(ctx, nav.cupId);
     case 'quick':
-      return quickRaceScreen(ctx, nav.trackId, nav.laps);
+      return quickRaceScreen(ctx, nav.worldId, nav.trackId, nav.laps);
     case 'garage':
       return garageScreen(ctx, nav.racerId);
     case 'settings':

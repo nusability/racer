@@ -1,6 +1,7 @@
 // Results: place, times, credits, standings. ONE primary button starts the next race at once
 // (north-star: finish line to next start is one tap).
 import { cupById } from '../../data/championships.ts';
+import { worldById } from '../../data/worlds.ts';
 import { trackById } from '../../data/tracks/index.ts';
 import type { RaceReport } from '../../game/career.ts';
 import type { RaceRequest } from '../../game/types.ts';
@@ -109,11 +110,16 @@ function celebration(report: RaceReport): HTMLElement | null {
     const me = c.standings.find((r) => r.isPlayer);
     return h('div', 'celebrate celebrate--lost', h('div', 'celebrate__title', `${cup.name.toUpperCase()} OVER`), h('div', 'celebrate__sub', `You finished ${ordinal(me?.position ?? 0)} overall. Win it to move up.`));
   }
-  const title = cup.unlocks === null ? 'MIRAGE CHAMPION' : `${cup.name.toUpperCase()} WON`;
+  const world = worldById(cup.worldId);
+  const title = cup.unlocks === null ? `${world.name.toUpperCase()} CHAMPION` : `${cup.name.toUpperCase()} WON`;
+  const opened = [
+    ...(c.unlockedCupId ? [cupById(c.unlockedCupId).name] : []),
+    ...c.unlockedWorldIds.map((id) => `the ${worldById(id).name}`),
+  ];
   const sub = c.becameChampion
-    ? 'You conquered the Mirage Grand Prix. The dunes bow to you.'
-    : c.unlockedCupId
-      ? `${cupById(c.unlockedCupId).name} unlocked!`
+    ? `You conquered the ${cup.name}. ${world.name} is yours.`
+    : opened.length
+      ? `${opened.join(' and ')} unlocked!`
       : 'Champion again.';
   return h('div', `celebrate${cup.unlocks === null ? ' celebrate--gold' : ''}`, h('div', 'celebrate__trophy', '🏆'), h('div', 'celebrate__title', title), h('div', 'celebrate__sub', sub));
 }

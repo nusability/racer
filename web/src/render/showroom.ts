@@ -16,7 +16,8 @@ interface ScreenWindow {
   bottom: number;
 }
 const PORTRAIT_WINDOW: ScreenWindow = { left: 0, right: 1, top: 0, bottom: 0.6 };
-const LANDSCAPE_WINDOW: ScreenWindow = { left: 0.3, right: 0.7, top: 0.12, bottom: 0.78 };
+// Matches the garage's clear centre column in landscape (measured at 844×390 and 932×430).
+const LANDSCAPE_WINDOW: ScreenWindow = { left: 0.34, right: 0.66, top: 0.18, bottom: 0.78 };
 
 const FOV = 34;
 /** Radius (m) of the racer's turning footprint that must fit the window. */

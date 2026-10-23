@@ -107,17 +107,20 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
   );
 }
 
-/** The player machine each cup assumes (see the header of data/championships.ts). */
-const ASSUMED: Record<string, { racerId: string; levels: Partial<UpgradeLevels>; label: string }> = {
-  dust: { racerId: 'dustwing', levels: {}, label: 'stock Dustwing' },
-  canyon: { racerId: 'dustwing', levels: { engine: 2, thrusters: 2, steering: 1 }, label: 'Dustwing E2 T2 S1' },
-  mirage: { racerId: 'quadra', levels: { engine: 2, thrusters: 2, steering: 2 }, label: 'Quadra Vex E2 T2 S2' },
+/**
+ * The player machine each cup tier assumes (see the header of data/championships.ts). Every
+ * world's rookie/pro/elite cups share their tier's rival band, so they share this too.
+ */
+const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeLevels>; label: string }> = {
+  1: { racerId: 'dustwing', levels: {}, label: 'stock Dustwing' },
+  2: { racerId: 'dustwing', levels: { engine: 2, thrusters: 2, steering: 1 }, label: 'Dustwing E2 T2 S1' },
+  3: { racerId: 'quadra', levels: { engine: 2, thrusters: 2, steering: 2 }, label: 'Quadra Vex E2 T2 S2' },
 };
 
 export function allCupStudies() {
   for (const cup of CUPS) {
-    const a = ASSUMED[cup.id];
-    if (!a) throw new Error(`sim-cups: no assumed player machine for cup ${cup.id}`);
+    const a = ASSUMED[cup.tier];
+    if (!a) throw new Error(`sim-cups: no assumed player machine for tier ${cup.tier} (cup ${cup.id})`);
     const levels = { ...noUpgrades(), ...a.levels };
     // The first cup is the one a bad racer must be able to win; later cups assume a decent player.
     if (cup.tier === 1) cupStudy(cup, NOVICE, a.racerId, levels, a.label);

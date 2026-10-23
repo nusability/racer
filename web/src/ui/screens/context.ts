@@ -7,8 +7,9 @@ export type Nav =
   | { screen: 'title' }
   | { screen: 'menu' }
   | { screen: 'championship' }
+  | { screen: 'world'; worldId: string }
   | { screen: 'cup'; cupId: string }
-  | { screen: 'quick'; trackId?: string; laps?: number }
+  | { screen: 'quick'; worldId?: string; trackId?: string; laps?: number }
   | { screen: 'garage'; racerId?: string }
   | { screen: 'settings' }
   | { screen: 'results'; report: RaceReport };

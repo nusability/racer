@@ -1,7 +1,7 @@
 // Builds the field for a race. Deterministic: the same cup, standings and player give the same
 // grid, so a retried race lines up exactly as before.
 import type { RaceEntrant } from '../core/types.ts';
-import { PLAYER_ENTRANT_ID, cupByTier } from '../data/championships.ts';
+import { PLAYER_ENTRANT_ID } from '../data/championships.ts';
 import type { CupDef, RivalDef } from '../data/championships.ts';
 import { racerById } from '../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, effectiveStats } from '../data/upgrades.ts';
@@ -59,9 +59,9 @@ export function championshipGrid(
   return field.sort((a, b) => pts(a.id) - pts(b.id) || (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 }
 
-/** Quick race: the rival roster of the player's current tier, player mid-pack. */
-export function quickRaceGrid(tier: number, player: RaceEntrant): RaceEntrant[] {
-  const field = cupByTier(tier).rivals.map(rivalEntrant);
+/** Quick race: the rival roster of the world's hardest open cup, player mid-pack. */
+export function quickRaceGrid(cup: CupDef, player: RaceEntrant): RaceEntrant[] {
+  const field = cup.rivals.map(rivalEntrant);
   field.splice(QUICK_RACE_PLAYER_SLOT, 0, player);
   return field;
 }

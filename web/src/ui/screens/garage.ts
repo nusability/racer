@@ -117,7 +117,7 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
         },
       });
       buy.classList.add('upg__buy');
-      return h('div', 'upg', h('div', 'upg__text', h('span', 'upg__name', u.name), h('span', 'upg__blurb', u.blurb)), pips(lvl, MAX_UPGRADE_LEVEL), buy);
+      return h('div', 'upg', h('div', 'upg__text', h('span', 'upg__name', u.name), pips(lvl, MAX_UPGRADE_LEVEL), h('span', 'upg__blurb', u.blurb)), buy);
     });
     const upgrades = panel(owned ? 'UPGRADES' : 'UPGRADES · BUY TO UNLOCK', h('div', `upgs${owned ? '' : ' is-locked'}`, ...rows));
 

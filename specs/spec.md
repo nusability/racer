@@ -31,9 +31,10 @@ Next IDs: F-002 · US2 · FR-002 · NFR-001 · SC-002
 
 ## Vision
 
-Mirage Racer is a desert pod-racing game for phones. Two giant engines haul a tiny cockpit
-across salt pans, canyons and dune seas at 600–800 km/h. The opponents are there, but the
-real rival is the track: chasms to jump, kickers that throw you into the air, tunnels through
+Mirage Racer is a racing game for phones. Pilots fly ground-effect skimmers (low, wide
+racing wings riding a cushion of air a hand's width above the ground, pushed by ducted
+fans) across worlds of salt pans, canyons, lagoons and sea caves at 600–800 km/h. The
+opponents are there, but the real rival is the track: chasms to jump, kickers that throw you into the air, tunnels through
 mesas, canyons barely wider than your engines, rock arches with off-centre openings and
 fields of pillars. Learning a track's lines is how you win.
 
@@ -41,13 +42,15 @@ It should feel faster than is safe: always a hair beyond control, with boost tha
 faster still at the price of engine heat. Between races it is a garage game: credits buy new
 racers and upgrades, and a championship of three cups gives the series a goal.
 
-**Elevator pitch**: An ultra-fast desert pod racer where the track itself is the main obstacle.
+**Elevator pitch**: An ultra-fast ground-effect racer where the track itself is the main obstacle.
 
 **Target player**: Mobile players who like arcade racers (F-Zero, Wipeout, pod racing); a race is 2–4 minutes, a session is one to a few races.
 
 ## Core Game Loop
 
-1. **Pick a race**: the next race of a championship cup, or a quick race on any track.
+1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
+   open world. Each world (Mirage Desert, Coral Coast; more to come) has six to eight tracks
+   and three cups, rookie → pro → elite. Winning a world's rookie cup opens the next world.
 2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
    buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
@@ -60,8 +63,8 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    tap to the next race). Spend them in the garage on new racers and upgrades.
 
 **Win / lose / end**: a race ends when everyone finishes, or 20 s after the player does. A cup
-is four races scored 10/8/6/4/2/1; winning it pays a bonus and unlocks the next cup. Winning
-the third cup, the Mirage Grand Prix, makes you Mirage Champion.
+is four races scored 10/8/6/4/2/1; winning it pays a bonus and unlocks the next cup of that
+world. Winning a world's elite cup makes you that world's champion.
 
 ## Tuned Numbers
 
@@ -87,7 +90,8 @@ the third cup, the Mirage Grand Prix, makes you Mirage Champion.
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
 | Laps | 2–3 per track, 9.3–10 km | Lap times 54–65 s on the starter racer |
-| Cup rival skill | Dust 0.20–0.45, Canyon 0.40–0.65, Grand Prix 0.70–0.95 | One strong rival per cup, the rest beatable |
+| Cup rival fields | Rookie: stock cars, skill 0.06–0.18; pro: upgrade 1, 0.52–0.64; elite: upgrade 1, 0.53–0.65 (eased skill²·⁸, with a 0.3 s reaction delay at skill 0) | Tight packs; same bands in every world |
+| Catch-up | Rivals 60–450 m ahead ease up to 6%; behind push up to 2% | Off once the player finishes |
 | Championship pay | 1000/750/550/400/250/150 × 1/4/12 | By place, per cup tier; cup bonus 2k/6k/25k |
 | Quick race pay | 50% of current tier | Scaled by laps |
 | Racer prices | 0 / 3k / 6.5k / 11k / 18k / 30k | Second racer after the first cup |

@@ -26,6 +26,8 @@ export interface RivalDef {
 
 export interface CupDef {
   id: string;
+  /** The world (data/worlds.ts) this cup belongs to. */
+  worldId: string;
   name: string;
   /** 1-based tier: drives payouts and the quick-race field. */
   tier: number;
@@ -33,7 +35,7 @@ export interface CupDef {
   trackIds: string[];
   /** Exactly five; ordered strongest first (front of the race-1 grid), all close together. */
   rivals: RivalDef[];
-  /** Cup unlocked by winning this one, or null for the final cup. */
+  /** Next cup in the same world unlocked by winning this one, or null for the world's elite cup. */
   unlocks: string | null;
 }
 
@@ -46,6 +48,7 @@ export const PLAYER_ENTRANT_ID = 'player';
 export const CUPS: CupDef[] = [
   {
     id: 'dust',
+    worldId: 'desert',
     name: 'Dust Cup',
     tier: 1,
     blurb: 'Salt pans and switchbacks. Prove you can hold a line at speed.',
@@ -61,6 +64,7 @@ export const CUPS: CupDef[] = [
   },
   {
     id: 'canyon',
+    worldId: 'desert',
     name: 'Canyon Cup',
     tier: 2,
     blurb: 'Tight rock, long drops. The walls start to bite.',
@@ -76,6 +80,7 @@ export const CUPS: CupDef[] = [
   },
   {
     id: 'mirage',
+    worldId: 'desert',
     name: 'Mirage Grand Prix',
     tier: 3,
     blurb: 'The fastest pilots alive, on tracks that want you dead.',
@@ -89,6 +94,56 @@ export const CUPS: CupDef[] = [
     ],
     unlocks: null,
   },
+  // Coral Coast: same strength bands per tier as the desert (worlds add variety, cups add
+  // difficulty), so the rookie cup is as winnable as the Dust Cup.
+  {
+    id: 'shoreline',
+    worldId: 'beach',
+    name: 'Shoreline Cup',
+    tier: 1,
+    blurb: 'Lagoons and boardwalks. Keep it clean over the water.',
+    trackIds: ['coralcove', 'lagoonloop', 'boardwalk', 'seastacks'],
+    rivals: [
+      { id: 'tide', name: 'Tide Okoro', racerId: 'dustwing', skill: 0.18, upgradeLevel: 0 },
+      { id: 'nell', name: 'Nell Spindrift', racerId: 'scarab', skill: 0.15, upgradeLevel: 0 },
+      { id: 'pip', name: 'Pip Saltmarsh', racerId: 'dustwing', skill: 0.12, upgradeLevel: 0 },
+      { id: 'cove', name: 'Cove Calloway', racerId: 'scarab', skill: 0.09, upgradeLevel: 0 },
+      { id: 'marin', name: 'Marin Vash', racerId: 'dustwing', skill: 0.06, upgradeLevel: 0 },
+    ],
+    unlocks: 'reef',
+  },
+  {
+    id: 'reef',
+    worldId: 'beach',
+    name: 'Reef Cup',
+    tier: 2,
+    blurb: 'Sea stacks and sunken caves. The tide does not wait.',
+    trackIds: ['lagoonloop', 'boardwalk', 'seastacks', 'tidalcaves'],
+    rivals: [
+      { id: 'juno', name: 'Juno Shoal', racerId: 'dustwing', skill: 0.64, upgradeLevel: 1 },
+      { id: 'ossian', name: 'Ossian Gale', racerId: 'scarab', skill: 0.61, upgradeLevel: 1 },
+      { id: 'lark', name: 'Lark Seaborne', racerId: 'dustwing', skill: 0.58, upgradeLevel: 1 },
+      { id: 'teo', name: 'Teo Driftwood', racerId: 'scarab', skill: 0.55, upgradeLevel: 1 },
+      { id: 'coralis', name: 'Mira Coralis', racerId: 'dustwing', skill: 0.52, upgradeLevel: 1 },
+    ],
+    unlocks: 'tsunami',
+  },
+  {
+    id: 'tsunami',
+    worldId: 'beach',
+    name: 'Tsunami Trophy',
+    tier: 3,
+    blurb: 'Lava tubes and blowholes, raced flat out by the best on the coast.',
+    trackIds: ['seastacks', 'tidalcaves', 'boardwalk', 'volcanoisle'],
+    rivals: [
+      { id: 'ishara', name: 'Ishara Wake', racerId: 'quadra', skill: 0.65, upgradeLevel: 1 },
+      { id: 'rook', name: 'Rook Maelstrom', racerId: 'sirocco', skill: 0.62, upgradeLevel: 1 },
+      { id: 'nerys', name: 'Nerys Squall', racerId: 'quadra', skill: 0.59, upgradeLevel: 1 },
+      { id: 'dagan', name: 'Dagan Undertow', racerId: 'sirocco', skill: 0.56, upgradeLevel: 1 },
+      { id: 'siren', name: 'Siren Brisk', racerId: 'quadra', skill: 0.53, upgradeLevel: 1 },
+    ],
+    unlocks: null,
+  },
 ];
 
 export function cupById(id: string): CupDef {
@@ -97,8 +152,8 @@ export function cupById(id: string): CupDef {
   return c;
 }
 
-export function cupByTier(tier: number): CupDef {
-  const c = CUPS.find((x) => x.tier === tier);
-  if (!c) throw new Error(`No cup at tier ${tier}`);
+export function cupByTier(worldId: string, tier: number): CupDef {
+  const c = CUPS.find((x) => x.worldId === worldId && x.tier === tier);
+  if (!c) throw new Error(`No cup at tier ${tier} in world "${worldId}"`);
   return c;
 }

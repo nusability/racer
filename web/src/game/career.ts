@@ -5,6 +5,7 @@ import { CUPS, CUP_POINTS, PLAYER_ENTRANT_ID, cupById } from '../data/championsh
 import type { CupDef } from '../data/championships.ts';
 import { racerById } from '../data/racers.ts';
 import { trackById } from '../data/tracks/index.ts';
+import { WORLDS, worldById, worldOfTrack } from '../data/worlds.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, noUpgrades } from '../data/upgrades.ts';
 import type { UpgradeLevels } from '../data/upgrades.ts';
 import type { UpgradeId } from '../core/types.ts';
@@ -40,6 +41,9 @@ export interface CupReport {
   finished: boolean;
   won: boolean;
   unlockedCupId: string | null;
+  /** Worlds this win opened (their rookie cups open with them). */
+  unlockedWorldIds: string[];
+  /** First win of a world's elite cup. */
   becameChampion: boolean;
 }
 
@@ -142,14 +146,32 @@ export class Career {
 
   // --- Championship ---------------------------------------------------------
 
-  isCupUnlocked(cupId: string): boolean {
-    cupById(cupId);
-    return this.save.unlockedCups.includes(cupId);
+  // Unlocks are derived from the cups won, so there is one source of truth for progress.
+
+  isWorldUnlocked(worldId: string): boolean {
+    const w = worldById(worldId);
+    return w.unlockedBy === null || this.save.wonCups.includes(w.unlockedBy);
   }
 
-  /** Tier of the hardest unlocked cup: sets the quick-race field and pay. */
-  progressTier(): number {
-    return Math.max(...this.save.unlockedCups.map((id) => cupById(id).tier));
+  /** A world's rookie cup opens with the world; pro and elite open on the previous cup's win. */
+  isCupUnlocked(cupId: string): boolean {
+    const cup = cupById(cupId);
+    if (!this.isWorldUnlocked(cup.worldId)) return false;
+    const prev = CUPS.find((c) => c.unlocks === cup.id);
+    return !prev || this.save.wonCups.includes(prev.id);
+  }
+
+  /** The world's elite cup has been won. */
+  isWorldChampion(worldId: string): boolean {
+    return this.save.wonCups.includes(worldById(worldId).cupIds[2]);
+  }
+
+  /** Quick race on a track: the rivals and pay of its world's hardest open cup. */
+  quickRaceCup(trackId: string): CupDef {
+    const world = worldOfTrack(trackId);
+    if (!this.isWorldUnlocked(world.id)) throw new Error(`Track "${trackId}" is in locked world "${world.id}"`);
+    const open = world.cupIds.map(cupById).filter((c) => this.isCupUnlocked(c.id));
+    return open.reduce((a, b) => (b.tier > a.tier ? b : a));
   }
 
   /** Starts (or restarts) a cup; any other run in progress is abandoned. */
@@ -216,7 +238,7 @@ export class Career {
       trackId: track.id,
       laps,
       seed: hashSeed(`${raceId}:${track.id}`),
-      entrants: quickRaceGrid(this.progressTier(), this.player()),
+      entrants: quickRaceGrid(this.quickRaceCup(track.id), this.player()),
     };
   }
 
@@ -234,7 +256,7 @@ export class Career {
     const track = trackById(req.trackId);
 
     const cup = req.mode === 'championship' ? this.applyCupResult(req, outcome.results) : null;
-    const tier = cup ? cupById(cup.report.cupId).tier : this.progressTier();
+    const tier = cup ? cupById(cup.report.cupId).tier : this.quickRaceCup(track.id).tier;
     const payout = racePayout({
       mode: req.mode,
       place: me.place,
@@ -290,19 +312,11 @@ export class Career {
     const finished = run.raceIndex >= cup.trackIds.length;
     const won = finished && standings[0].isPlayer;
     const wonFirstTime = won && !this.save.wonCups.includes(cup.id);
-    let unlockedCupId: string | null = null;
-    let becameChampion = false;
-    if (won) {
-      if (wonFirstTime) this.save.wonCups.push(cup.id);
-      if (cup.unlocks && !this.save.unlockedCups.includes(cup.unlocks)) {
-        this.save.unlockedCups.push(cup.unlocks);
-        unlockedCupId = cup.unlocks;
-      }
-      if (cup.unlocks === null && !this.save.champion) {
-        this.save.champion = true;
-        becameChampion = true;
-      }
-    }
+    // Only a first win opens anything; winning again just pays the repeat bonus.
+    if (wonFirstTime) this.save.wonCups.push(cup.id);
+    const unlockedCupId = wonFirstTime ? cup.unlocks : null;
+    const unlockedWorldIds = wonFirstTime ? WORLDS.filter((w) => w.unlockedBy === cup.id).map((w) => w.id) : [];
+    const becameChampion = wonFirstTime && cup.unlocks === null;
     if (finished) this.save.cup = null;
     return {
       won,
@@ -316,15 +330,16 @@ export class Career {
         finished,
         won,
         unlockedCupId,
+        unlockedWorldIds,
         becameChampion,
       },
     };
   }
 }
 
-/** All cups with their state, for the championship screen. */
-export function cupStates(career: Career): { cup: CupDef; unlocked: boolean; won: boolean; inProgress: boolean }[] {
-  return CUPS.map((cup) => ({
+/** A world's three cups with their state, for the world screen. */
+export function cupStates(career: Career, worldId: string): { cup: CupDef; unlocked: boolean; won: boolean; inProgress: boolean }[] {
+  return worldById(worldId).cupIds.map(cupById).map((cup) => ({
     cup,
     unlocked: career.isCupUnlocked(cup.id),
     won: career.save.wonCups.includes(cup.id),

@@ -64,6 +64,10 @@
 }
 .hdr__title {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 30px;
   font-weight: 900;
   font-style: italic;
@@ -333,6 +337,38 @@
 .racelist__row.is-next { background: rgba(255, 122, 26, 0.25); box-shadow: inset 3px 0 0 var(--orange); }
 .racelist__row.is-next .racelist__n { background: var(--orange); color: var(--ink); }
 
+/* --- Worlds ------------------------------------------------------------------------------ */
+.worldcards { flex: 1; display: flex; gap: var(--gap); min-height: 0; }
+.worldcard {
+  flex: 0 0 min(400px, 48%);
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(160deg, var(--world-from), var(--world-to));
+  font-size: 28px;
+  font-style: italic;
+  font-weight: 900;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+}
+.worldcard.btn { justify-content: flex-start; }
+.worldcard__blurb { font-size: 15px; font-weight: 600; font-style: normal; letter-spacing: 0.01em; line-height: 1.2; }
+.worldcard__thumbs { display: flex; gap: 6px; flex: 1; min-height: 0; }
+.worldcard__thumb { flex: 1; min-width: 0; height: 100%; max-height: 110px; object-fit: cover; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.35); }
+.worldcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.worldcard__cups { display: inline-flex; gap: 4px; font-size: 18px; }
+.cuppip { filter: grayscale(1) brightness(0.6); }
+.cuppip.is-won { filter: none; }
+.worldcard__status { font-size: 15px; font-style: normal; letter-spacing: 0.05em; padding: 4px 10px; border-radius: 8px; background: rgba(20, 8, 2, 0.45); }
+.worldcard.is-live .worldcard__status { background: var(--orange); color: var(--ink); text-shadow: none; }
+.worldcard:disabled { opacity: 0.6; filter: grayscale(0.55); }
+.quick__worlds { flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.quick__worlds .btn { font-size: 16px; white-space: nowrap; }
+.trackcard:disabled { opacity: 0.55; }
+
 /* --- Quick race --------------------------------------------------------------------------- */
 .trackcards { flex: 1; display: flex; gap: var(--gap); min-height: 0; padding-bottom: 2px; }
 .trackcard {
@@ -428,11 +464,11 @@
 .garage__upgrades .panel { overflow: auto; scrollbar-width: none; }
 .upgs { display: flex; flex-direction: column; gap: 6px; }
 .upgs.is-locked { opacity: 0.45; }
-.upg { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
-.upg__text { display: flex; flex-direction: column; min-width: 0; }
+.upg { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.upg__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .upg__name { font-size: 16px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .upg__blurb { font-size: 12px; color: var(--sand-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.upg .pips .pip { width: 9px; height: 14px; }
+.upg .pips .pip { width: 14px; height: 8px; }
 .upg__buy { min-width: 86px; min-height: 48px; padding: 2px 8px; font-size: 16px; }
 
 /* --- Settings ---------------------------------------------------------------------------- */
@@ -485,6 +521,7 @@
 
 /* --- Portrait --------------------------------------------------------------------------- */
 @media (orientation: portrait) {
+  .hdr__title { font-size: 24px; }
   .app[data-backdrop='showroom'] {
     background: linear-gradient(180deg, rgba(26, 12, 6, 0.75) 0%, transparent 12%, transparent 34%, rgba(26, 12, 6, 0.85) 46%, rgba(26, 12, 6, 0.95) 100%);
   }
@@ -494,6 +531,9 @@
   .menu__tiles { flex: none; width: 100%; grid-template-columns: 1fr; }
   .menu__tiles .btn { min-height: 76px; }
   .cupcards { flex-direction: column; overflow: auto; }
+  .worldcards { flex-direction: column; overflow-y: auto; }
+  .worldcard { flex: none; }
+  .worldcard__thumb { height: 80px; }
   .cupcard { flex: none; }
   .cup__body,
   .garage__body,

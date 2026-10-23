@@ -1,5 +1,6 @@
 // Main menu: four big tiles. The selected racer is named so the player knows what they'll fly.
 import { racerById } from '../../data/racers.ts';
+import { WORLDS } from '../../data/worlds.ts';
 import { button, creditsChip, h } from '../kit.ts';
 import type { AppCtx, Screen } from './context.ts';
 import { logo } from './title.ts';
@@ -7,13 +8,14 @@ import { logo } from './title.ts';
 export function mainMenuScreen(ctx: AppCtx): Screen {
   const save = ctx.career.save;
   const racer = racerById(save.selectedRacer);
+  const crowns = WORLDS.filter((w) => ctx.career.isWorldChampion(w.id));
   const tiles = h(
     'div',
     'menu__tiles',
     button({
       id: 'menu_championship_button',
       label: 'CHAMPIONSHIP',
-      sub: save.cup ? 'Cup in progress' : save.champion ? 'Mirage Champion' : 'Three cups to glory',
+      sub: save.cup ? 'Cup in progress' : `${WORLDS.filter((w) => ctx.career.isWorldUnlocked(w.id)).length} of ${WORLDS.length} worlds open`,
       aria: 'Championship',
       variant: 'primary',
       big: true,
@@ -48,7 +50,7 @@ export function mainMenuScreen(ctx: AppCtx): Screen {
     'div',
     'menu__side',
     logo(),
-    save.champion ? h('div', 'badge badge--gold', '★ MIRAGE CHAMPION') : null,
+    ...crowns.map((w) => h('div', 'badge badge--gold', `👑 ${w.name.toUpperCase()} CHAMPION`)),
     creditsChip(save.credits),
   );
   return { el: h('div', 'screen screen--menu', side, tiles), backdrop: 'sunset' };

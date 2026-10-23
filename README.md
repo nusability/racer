@@ -1,9 +1,10 @@
 # Mirage Racer
 
-An ultra-fast desert pod-racing game for phones. Engines out front, a tiny pod behind, and
-a track that wants you dead: jumps over chasms, tunnels, narrow canyons, rock arches and
-pillar slaloms at 600–800 km/h. Boost heats your engines. Win races to earn credits, buy and
-upgrade racers, and take the championship (or just do a quick race).
+An ultra-fast racing game for phones. Ground-effect skimmers (wide racing wings riding a
+cushion of air, pushed by ducted fans) tear across desert canyons and coral lagoons at
+600–800 km/h: chasm jumps, tunnels, sea stacks, risky shortcuts and boost cells to collect.
+Win races to earn credits, buy and upgrade skimmers, and take the cups of every world (or
+just do a quick race).
 
 - **Play the prototype**: GitHub Pages (published from `web/` by `.github/workflows/pages.yml`).
 - **Stage**: `prototype` (see `specs/spec.md`). Work is tracked on Stori project `MIRA`.

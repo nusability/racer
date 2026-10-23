@@ -1,14 +1,22 @@
-// Championship: the three cup cards, then a cup view with its races, standings and one big
-// RACE button for the next race.
+// Championship: world cards → a world's three cups (rookie, pro, elite) → a cup view with its
+// races, standings and one big RACE button for the next race.
 import { CUPS, cupById } from '../../data/championships.ts';
 import type { CupDef } from '../../data/championships.ts';
 import { racerById } from '../../data/racers.ts';
 import { trackById } from '../../data/tracks/index.ts';
+import { WORLDS, worldById } from '../../data/worlds.ts';
 import { cupStates } from '../../game/career.ts';
 import { racePayout } from '../../game/economy.ts';
 import { button, difficultyDots, formatCredits, h, header, panel } from '../kit.ts';
 import { trackThumb } from '../trackArt.ts';
 import type { AppCtx, Screen } from './context.ts';
+
+/** Cup tier as the player reads it. */
+export const TIER_NAMES = ['ROOKIE', 'PRO', 'ELITE'];
+/** Track previews shown on a world card. */
+const WORLD_CARD_THUMBS = 3;
+
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 function prizeLine(cup: CupDef): string {
   const p = racePayout({ mode: 'championship', place: 1, tier: cup.tier, laps: 1, standardLaps: 1, cupWin: { firstTime: true } });
@@ -16,8 +24,51 @@ function prizeLine(cup: CupDef): string {
 }
 
 export function championshipScreen(ctx: AppCtx): Screen {
+  const career = ctx.career;
+  const cards = WORLDS.map((w) => {
+    const unlocked = career.isWorldUnlocked(w.id);
+    const lockedBy = !unlocked && w.unlockedBy ? cupById(w.unlockedBy) : null;
+    const won = w.cupIds.filter((id) => career.save.wonCups.includes(id)).length;
+    const live = career.save.cup && cupById(career.save.cup.cupId).worldId === w.id;
+    const status = lockedBy
+      ? `🔒 Win the ${lockedBy.name} to open`
+      : career.isWorldChampion(w.id)
+        ? '👑 World champion'
+        : live
+          ? 'Cup in progress'
+          : `${won}/${w.cupIds.length} cups won`;
+    const card = button({
+      id: `championship_${w.id}_button`,
+      label: w.name.toUpperCase(),
+      aria: `${w.name}${unlocked ? '' : ' (locked)'}`,
+      disabled: !unlocked,
+      onTap: () => ctx.go({ screen: 'world', worldId: w.id }),
+    });
+    card.classList.add('worldcard');
+    if (live) card.classList.add('is-live');
+    card.style.setProperty('--world-from', hex(w.card.from));
+    card.style.setProperty('--world-to', hex(w.card.to));
+    const pips = h('span', 'worldcard__cups', ...w.cupIds.map((id) => h('span', career.save.wonCups.includes(id) ? 'cuppip is-won' : 'cuppip', '🏆')));
+    card.append(
+      h('span', 'worldcard__blurb', w.blurb),
+      h('span', 'worldcard__thumbs', ...w.trackIds.slice(0, WORLD_CARD_THUMBS).map((t) => trackThumb(t, 'worldcard__thumb'))),
+      h('span', 'worldcard__foot', pips, h('span', 'worldcard__status', status)),
+    );
+    return card;
+  });
+  const el = h(
+    'div',
+    'screen screen--champ',
+    header('championship', 'CHAMPIONSHIP', career.save.credits, () => ctx.go({ screen: 'menu' })),
+    h('div', 'worldcards list-scroll', ...cards),
+  );
+  return { el, backdrop: 'sunset' };
+}
+
+export function worldScreen(ctx: AppCtx, worldId: string): Screen {
   const run = ctx.career.save.cup;
-  const cards = cupStates(ctx.career).map(({ cup, unlocked, won, inProgress }) => {
+  const world = worldById(worldId);
+  const cards = cupStates(ctx.career, worldId).map(({ cup, unlocked, won, inProgress }) => {
     const prev = CUPS.find((c) => c.unlocks === cup.id);
     const status = !unlocked
       ? `🔒 Win the ${prev?.name ?? 'previous cup'} to unlock`
@@ -27,7 +78,7 @@ export function championshipScreen(ctx: AppCtx): Screen {
           ? '★ Won — race it again'
           : 'Ready';
     const card = button({
-      id: `championship_${cup.id}_button`,
+      id: `world_${cup.id}_button`,
       label: cup.name.toUpperCase(),
       aria: `${cup.name}${unlocked ? '' : ' (locked)'}`,
       disabled: !unlocked,
@@ -36,7 +87,7 @@ export function championshipScreen(ctx: AppCtx): Screen {
     card.classList.add('cupcard', `cupcard--t${cup.tier}`);
     if (won) card.classList.add('is-won');
     if (inProgress) card.classList.add('is-live');
-    card.prepend(h('span', 'cupcard__tier', `CUP ${cup.tier}`));
+    card.prepend(h('span', 'cupcard__tier', TIER_NAMES[cup.tier - 1]));
     card.append(
       h('span', 'cupcard__blurb', cup.blurb),
       h('span', 'cupcard__prize', prizeLine(cup)),
@@ -47,7 +98,7 @@ export function championshipScreen(ctx: AppCtx): Screen {
   const el = h(
     'div',
     'screen screen--champ',
-    header('championship', 'CHAMPIONSHIP', ctx.career.save.credits, () => ctx.go({ screen: 'menu' })),
+    header('world', world.name.toUpperCase(), ctx.career.save.credits, () => ctx.go({ screen: 'championship' })),
     h('div', 'cupcards', ...cards),
   );
   return { el, backdrop: 'sunset' };
@@ -138,7 +189,7 @@ export function cupScreen(ctx: AppCtx, cupId: string): Screen {
   const el = h(
     'div',
     'screen screen--cup',
-    header('cup', cup.name.toUpperCase(), career.save.credits, () => ctx.go({ screen: 'championship' })),
+    header('cup', cup.name.toUpperCase(), career.save.credits, () => ctx.go({ screen: 'world', worldId: cup.worldId })),
     h('div', 'cup__body', panel('RACES', h('ol', 'racelist', ...races)), panel('STANDINGS', table)),
     actions,
   );

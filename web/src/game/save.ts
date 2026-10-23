@@ -1,13 +1,13 @@
-// The versioned save blob. Prototype stage: a save from another version, or one that fails to
+// The versioned save blob. Prototype stage: a save from an unknown version, or one that fails to
 // parse or validate, is replaced by a fresh one (with a console warning) rather than migrated.
 import type { UpgradeId } from '../core/types.ts';
-import { CUPS, cupById } from '../data/championships.ts';
+import { cupById } from '../data/championships.ts';
 import { RACERS, racerById } from '../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, noUpgrades } from '../data/upgrades.ts';
 import type { UpgradeLevels } from '../data/upgrades.ts';
 import type { Settings } from './types.ts';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'mirage-racer.save';
 /** How many applied race ids are remembered to make applying an outcome idempotent. */
 export const APPLIED_RACE_MEMORY = 16;
@@ -34,9 +34,8 @@ export interface SaveData {
   /** Upgrade levels per owned racer id. */
   upgrades: Record<string, UpgradeLevels>;
   cup: CupRun | null;
-  unlockedCups: string[];
+  /** Every cup won at least once. Cup and world unlocks are derived from it (career.ts). */
   wonCups: string[];
-  champion: boolean;
   records: Record<string, TrackRecord>;
   settings: Settings;
   /** Increments per applied race; names the next race id and seeds it. */
@@ -64,9 +63,7 @@ export function freshSave(): SaveData {
     selectedRacer: starter.id,
     upgrades: { [starter.id]: noUpgrades() },
     cup: null,
-    unlockedCups: [CUPS[0].id],
     wonCups: [],
-    champion: false,
     records: {},
     settings: defaultSettings(),
     raceSerial: 1,
@@ -123,11 +120,8 @@ function validate(d: Record<string, unknown>): SaveData {
     check((cup.raceIndex as number) >= 0 && (cup.raceIndex as number) <= def.trackIds.length, 'cup raceIndex');
     check(Object.values(cup.points as object).every(isInt), 'cup points');
   }
-  check(isStrArr(d.unlockedCups) && d.unlockedCups.length > 0, 'unlockedCups');
   check(isStrArr(d.wonCups), 'wonCups');
-  (d.unlockedCups as string[]).forEach(cupById);
   (d.wonCups as string[]).forEach(cupById);
-  check(typeof d.champion === 'boolean', 'champion');
   check(isObj(d.records), 'records');
   for (const rec of Object.values(d.records as object)) {
     check(isObj(rec) && (rec.bestLap === null || typeof rec.bestLap === 'number') && isObj(rec.bestRace), 'record');
@@ -136,6 +130,17 @@ function validate(d: Record<string, unknown>): SaveData {
   check(isInt(d.raceSerial) && d.raceSerial >= 1, 'raceSerial');
   check(isStrArr(d.appliedRaceIds), 'appliedRaceIds');
   return d as unknown as SaveData;
+}
+
+/**
+ * v1 → v2 (worlds): unlocks are now derived from the cups won, so the stored unlock list and
+ * champion flag go; everything a v1 player earned is kept.
+ */
+function migrateV1(d: Record<string, unknown>): void {
+  renameCoolingToTank(d);
+  delete d.unlockedCups;
+  delete d.champion;
+  d.version = 2;
 }
 
 /**
@@ -157,7 +162,7 @@ export function decodeSave(raw: string | null): SaveData {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!isObj(parsed)) throw new SaveInvalid('not an object');
-    renameCoolingToTank(parsed);
+    if (parsed.version === 1) migrateV1(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);

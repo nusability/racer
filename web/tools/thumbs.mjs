@@ -17,6 +17,7 @@ import { chromium } from 'playwright-core';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(WEB, 'public', 'thumbs');
+const VITE = join(WEB, 'node_modules', 'vite', 'bin', 'vite.js');
 /** Imported by the menus (src/ui/trackArt.ts): which s each thumb used, plus the outline. */
 const MANIFEST = join(WEB, 'src', 'data', 'trackThumbs.json');
 /** Outline vertices per ribbon; enough for a ~48 px corner icon. */
@@ -24,10 +25,12 @@ const OUTLINE_POINTS = 96;
 const WIDTH = 640;
 const HEIGHT = 360;
 /** WebP quality: keeps each thumb under ~60 KB at 640x360. */
-const WEBP_QUALITY = 0.72;
+const WEBP_QUALITY = 0.85;
 const MAX_BYTES = 60 * 1024;
 /** Frames the scene gets to settle (textures, instancing) before the shot. */
 const SETTLE_MS = 1500;
+/** Boost cells closer than this ahead of the camera are hidden for the shot. */
+const CELL_CLEAR_M = 60;
 /** Explore mode: evenly spaced candidate spots per lap. */
 const EXPLORE_SPOTS = 12;
 
@@ -37,14 +40,20 @@ const EXPLORE_SPOTS = 12;
  * when a track's layout changes.
  */
 const SHOTS = {
-  sunpan: { u: 0, x: 0, branch: -1, why: 'spaceport' },
-  rattlesnake: { u: 0, x: 0, branch: -1, why: 'mine' },
-  oasis: { u: 0, x: 0, branch: -1, why: 'oasis town' },
-  bonecanyon: { u: 0, x: 0, branch: -1, why: 'colossus' },
-  glasssea: { u: 0, x: 0, branch: -1, why: 'sand beast' },
-  devilsteeth: { u: 0, x: 0, branch: -1, why: 'mine' },
-  mirageh: { u: 0, x: 0, branch: -1, why: 'colossus' },
-  stormfront: { u: 0, x: 0, branch: -1, why: 'invasion' },
+  sunpan: { u: 0.083, x: 0, branch: -1, why: 'spaceport beams and blimps' },
+  rattlesnake: { u: 0.5, x: 0, branch: -1, why: 'Fang Gulch canyon' },
+  oasis: { u: 0.417, x: 0, branch: -1, why: 'the lit bore under Table Mesa' },
+  bonecanyon: { u: 0.167, x: 0, branch: -1, why: 'gorge and stone arch' },
+  glasssea: { u: 0.083, x: 0, branch: -1, why: 'dusk, balloons and the Triple Leap marking' },
+  devilsteeth: { u: 0.333, x: 0, branch: -1, why: 'the twin rock fangs' },
+  mirageh: { u: 0.25, x: 0, branch: -1, why: 'the wind farm' },
+  stormfront: { u: 0.833, x: 0, branch: -1, why: 'spaceport in the storm haze' },
+  coralcove: { u: 0.083, x: 0, branch: -1, why: 'lagoon and palms' },
+  lagoonloop: { u: 0.833, x: 0, branch: -1, why: 'beachfront towers over the lagoon' },
+  boardwalk: { u: 0.083, x: 0, branch: -1, why: 'the fairground at sunset' },
+  seastacks: { u: 0.25, x: 0, branch: -1, why: 'the cliff tunnel mouth' },
+  tidalcaves: { u: 0.333, x: 0, branch: -1, why: 'the sea gorge' },
+  volcanoisle: { u: 0.333, x: 0, branch: -1, why: 'the volcano' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
@@ -59,7 +68,7 @@ function build(outDir) {
   const config = join(outDir, '..', `${basename(outDir)}.vite.config.mjs`);
   const viewer = JSON.stringify(join(WEB, 'track-viewer.html'));
   writeFileSync(config, `export default { root: ${JSON.stringify(WEB)}, base: './', build: { target: 'es2022', chunkSizeWarningLimit: 1500, rollupOptions: { input: { trackViewer: ${viewer} } } } };\n`);
-  const r = spawnSync('npx', ['vite', 'build', '--config', config, '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], { cwd: WEB, stdio: 'inherit' });
+  const r = spawnSync(process.execPath, [VITE, 'build', '--config', config, '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], { cwd: WEB, stdio: 'inherit' });
   rmSync(config);
   if (r.status !== 0) throw new Error(`vite build failed (${r.status})`);
 }
@@ -80,7 +89,8 @@ let PORT = 0;
 
 async function preview(outDir) {
   PORT = await freePort();
-  const proc = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(PORT), '--strictPort'], { cwd: WEB, stdio: 'ignore' });
+  // Run vite's own entry (not npx) so killing this process really stops the server.
+  const proc = spawn(process.execPath, [VITE, 'preview', '--outDir', outDir, '--port', String(PORT), '--strictPort'], { cwd: WEB, stdio: 'ignore' });
   let exited = null;
   proc.on('exit', (code) => (exited = code));
   const deadline = Date.now() + SERVER_TIMEOUT_MS;
@@ -101,12 +111,21 @@ async function shoot(page, trackId, shot) {
   await page.goto(`http://localhost:${PORT}/track-viewer.html?track=${trackId}&pause=1&view=fly`);
   await page.addStyleTag({ content: HIDE_OVERLAY });
   await page.waitForFunction(() => 'viewer' in window);
-  const s = await page.evaluate(({ u, x, branch }) => {
-    const v = window.viewer;
-    const target = v.track.ribbon(branch).length * u;
-    v.set({ branch, s: target, x, view: 'fly', paused: true });
-    return target;
-  }, shot);
+  const s = await page.evaluate(
+    ({ shot: { u, x, branch }, clear }) => {
+      const v = window.viewer;
+      const ribbon = v.track.ribbon(branch);
+      const target = ribbon.length * u;
+      // A boost cell just ahead of the lens fills the frame with glow; take it first.
+      for (const c of ribbon.cells) {
+        const ahead = ribbon.delta(target, c.s);
+        if (ahead > -10 && ahead < clear) v.collect(branch, c.index);
+      }
+      v.set({ branch, s: target, x, view: 'fly', paused: true });
+      return target;
+    },
+    { shot, clear: CELL_CLEAR_M },
+  );
   await page.waitForTimeout(SETTLE_MS);
   page.assertClean();
   return { s, png: await page.screenshot({ type: 'png' }) };
