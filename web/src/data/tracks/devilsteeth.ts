@@ -92,6 +92,7 @@ export const devilsteeth: TrackDef = {
 };
 
 export const devilsteethScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 8,
   spires: 20,
   duneHeight: 5,

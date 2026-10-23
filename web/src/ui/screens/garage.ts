@@ -100,7 +100,7 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
     const next = button({ id: 'garage_next_button', label: '›', aria: 'Next racer', variant: 'icon', onTap: () => step(1) });
     prev.classList.add('carousel__prev');
     next.classList.add('carousel__next');
-    const carousel = h('div', 'carousel', prev, next, h('div', 'carousel__foot', dots, primary));
+    const carousel = h('div', 'carousel', h('div', 'garage__window', prev, next), h('div', 'carousel__foot', dots, primary));
 
     const rows = UPGRADES.map((u) => {
       const lvl = levels[u.id];

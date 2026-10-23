@@ -1,5 +1,5 @@
 import type { Branch, Ribbon, Track } from '../../core/track.ts';
-import type { TrackFeature } from '../../core/types.ts';
+import type { TrackFeature, TrackParam } from '../../core/types.ts';
 import { BRANCH_JUNCTION_LENGTH } from '../../data/tuning.ts';
 import {
   CANYON_MIN_HEIGHT,
@@ -37,6 +37,8 @@ export interface CorridorShape {
   run: [Float32Array, Float32Array];
   /** Lateral reach of the corridor geometry from the centreline, metres. */
   outer: [Float32Array, Float32Array];
+  /** The run-off here is lagoon water (a sea biome), not sand: no lip, no strip, buoys. */
+  water: Uint8Array;
   /** The side opens onto a neighbouring ribbon (a junction): no side geometry at all. */
   open: [Uint8Array, Uint8Array];
   /** Horizontal unit right vector (bank removed): side geometry stands on world up. */
@@ -49,8 +51,17 @@ const CANYON_RAMP = 10;
 
 export const sideIndex = (side: number): 0 | 1 => (side > 0 ? 1 : 0);
 
-export function ribbonViews(track: Track): RibbonView[] {
+/** Main-loop param spans whose run-off is water. */
+export type WaterSpans = { from: TrackParam; to: TrackParam }[];
+
+export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
   const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track) }];
+  const mainWater = views[0].shape.water;
+  for (const w of water) {
+    const s0 = track.paramToS(w.from);
+    const len = track.wrap(track.paramToS(w.to) - s0);
+    for (let d = 0; d <= len; d += track.step / 2) mainWater[Math.round(track.wrap(s0 + d) / track.step) % track.samples.length] = 1;
+  }
   for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon) });
   // Junctions: each ribbon's side facing the other opens, since the other's road covers it.
   for (const b of track.branches) {
@@ -90,6 +101,7 @@ export function corridorShape(r: Ribbon): CorridorShape {
   const run: [Float32Array, Float32Array] = [new Float32Array(n), new Float32Array(n)];
   const outer: [Float32Array, Float32Array] = [new Float32Array(n), new Float32Array(n)];
   const open: [Uint8Array, Uint8Array] = [new Uint8Array(n), new Uint8Array(n)];
+  const water = new Uint8Array(n);
   const rx = new Float32Array(n);
   const rz = new Float32Array(n);
   for (let k = 0; k < n; k++) {
@@ -115,5 +127,5 @@ export function corridorShape(r: Ribbon): CorridorShape {
     rx[k] = smp.right.x / l;
     rz[k] = smp.right.z / l;
   }
-  return { wall, canyon, tunnel, run, outer, open, rx, rz };
+  return { wall, canyon, tunnel, run, outer, water, open, rx, rz };
 }

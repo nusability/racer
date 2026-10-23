@@ -57,6 +57,12 @@ export const ANISOTROPY = 8;
 /** Procedural texture resolution (square, power of two). */
 export const TEXTURE_SIZE = { low: 512, high: 1024 } as const;
 
+// --- Water (biomes with a sea) ---
+/** The sea surface height, metres; roads beside water stay well above it. */
+export const SEA_LEVEL = 0;
+/** Depth of the sea bed under a lagoon's water run-off, metres. */
+export const LAGOON_DEPTH = 1.4;
+
 // --- Terrain ---
 /** Terrain extends this far past the course's bounding box. */
 export const TERRAIN_MARGIN = 1900;

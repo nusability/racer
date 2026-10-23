@@ -2,6 +2,11 @@
 
 import * as THREE from 'three';
 import type { Landmark, LandmarkFactory, LandmarkOptions } from './types.ts';
+import { createLighthouse } from './c/lighthouse.ts';
+import { createResort } from './c/resort.ts';
+import { createRegatta } from './c/regatta.ts';
+import { createCruiseliner } from './c/cruiseliner.ts';
+import { createPier } from './c/pier.ts';
 
 type SetCKind = 'lighthouse' | 'pier' | 'cruiseliner' | 'regatta' | 'resort' | 'harbor' | 'volcano' | 'whales' | 'beachParty' | 'airshow';
 
@@ -16,11 +21,11 @@ function box(w: number, h: number, d: number) {
 }
 
 export const LANDMARKS_C: Record<SetCKind, LandmarkFactory> = {
-  lighthouse: box(40, 60, 40),
-  pier: box(40, 50, 300),
-  cruiseliner: box(320, 60, 45),
-  regatta: box(300, 30, 300),
-  resort: box(250, 90, 150),
+  lighthouse: createLighthouse,
+  pier: createPier,
+  cruiseliner: createCruiseliner,
+  regatta: createRegatta,
+  resort: createResort,
   harbor: box(300, 70, 200),
   volcano: box(900, 350, 900),
   whales: box(250, 30, 250),

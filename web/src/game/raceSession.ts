@@ -367,6 +367,7 @@ export class RaceSession {
         heat: r.boosting ? SESSION_BOOST_NOZZLE_HEAT : SESSION_IDLE_NOZZLE_HEAT,
         damage: r.damage,
         steer: r.steer,
+        groundColor: this.track.def.palette.sand,
         airborne: r.airborne,
         crashed: r.crashed > 0,
       });

@@ -67,12 +67,22 @@ function wrapStroke(h: number, draw: (dy: number) => void) {
   for (const dy of [-h, 0, h]) draw(dy);
 }
 
+/** What the paved road and its run-off strip are made of. */
+export interface RoadStyle {
+  surface: 'packed' | 'causeway' | 'boardwalk';
+  runoff: 'sand' | 'wetsand';
+}
+
+/** Boardwalk plank depth along the road, metres, and the gap between planks. */
+const PLANK = 0.32;
+const PLANK_GAP = 0.04;
+
 /**
  * Road atlas: paved road on the left half (u 0..0.5, edge to edge), run-off sand on the right
  * half (u 0.5 at the road edge to 1 at the hard boundary). Both repeat every
  * ROAD_TEXTURE_LENGTH metres along the lap.
  */
-export function roadTexture(palette: TrackPalette, seed: number, quality: Quality): THREE.CanvasTexture {
+export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: number, quality: Quality): THREE.CanvasTexture {
   const W = TEXTURE_SIZE[quality];
   const H = W * 2;
   const R = W / 2;
@@ -83,6 +93,27 @@ export function roadTexture(palette: TrackPalette, seed: number, quality: Qualit
   // --- Paved road ---
   ctx.fillStyle = css(palette.road);
   ctx.fillRect(0, 0, R, H);
+  if (style.surface === 'boardwalk') {
+    // Planks across the road: each its own tone, with dark gaps and nail rows.
+    for (let y = 0; y < H; y += PLANK * pxPerM) {
+      ctx.fillStyle = css(palette.road, 0.82 + rng() * 0.3);
+      ctx.fillRect(0, y, R, PLANK * pxPerM);
+      ctx.fillStyle = css(palette.road, 0.45, 0.9);
+      ctx.fillRect(0, y, R, Math.max(1, PLANK_GAP * pxPerM));
+      for (let x = 0.12; x < 1; x += 0.25) ctx.fillRect(x * R, y + (PLANK * pxPerM) / 2, 2, 2);
+    }
+  } else if (style.surface === 'causeway') {
+    // Concrete slabs with sand blown across them.
+    for (let y = 0; y < H; y += 4 * pxPerM) {
+      ctx.fillStyle = css(palette.road, 0.75, 0.6);
+      ctx.fillRect(0, y, R, 2);
+    }
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = css(palette.sand, 1, 0.12 + rng() * 0.18);
+      const y = rng() * H;
+      wrapStroke(H, (dy) => ctx.fillRect(0, y + dy, R, 30 + rng() * 120));
+    }
+  }
   // Repair patches and tonal blotches.
   for (let i = 0; i < 26; i++) {
     const x = rng() * R;
@@ -163,9 +194,11 @@ export function roadTexture(palette: TrackPalette, seed: number, quality: Qualit
   }
 
   // --- Run-off sand (u 0.5 road side → 1 boundary) ---
+  // Wet sand is the beach's run-off: darker, cooler, glossy where the tide just left.
+  const wet = style.runoff === 'wetsand';
   const sand = (k: number, a = 1) => {
-    const [r1, g1, b1] = rgb(palette.sand);
-    const [r2, g2, b2] = rgb(palette.road);
+    const [r1, g1, b1] = rgb(palette.sand, wet ? 0.78 : 1);
+    const [r2, g2, b2] = rgb(wet ? 0x8a9aa0 : palette.road);
     return `rgba(${Math.round((r1 * 0.7 + r2 * 0.3) * k)},${Math.round((g1 * 0.7 + g2 * 0.3) * k)},${Math.round((b1 * 0.7 + b2 * 0.3) * k)},${a})`;
   };
   const grad = ctx.createLinearGradient(R, 0, W, 0);

@@ -9,12 +9,12 @@ import { championshipGrid, playerEntrant } from '../src/game/opponents.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
 import { AiDriver } from '../src/core/ai.ts';
+import { steerRate } from '../src/core/vehicle.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput } from '../src/core/types.ts';
 
-const IDLE: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
-/** A bot holding boost from the start gets the launch boost at GO. */
-const HOLD_BOOST: PlayerInput = { ...IDLE, boost: true };
+/** Both bots hold boost through the countdown, so they get the launch boost at GO. */
+const HOLD_BOOST: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: true };
 /** A race longer than this many seconds per lap means someone is stuck. */
 const TIMEOUT_PER_LAP = 240;
 /** Races per track per bot (different seeds) to average out luck. */
@@ -51,7 +51,10 @@ export function botDriver(race: Race, seed: number, bot: PlayerBot): (r: Race) =
     seen.push(eyes.aimX);
     // Drag control: the finger puts the target where the player saw the gap, late.
     const aim = seen.length > delay ? (seen.shift() as number) : v.targetX;
-    return { steer: 0, nudge: aim - v.targetX, brake: bot.brakes && wanted.brake, boost: bot.holdBoost || wanted.boost };
+    // A thumb drags smoothly: the target moves no faster than full steer would move it.
+    const reach = steerRate(v.stats) * SIM_DT;
+    const nudge = Math.max(-reach, Math.min(reach, aim - v.targetX));
+    return { steer: 0, nudge, brake: bot.brakes && wanted.brake, boost: bot.holdBoost || wanted.boost };
   };
 }
 
@@ -69,7 +72,7 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const maxSteps = Math.ceil((track.def.laps * TIMEOUT_PER_LAP) / SIM_DT);
   for (let n = 0; race.phase !== 'finished'; n++) {
     if (n > maxSteps) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} race timed out`);
-    race.step(race.phase === 'countdown' ? (bot.holdBoost ? HOLD_BOOST : IDLE) : drive(race));
+    race.step(race.phase === 'countdown' ? HOLD_BOOST : drive(race));
   }
   const me = race.player();
   if (me.finishTime === null) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} never finished`);

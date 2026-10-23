@@ -1,11 +1,13 @@
 // Chase-camera feel. Distances in metres, angles in degrees, rates per second.
 
+import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
+
 /** Distance behind the racer at standstill and at top speed. */
-export const CAM_BACK_MIN = 11.5;
-export const CAM_BACK_MAX = 13;
+export const CAM_BACK_MIN = 10.5;
+export const CAM_BACK_MAX = 12;
 /** Extra pull-back while boosting: the racer surges away from the camera. */
 export const CAM_BACK_BOOST = 2.5;
-export const CAM_HEIGHT = 3.8;
+export const CAM_HEIGHT = 3.3;
 export const CAM_LOOK_AHEAD = 40;
 export const CAM_LOOK_HEIGHT = 3.4;
 /** How much of the racer's lateral offset the camera copies (lower = racer swings more). */
@@ -24,8 +26,8 @@ export const CAM_PORTRAIT_FOV_SCALE = 1.3;
 export const CAM_SHAKE_DECAY = 2.5;
 
 // --- Racer pose ---
-/** Visual hover gap between the road and the craft's centre. */
-export const POSE_VISUAL_HOVER = 1.1;
+/** Visual hover gap between the road and the craft's centre: the skimmer's ride height. */
+export const POSE_VISUAL_HOVER = SKIMMER_RIDE_HEIGHT;
 /** Nose up/down limit when flying, radians. */
 export const POSE_MAX_PITCH = 0.45;
 /** Opponents closer than this to the camera are hidden instead of filling the lens. */

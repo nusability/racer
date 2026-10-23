@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, range, type Rng } from '../../core/rng.ts';
-import type { TrackScenery } from '../../data/tracks/scenery.ts';
+import type { DesertScenery } from '../../data/tracks/scenery.ts';
 import { FlatBuilder, type P3 } from './builder.ts';
 import { RIDGE_RISE, RUNOFF_MIN, type Quality } from './config.ts';
 import { sideIndex } from './shape.ts';
@@ -21,14 +21,14 @@ const POOL_RADIUS = 34;
 /** Oasis pools sit this far past the road edge. */
 const POOL_SETBACK = 55;
 
-interface Placement {
+export interface Placement {
   pos: P3;
   yaw: number;
   scale: P3;
   color?: THREE.Color;
 }
 
-function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: Placement[], name: string): THREE.InstancedMesh | null {
+export function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: Placement[], name: string): THREE.InstancedMesh | null {
   if (list.length === 0) return null;
   const mesh = new THREE.InstancedMesh(geo, mat, list.length);
   const m = new THREE.Matrix4();
@@ -62,7 +62,7 @@ function scatterSpots(cor: Corridor, count: number, rng: Rng, minOut: number, sp
   return out;
 }
 
-export function buildInstanced(cor: Corridor, scenery: TrackScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
+export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
   const rng = mulberry32(seed ^ 0x1ce);
   const track = cor.ribbon;
   const meshes: THREE.InstancedMesh[] = [];
@@ -210,7 +210,7 @@ function shard(): THREE.BufferGeometry {
   return finish(b);
 }
 
-function palm(): THREE.BufferGeometry {
+export function palm(): THREE.BufferGeometry {
   const b = new FlatBuilder();
   const bark = new THREE.Color(0x7a5434);
   const frond = new THREE.Color(0x3f8a3a);

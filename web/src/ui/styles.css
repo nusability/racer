@@ -34,7 +34,7 @@
   pointer-events: none;
 }
 .app[data-backdrop='showroom'] {
-  background: linear-gradient(90deg, rgba(26, 12, 6, 0.9) 0%, rgba(26, 12, 6, 0.35) 32%, transparent 42%, transparent 60%, rgba(26, 12, 6, 0.35) 66%, rgba(26, 12, 6, 0.9) 100%);
+  background: linear-gradient(90deg, rgba(26, 12, 6, 0.9) 0%, rgba(26, 12, 6, 0.6) 30%, transparent 36%, transparent 64%, rgba(26, 12, 6, 0.6) 70%, rgba(26, 12, 6, 0.9) 100%);
 }
 
 /* --- Screen frame ------------------------------------------------------------------- */
@@ -359,7 +359,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(230px, 280px) 1fr minmax(280px, 330px);
+  /* Equal side columns keep the centre window symmetric, so the showroom frames the racer
+     on the viewport's centre line. */
+  --garage-side: clamp(250px, 31vw, 340px);
+  grid-template-columns: var(--garage-side) 1fr var(--garage-side);
   gap: var(--gap);
 }
 .garage__info { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
@@ -367,9 +370,11 @@
 .garage__pilot { font-size: 15px; font-weight: 700; color: var(--orange-hi); letter-spacing: 0.06em; }
 .garage__blurb { margin: 0 0 4px; font-size: 15px; line-height: 1.2; color: var(--sand); }
 .garage__stage { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
-.carousel { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.carousel { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The clear window the 3D racer is framed in: only the arrows sit on its edges. */
+.garage__window { position: relative; flex: 1; min-height: 0; }
 .carousel__prev,
-.carousel__next { position: absolute; top: 42%; margin-top: calc(var(--tap) / -2); }
+.carousel__next { position: absolute; top: 50%; margin-top: calc(var(--tap) / -2); }
 .carousel__prev { left: 0; }
 .carousel__next { right: 0; }
 .carousel__foot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
@@ -387,7 +392,7 @@
 .upg__name { font-size: 16px; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .upg__blurb { font-size: 12px; color: var(--sand-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .upg .pips .pip { width: 9px; height: 14px; }
-.upg__buy { min-width: 92px; min-height: 48px; padding: 2px 8px; font-size: 16px; }
+.upg__buy { min-width: 86px; min-height: 48px; padding: 2px 8px; font-size: 16px; }
 
 /* --- Settings ---------------------------------------------------------------------------- */
 .settings__body { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--gap); align-items: start; min-height: 0; }

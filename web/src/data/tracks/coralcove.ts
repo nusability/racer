@@ -1,0 +1,91 @@
+import type { TrackDef } from '../../core/types.ts';
+import type { TrackScenery } from './scenery.ts';
+
+// The Coral Coast's first lesson: a wide coast road that skims straight across a turquoise
+// lagoon, a gentle leap over the reef channel and an easy cut behind the lighthouse headland.
+export const coralcove: TrackDef = {
+  id: 'coralcove',
+  name: 'Coral Cove',
+  blurb: 'Skim the lagoon flat out, hop the reef channel, wave at the beach party.',
+  difficulty: 1,
+  laps: 3,
+  seed: 1101,
+  width: 54,
+  runoff: 75,
+  points: [
+    { x: 0, z: 0, y: 1.5 },
+    { x: 900, z: 0, y: 1.5 },
+    { x: 1700, z: -100, y: 1.5 },
+    { x: 2350, z: -450, y: 2 },
+    { x: 2600, z: -1100, y: 3 },
+    { x: 2400, z: -1800, y: 4 },
+    { x: 2000, z: -2550, y: 4 },
+    { x: 1200, z: -2700, y: 3 },
+    { x: 500, z: -2200, y: 2.5 },
+    { x: -100, z: -1800, y: 2.5 },
+    { x: -400, z: -1100, y: 2.5 },
+    { x: -380, z: -450, y: 2 },
+    { x: -200, z: -120, y: 1.5 },
+  ],
+  features: [
+    { kind: 'boostCells', at: 0.1, lateral: 0, count: 5, spacing: 30 },
+    { kind: 'boostPad', at: 0.3, lateral: -10 },
+    { kind: 'boostPad', at: 0.3, lateral: 10 },
+    { kind: 'boostCells', at: 0.9, lateral: 35, count: 6, spacing: 35 },
+    { kind: 'boostCells', at: 1.5, lateral: -35, count: 6, spacing: 35 },
+    { kind: 'boostPad', at: 1.9, lateral: 0 },
+    { kind: 'boostPad', at: 1.94, lateral: 0 },
+    { kind: 'jump', at: 3.3, rampLength: 60, rampHeight: 4, gapLength: 40 },
+    { kind: 'boostCells', at: 3.75, lateral: 0, count: 5, spacing: 35 },
+    { kind: 'dunes', from: 4.2, to: 4.9, amplitude: 1.5, wavelength: 240 },
+    { kind: 'boostCells', at: 6.4, lateral: -18, count: 6, spacing: 30 },
+    { kind: 'boostPad', at: 7.5, lateral: 0 },
+    { kind: 'boulders', from: 9.2, to: 9.45, count: 5, radius: 3 },
+    { kind: 'boostCells', at: 9.25, lateral: 45, count: 4, spacing: 28 },
+    { kind: 'boostPad', at: 10.3, lateral: 0 },
+    { kind: 'boostPad', at: 10.34, lateral: 0 },
+    { kind: 'kicker', at: 11.2, length: 40, height: 2 },
+    { kind: 'boostCells', at: 11.5, lateral: 0, count: 5, spacing: 35 },
+  ],
+  branches: [
+    {
+      id: 'reefrun',
+      name: 'Reef Run',
+      side: -1,
+      from: 5.15,
+      to: 8.0,
+      width: 22,
+      runoff: 0,
+      points: [
+        { x: 2200, z: -2050, y: 4 },
+        { x: 1700, z: -2250, y: 3.5 },
+        { x: 1100, z: -2300, y: 3 },
+      ],
+      features: [
+        { kind: 'boostCells', at: 2.3, lateral: 0, count: 6, spacing: 35 },
+        { kind: 'boostPad', at: 3.5, lateral: 0 },
+      ],
+    },
+  ],
+  palette: { sky: 0x2f8be0, horizon: 0xd8f0f4, sand: 0xf3e2b8, road: 0xc9c2b0, rock: 0x8a7a6a, accent: 0xff6a3a, sun: 0xfff6e0, dusk: 0 },
+};
+
+export const coralcoveScenery: TrackScenery = {
+  biome: 'beach',
+  boundary: 'dune',
+  lagoons: [{ from: 0.2, to: 2.3 }],
+  land: 0.35,
+  landHeight: 5,
+  islands: 9,
+  stacks: 8,
+  palmsPerKm: 22,
+  hutsPerKm: 4,
+  road: 'causeway',
+  landmarks: [
+    { kind: 'beachParty', at: 1.1, side: 1, distance: 10 },
+    { kind: 'lighthouse', at: 6.2, side: 1, distance: 30, afloat: true },
+    { kind: 'regatta', at: 3.6, side: 1, distance: 150, afloat: true },
+    { kind: 'whales', at: 9.8, side: -1, distance: 200, afloat: true },
+    { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
+  ],
+};

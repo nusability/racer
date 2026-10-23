@@ -9,15 +9,15 @@ import { buildDressing } from './track/dressing.ts';
 import { buildRockFeatures } from './track/features.ts';
 import { Ground } from './track/ground.ts';
 import { buildHazards } from './track/hazards.ts';
-import { buildHorizon } from './track/horizon.ts';
-import { buildInstanced } from './track/instanced.ts';
 import { buildJunctions, type SignQuads } from './track/junction.ts';
 import { checkLandmarkClearance, placeLandmarks, updateLandmarks } from './track/landmarks.ts';
 import { makePaint } from './track/paint.ts';
 import { buildPosts } from './track/posts.ts';
 import { ribbonViews } from './track/shape.ts';
 import { buildTerrain } from './track/terrain.ts';
-import { boostTexture, roadTexture, rockTexture, sandTexture, signTexture } from './track/textures.ts';
+import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
+import { biomeKit } from './track/biomes/index.ts';
+import { worldOfTrack } from '../data/worlds.ts';
 
 export { applyEnvironment } from './track/environment.ts';
 
@@ -28,6 +28,11 @@ export interface TrackScene {
   collectCell(branch: number, cell: number): void;
   /** A new lap for the player: every cell shows again. */
   resetCells(): void;
+  /**
+   * What a craft at (s, x) on a ribbon (branch -1 = main loop) kicks up, as an sRGB hex:
+   * road grit, run-off sand, or white spray over water.
+   */
+  groundColorAt(branch: number, s: number, x: number): number;
   dispose(): void;
 }
 
@@ -41,13 +46,16 @@ const CORNER_STANDS = { low: 1, high: 3 } as const;
 export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   const def = track.def;
   const scenery = sceneryById(def.id);
+  const biome = worldOfTrack(def.id).biome;
+  if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
+  const kit = biomeKit(scenery, def.palette);
   const paint = makePaint(def.palette);
-  const views = ribbonViews(track);
-  const ground = new Ground(views, scenery, def.palette, def.seed);
+  const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
+  const ground = new Ground(views, kit.ground, def.seed);
   // Landmarks first: they level the ground the corridor and terrain then read.
   const landmarks = placeLandmarks(track, scenery, ground, quality);
   const glow = new FlatBuilder();
-  const scatter: Scatter = { pylons: [], lights: [] };
+  const scatter: Scatter = { pylons: [], lights: [], buoys: [] };
   const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter));
   for (const c of corridors) {
     buildHazards(c);
@@ -60,10 +68,11 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
 
   const group = new THREE.Group();
   group.name = `track:${def.id}`;
+  const detail = kit.detail(def.seed, quality);
   const tex = {
-    road: roadTexture(def.palette, def.seed, quality),
-    sand: sandTexture(def.seed, quality),
-    rock: rockTexture(def.seed, quality),
+    road: roadTexture(def.palette, kit.road, def.seed, quality),
+    sand: detail.sand,
+    rock: detail.rock,
     pad: boostTexture(),
     sign: signTexture(track.branches.map((b) => ({ name: b.def.name, side: b.side })), def.palette.accent),
   };
@@ -105,9 +114,9 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     group.add(t);
     if (t.geometry.boundingSphere && t.geometry.boundingSphere.radius < 2000) cullable.push(t);
   }
-  add(buildHorizon(corridors[0], scenery, quality, def.seed).build(ROCK_TILE), mats.rock, 'horizon');
+  const dressing = kit.dress({ corridors, ground, quality, seed: def.seed, buoys: scatter.buoys, lit: mats.plain, unlit: mats.unlit, rock: mats.rock });
+  for (const o of dressing.objects) group.add(o);
   add(props.build(), mats.plain, 'props');
-  for (const m of buildInstanced(corridors[0], scenery, quality, mats.plain, def.seed)) group.add(m);
   for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
   add(boostPads(corridors.map((c) => c.ribbon)), mats.pad, 'boostPads');
   if (signs.pos.length > 0) {
@@ -132,6 +141,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       last = time;
       tex.pad.offset.y = -time * BOOST_SCROLL;
       cells.update(time);
+      dressing.update(time, cameraPos);
       for (const o of cullable) {
         const bs = o.geometry.boundingSphere;
         if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < fogFar + CULL_MARGIN;
@@ -144,7 +154,14 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     resetCells() {
       cells.reset();
     },
+    groundColorAt(branch, s, x) {
+      const r = track.ribbon(branch);
+      if (Math.abs(x) <= r.widthAt(s) / 2) return kit.spray.road;
+      const wet = branch < 0 && views[0].shape.water[Math.round(track.wrap(s) / track.step) % track.samples.length] === 1;
+      return wet ? kit.spray.water : kit.spray.runoff;
+    },
     dispose() {
+      dressing.dispose();
       cells.dispose();
       for (const l of landmarks) l.landmark.dispose();
       group.traverse((o) => {

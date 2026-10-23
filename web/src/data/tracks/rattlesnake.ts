@@ -82,6 +82,7 @@ export const rattlesnake: TrackDef = {
 };
 
 export const rattlesnakeScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 12,
   spires: 10,
   duneHeight: 6,

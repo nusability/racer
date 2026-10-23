@@ -1,242 +1,78 @@
-// Dynamic racer parts rebuilt every frame in place: the crackling binder beams between engines,
-// the tow cables (they follow the swaying pod) and the exhaust flame cone geometry.
+// Skimmer effect geometry: wingtip vortex ribbons (rebuilt in place each frame), the shimmering
+// air-cushion sheet under the hull (animated in its shader), the fan blur disc and the jet cone.
 import * as THREE from 'three';
-import type { CableSpec, Detail } from './racerBlueprint.ts';
+import type { CushionSpec, Detail } from './racerBlueprint.ts';
+import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
 
-/** Strand recipe for one binder: a wide soft halo, a hot core and jagged arcs. */
-interface Strand {
-  width: number;
-  intensity: number;
-  /** Lateral wander at mid-span, metres. */
-  amplitude: number;
-}
-const BINDER_HALO: Strand = { width: 0.55, intensity: 0.22, amplitude: 0.02 };
-const BINDER_CORE: Strand = { width: 0.11, intensity: 1.0, amplitude: 0.05 };
-const BINDER_ARC: Strand = { width: 0.05, intensity: 0.95, amplitude: 0.32 };
-const BINDER_ARCS = { high: 3, low: 1 } as const;
-const BINDER_SEGMENTS = { high: 10, low: 6 } as const;
-/** Arc shapes re-roll this often (Hz): the crackle rate. */
-const BINDER_CRACKLE_HZ = 24;
-/** Chance an arc is dark on a given crackle. */
-const BINDER_ARC_DROPOUT = 0.3;
+// --- Wingtip vortices ---------------------------------------------------------------------------
+const VORTEX_SEGMENTS = { high: 14, low: 8 } as const;
+/** Ribbon half-width at the tip and the extra it gains by the tail (m). */
+const VORTEX_WIDTH = [0.03, 0.12] as const;
+/** Corkscrew radius (m) and spin (rad/s): the trail twists like a real tip vortex. */
+const VORTEX_SPIRAL = 0.07;
+const VORTEX_SPIN = 22;
+/** How far the trail bows outward per unit of steer at its tail (m): it reads the turn. */
+const VORTEX_BEND = 2.2;
 
-/** Cross-section: two crossed planes of (edge, centre, edge) so the beam reads from any angle. */
-const BINDER_SECTION_VERTS = 6;
-
-const scratchA = new THREE.Vector3();
-const scratchU = new THREE.Vector3();
-const scratchV = new THREE.Vector3();
-const scratchD = new THREE.Vector3();
 const scratchP = new THREE.Vector3();
 
-function perpendiculars(d: THREE.Vector3, u: THREE.Vector3, v: THREE.Vector3): void {
-  // Any axis not parallel to the span works; pick the least aligned for stability.
-  const ax = Math.abs(d.x);
-  const ay = Math.abs(d.y);
-  if (ax <= ay && ax <= Math.abs(d.z)) u.set(1, 0, 0);
-  else if (ay <= Math.abs(d.z)) u.set(0, 1, 0);
-  else u.set(0, 0, 1);
-  v.crossVectors(d, u).normalize();
-  u.crossVectors(v, d).normalize();
-}
-
-export class BinderBeams {
-  readonly mesh: THREE.Mesh;
-  private readonly geometry = new THREE.BufferGeometry();
-  private readonly positions: Float32Array;
-  private readonly colors: Float32Array;
-  private readonly strands: Strand[];
-  private readonly segments: number;
-  /** Random lateral offsets per strand point (u, v), re-rolled each crackle. */
-  private readonly jitter: Float32Array;
-  private readonly arcGain: Float32Array;
-  private crackleTimer = 0;
-
-  constructor(private readonly binders: [THREE.Vector3, THREE.Vector3][], detail: Detail, material: THREE.Material) {
-    this.segments = BINDER_SEGMENTS[detail];
-    this.strands = [BINDER_HALO, BINDER_CORE];
-    for (let i = 0; i < BINDER_ARCS[detail]; i++) this.strands.push(BINDER_ARC);
-    const strandCount = binders.length * this.strands.length;
-    const sections = this.segments + 1;
-    this.positions = new Float32Array(strandCount * sections * BINDER_SECTION_VERTS * 3);
-    this.colors = new Float32Array(this.positions.length);
-    this.jitter = new Float32Array(strandCount * sections * 2);
-    this.arcGain = new Float32Array(strandCount).fill(1);
-    const index: number[] = [];
-    for (let s = 0; s < strandCount; s++) {
-      for (let k = 0; k < this.segments; k++) {
-        const a = (s * sections + k) * BINDER_SECTION_VERTS;
-        const b = a + BINDER_SECTION_VERTS;
-        for (let plane = 0; plane < 2; plane++) {
-          for (let half = 0; half < 2; half++) {
-            const o = plane * 3 + half;
-            index.push(a + o, b + o, a + o + 1, a + o + 1, b + o, b + o + 1);
-          }
-        }
-      }
-    }
-    this.geometry.setIndex(index);
-    const pos = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
-    const col = new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage);
-    this.geometry.setAttribute('position', pos);
-    this.geometry.setAttribute('color', col);
-    this.mesh = new THREE.Mesh(this.geometry, material);
-    this.mesh.frustumCulled = false;
-    this.crackle();
-  }
-
-  private crackle(): void {
-    const sections = this.segments + 1;
-    for (let s = 0; s < this.arcGain.length; s++) {
-      const strand = this.strands[s % this.strands.length];
-      const isArc = strand === BINDER_ARC;
-      this.arcGain[s] = isArc && Math.random() < BINDER_ARC_DROPOUT ? 0 : 0.6 + Math.random() * 0.4;
-      for (let k = 0; k < sections; k++) {
-        const j = (s * sections + k) * 2;
-        this.jitter[j] = Math.random() * 2 - 1;
-        this.jitter[j + 1] = Math.random() * 2 - 1;
-      }
-    }
-    this.writeColors();
-  }
-
-  private writeColors(): void {
-    const sections = this.segments + 1;
-    for (let s = 0; s < this.arcGain.length; s++) {
-      const strand = this.strands[s % this.strands.length];
-      for (let k = 0; k < sections; k++) {
-        // Fade toward the emitters so the beam springs out of the tips rather than ending flat.
-        const t = k / this.segments;
-        const ends = Math.min(1, Math.sin(Math.PI * t) * 2.5 + 0.35);
-        const c = strand.intensity * this.arcGain[s] * ends;
-        const base = (s * sections + k) * BINDER_SECTION_VERTS * 3;
-        for (let vtx = 0; vtx < BINDER_SECTION_VERTS; vtx++) {
-          const centre = vtx % 3 === 1 ? c : 0;
-          this.colors[base + vtx * 3] = centre;
-          this.colors[base + vtx * 3 + 1] = centre;
-          this.colors[base + vtx * 3 + 2] = centre;
-        }
-      }
-    }
-    (this.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
-  }
-
-  /** `energy` 0..1 scales arc reach (boost makes the binder lash about). */
-  update(dt: number, time: number, energy: number): void {
-    this.crackleTimer -= dt;
-    if (this.crackleTimer <= 0) {
-      this.crackleTimer = 1 / BINDER_CRACKLE_HZ;
-      this.crackle();
-    }
-    const sections = this.segments + 1;
-    let s = 0;
-    for (const [a, b] of this.binders) {
-      scratchD.subVectors(b, a);
-      const span = scratchD.length();
-      scratchD.divideScalar(span);
-      perpendiculars(scratchD, scratchU, scratchV);
-      for (const strand of this.strands) {
-        const amp = strand.amplitude * (0.6 + energy * 0.8) * span * 0.5;
-        for (let k = 0; k < sections; k++) {
-          const t = k / this.segments;
-          const env = Math.sin(Math.PI * t);
-          const j = (s * sections + k) * 2;
-          // A slow wave keeps the beam alive between crackles.
-          const wave = Math.sin(time * 9 + t * 7 + s) * 0.3;
-          const du = (this.jitter[j] + wave) * amp * env;
-          const dv = (this.jitter[j + 1] - wave) * amp * env;
-          scratchP.copy(a).addScaledVector(scratchD, span * t).addScaledVector(scratchU, du).addScaledVector(scratchV, dv);
-          const base = (s * sections + k) * BINDER_SECTION_VERTS * 3;
-          const w = strand.width * 0.5;
-          this.writeSection(base, scratchP, scratchU, w);
-          this.writeSection(base + 9, scratchP, scratchV, w);
-        }
-        s++;
-      }
-    }
-    (this.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-  }
-
-  private writeSection(base: number, p: THREE.Vector3, axis: THREE.Vector3, w: number): void {
-    const out = this.positions;
-    out[base] = p.x - axis.x * w;
-    out[base + 1] = p.y - axis.y * w;
-    out[base + 2] = p.z - axis.z * w;
-    out[base + 3] = p.x;
-    out[base + 4] = p.y;
-    out[base + 5] = p.z;
-    out[base + 6] = p.x + axis.x * w;
-    out[base + 7] = p.y + axis.y * w;
-    out[base + 8] = p.z + axis.z * w;
-  }
-
-  dispose(): void {
-    this.geometry.dispose();
-  }
-}
-
-const CABLE_SEGMENTS = { high: 6, low: 4 } as const;
-const CABLE_WIDTH = 0.07;
-/** Mid-span droop, metres. */
-const CABLE_SAG = 0.22;
-const CABLE_COLOR = 0x1a1714;
-
-/** Tow cables as crossed ribbons, re-bent each frame so they stay attached to the swaying pod. */
-export class CableRibbons {
+/** One flat ribbon per wingtip, fading toward the tail. Flat, not crossed: the chase camera looks
+ * down on it, and a vertical strip seen edge-on would stack into a hard white line. */
+export class VortexTrails {
   readonly mesh: THREE.Mesh;
   private readonly geometry = new THREE.BufferGeometry();
   private readonly positions: Float32Array;
   private readonly segments: number;
 
-  constructor(private readonly cables: CableSpec[], detail: Detail, material: THREE.Material) {
-    this.segments = CABLE_SEGMENTS[detail];
+  constructor(private readonly tips: THREE.Vector3[], detail: Detail, material: THREE.Material) {
+    this.segments = VORTEX_SEGMENTS[detail];
     const sections = this.segments + 1;
-    const verts = cables.length * sections * 4;
+    const verts = tips.length * sections * 2;
     this.positions = new Float32Array(verts * 3);
     const colors = new Float32Array(verts * 3);
-    const normals = new Float32Array(verts * 3);
-    const c = new THREE.Color(CABLE_COLOR);
-    for (let i = 0; i < verts; i++) {
-      colors.set([c.r, c.g, c.b], i * 3);
-      normals.set([0, 1, 0], i * 3);
-    }
     const index: number[] = [];
-    for (let n = 0; n < cables.length; n++) {
-      for (let k = 0; k < this.segments; k++) {
-        const a = (n * sections + k) * 4;
-        const b = a + 4;
-        index.push(a, b, a + 1, a + 1, b, b + 1, a + 2, b + 2, a + 3, a + 3, b + 2, b + 3);
+    for (let n = 0; n < tips.length; n++) {
+      for (let k = 0; k < sections; k++) {
+        const t = k / this.segments;
+        // Bright just behind the tip, dissolving toward the tail; additive so 0 is invisible.
+        const c = Math.min(1, t * 6) * Math.pow(1 - t, 2.6);
+        colors.fill(c, (n * sections + k) * 6, (n * sections + k + 1) * 6);
+        if (k < this.segments) {
+          const a = (n * sections + k) * 2;
+          const b = a + 2;
+          index.push(a, b, a + 1, a + 1, b, b + 1);
+        }
       }
     }
     this.geometry.setIndex(index);
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
     this.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    this.geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     this.mesh = new THREE.Mesh(this.geometry, material);
     this.mesh.frustumCulled = false;
   }
 
-  /** `podMatrix` maps pod space into craft space. */
-  update(podMatrix: THREE.Matrix4, time: number): void {
+  /** `length` in metres (0 hides), `steer` −1..1 bends the trail away from the turn. */
+  update(time: number, length: number, steer: number): void {
+    this.mesh.visible = length > 0.2;
+    if (!this.mesh.visible) return;
     const sections = this.segments + 1;
-    const w = CABLE_WIDTH * 0.5;
-    for (let n = 0; n < this.cables.length; n++) {
-      const cable = this.cables[n];
-      scratchA.copy(cable.pod).applyMatrix4(podMatrix);
-      scratchD.subVectors(scratchA, cable.engine);
-      const sway = Math.sin(time * 3.1 + n * 1.3) * 0.04;
+    const out = this.positions;
+    for (let n = 0; n < this.tips.length; n++) {
+      const tip = this.tips[n];
+      const spinDir = tip.x < 0 ? -1 : 1;
       for (let k = 0; k < sections; k++) {
         const t = k / this.segments;
-        const droop = 4 * t * (1 - t);
-        scratchP.copy(cable.engine).addScaledVector(scratchD, t);
-        scratchP.y -= droop * CABLE_SAG;
-        scratchP.x += droop * sway;
-        const o = (n * sections + k) * 12;
-        const out = this.positions;
+        const a = time * VORTEX_SPIN * spinDir - t * 9;
+        const r = VORTEX_SPIRAL * t;
+        scratchP.set(
+          tip.x + Math.cos(a) * r - steer * VORTEX_BEND * t * t,
+          tip.y + Math.sin(a) * r - t * 0.15,
+          tip.z + t * length,
+        );
+        const w = VORTEX_WIDTH[0] + VORTEX_WIDTH[1] * t;
+        const o = (n * sections + k) * 6;
         out[o] = scratchP.x - w; out[o + 1] = scratchP.y; out[o + 2] = scratchP.z;
         out[o + 3] = scratchP.x + w; out[o + 4] = scratchP.y; out[o + 5] = scratchP.z;
-        out[o + 6] = scratchP.x; out[o + 7] = scratchP.y - w; out[o + 8] = scratchP.z;
-        out[o + 9] = scratchP.x; out[o + 10] = scratchP.y + w; out[o + 11] = scratchP.z;
       }
     }
     (this.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
@@ -247,21 +83,117 @@ export class CableRibbons {
   }
 }
 
-/** Flame cone: base (radius 1) at z = 0, tip at z = 1, vertex brightness fading to the tip so
+// --- Air cushion ----------------------------------------------------------------------------
+/** The sheet sits just above the ground so it never clips through the hull belly. */
+const CUSHION_LIFT = 0.06;
+const CUSHION_GRID = { high: [8, 10], low: [5, 6] } as const;
+
+const CUSHION_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const CUSHION_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+uniform float uTime;
+uniform float uIntensity;
+varying vec2 vUv;
+void main() {
+  vec2 p = vUv * 2.0 - 1.0;
+  float edge = 1.0 - smoothstep(0.55, 1.0, length(p * vec2(1.0, 0.9)));
+  // Two drifting interference bands: a pressure shimmer that races aft with the airflow.
+  float wave = sin(p.x * 11.0 + uTime * 7.0) * sin(p.y * 7.0 - uTime * 23.0);
+  float streak = sin(p.y * 19.0 - uTime * 41.0 + p.x * 3.0);
+  float a = edge * (0.55 + 0.3 * wave + 0.15 * streak) * uIntensity;
+  gl_FragColor = vec4(uColor * a, 1.0);
+  #include <colorspace_fragment>
+}`;
+
+export class CushionSheet {
+  readonly mesh: THREE.Mesh;
+  readonly material: THREE.ShaderMaterial;
+  private readonly geometry: THREE.PlaneGeometry;
+
+  constructor(spec: CushionSpec, detail: Detail) {
+    const [sx, sz] = CUSHION_GRID[detail];
+    this.geometry = new THREE.PlaneGeometry(spec.width, spec.length, sx, sz);
+    this.geometry.rotateX(-Math.PI / 2);
+    this.geometry.translate(0, -SKIMMER_RIDE_HEIGHT + CUSHION_LIFT, spec.z);
+    this.material = new THREE.ShaderMaterial({
+      vertexShader: CUSHION_VERTEX,
+      fragmentShader: CUSHION_FRAGMENT,
+      uniforms: { uColor: { value: new THREE.Color() }, uTime: { value: 0 }, uIntensity: { value: 0 } },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      forceSinglePass: true,
+    });
+    this.mesh = new THREE.Mesh(this.geometry, this.material);
+    this.mesh.renderOrder = 1;
+  }
+
+  update(time: number, intensity: number, color: THREE.Color): void {
+    this.mesh.visible = intensity > 0.01;
+    const u = this.material.uniforms;
+    u.uTime.value = time;
+    u.uIntensity.value = intensity;
+    (u.uColor.value as THREE.Color).copy(color);
+  }
+
+  dispose(): void {
+    this.geometry.dispose();
+    this.material.dispose();
+  }
+}
+
+// --- Fan disc and jet -----------------------------------------------------------------------
+const FAN_BLADES = 7;
+
+/** Unit fan disc facing +Z: soft blade streaks that strobe into a blur when spun. */
+export function createFanDiscGeometry(detail: Detail): THREE.BufferGeometry {
+  const segments = FAN_BLADES * (detail === 'high' ? 6 : 4);
+  const rings = [0.22, 0.6, 0.97];
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const index: number[] = [];
+  for (let s = 0; s <= segments; s++) {
+    const a = (s / segments) * Math.PI * 2;
+    // Blades lead with a bright edge and trail off: reads as rotation even when strobing.
+    const phase = ((a * FAN_BLADES) / (Math.PI * 2)) % 1;
+    const blade = Math.pow(1 - phase, 3);
+    rings.forEach((r, i) => {
+      positions.push(Math.cos(a) * r, Math.sin(a) * r, 0);
+      const c = (i === 0 ? 0.15 : 0.12 + 0.88 * blade) * (i === 2 ? 0.7 : 1);
+      colors.push(c, c, c);
+    });
+  }
+  for (let s = 0; s < segments; s++) {
+    for (let r = 0; r < rings.length - 1; r++) {
+      const a = s * rings.length + r;
+      const b = a + rings.length;
+      index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setIndex(index);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  return geo;
+}
+
+/** Jet cone: base (radius 1) at z = 0, tip at z = 1, vertex brightness fading to the tip so
  * additive blending makes it dissolve without a texture. */
-export function createFlameGeometry(detail: Detail): THREE.BufferGeometry {
-  const profile = [[0.85, 0], [1.0, 0.1], [0.85, 0.35], [0.5, 0.65], [0.0, 1.0]];
-  const geo = new THREE.LatheGeometry(profile.map(([r, z]) => new THREE.Vector2(r, z)), detail === 'high' ? 10 : 7);
+export function createJetGeometry(detail: Detail): THREE.BufferGeometry {
+  const profile = [[0.9, 0], [1.0, 0.08], [0.8, 0.35], [0.45, 0.68], [0.0, 1.0]];
+  const geo = new THREE.LatheGeometry(profile.map(([r, z]) => new THREE.Vector2(r, z)), detail === 'high' ? 12 : 8);
   geo.rotateX(Math.PI / 2);
   geo.deleteAttribute('uv');
   const pos = geo.getAttribute('position');
   const colors = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const c = Math.pow(1 - pos.getZ(i), 1.4);
-    colors[i * 3] = c;
-    colors[i * 3 + 1] = c;
-    colors[i * 3 + 2] = c;
-  }
+  for (let i = 0; i < pos.count; i++) colors.fill(Math.pow(1 - pos.getZ(i), 1.6), i * 3, i * 3 + 3);
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geo;
 }

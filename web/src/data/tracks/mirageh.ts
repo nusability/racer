@@ -82,6 +82,7 @@ export const mirageh: TrackDef = {
 };
 
 export const miragehScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 14,
   spires: 10,
   duneHeight: 8,

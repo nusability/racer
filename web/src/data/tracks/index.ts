@@ -8,8 +8,14 @@ import { glasssea, glassseaScenery } from './glasssea.ts';
 import { devilsteeth, devilsteethScenery } from './devilsteeth.ts';
 import { mirageh, miragehScenery } from './mirageh.ts';
 import { stormfront, stormfrontScenery } from './stormfront.ts';
+import { coralcove, coralcoveScenery } from './coralcove.ts';
+import { lagoonloop, lagoonloopScenery } from './lagoonloop.ts';
+import { boardwalk, boardwalkScenery } from './boardwalk.ts';
+import { seastacks, seastacksScenery } from './seastacks.ts';
+import { tidalcaves, tidalcavesScenery } from './tidalcaves.ts';
+import { volcanoisle, volcanoisleScenery } from './volcanoisle.ts';
 
-export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront];
+export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront, coralcove, lagoonloop, boardwalk, seastacks, tidalcaves, volcanoisle];
 
 const SCENERY: Record<string, TrackScenery> = {
   sunpan: sunpanScenery,
@@ -20,6 +26,12 @@ const SCENERY: Record<string, TrackScenery> = {
   devilsteeth: devilsteethScenery,
   mirageh: miragehScenery,
   stormfront: stormfrontScenery,
+  coralcove: coralcoveScenery,
+  lagoonloop: lagoonloopScenery,
+  boardwalk: boardwalkScenery,
+  seastacks: seastacksScenery,
+  tidalcaves: tidalcavesScenery,
+  volcanoisle: volcanoisleScenery,
 };
 
 export function trackById(id: string): TrackDef {

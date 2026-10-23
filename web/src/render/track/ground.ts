@@ -1,31 +1,26 @@
 import * as THREE from 'three';
-import type { TrackPalette } from '../../core/types.ts';
 import { CHASM_DEPTH } from '../../data/tuning.ts';
-import type { TrackScenery } from '../../data/tracks/scenery.ts';
+import type { GroundStyle } from './biomes/kit.ts';
 import {
   CHASM_FLOOR_EXTRA,
   FIELD_CELL,
   FIELD_REACH,
   GROUND_BLEND_MIN,
   GROUND_BLEND_PER_M,
+  LAGOON_DEPTH,
+  SEA_LEVEL,
   TERRAIN_SINK,
 } from './config.ts';
-import { fbm, smoothstep, valueNoise, type Noise2 } from './noise.ts';
+import { smoothstep, valueNoise, type Noise2 } from './noise.ts';
 import { sideIndex, type RibbonView } from './shape.ts';
 
 /** Flat sand beside the corridor before the ground starts easing to the dunes. */
 const SHOULDER_FLAT = 5;
 /** The shoulder sits just under the road edge so nothing floats. */
 const SHOULDER_DROP = 0.35;
-/** Dune crest spacing, metres. */
-const DUNE_WAVELENGTH = 130;
-/** Long dunes that stay everywhere, coarse enough for the far terrain mesh. */
-const BROAD_DUNE_WAVELENGTH = 420;
 /** Small dunes fade out between these distances from the course, metres. */
 const DUNE_FADE_START = 260;
 const DUNE_FADE_LENGTH = 260;
-/** Scale of the broad swells under the dunes, metres. */
-const SWELL_SCALE = 900;
 /** Stamp every n-th sample into the nearest-sample field (refined exactly per query). */
 const FIELD_STRIDE = 3;
 /** A levelled landmark pad eases back into the dunes over this distance. */
@@ -52,25 +47,22 @@ interface Pad {
  */
 export class Ground {
   readonly base: number;
-  private readonly noise: Noise2;
+  /** Seeded noise and a prevailing wind direction, for the biome's ground shapes. */
+  readonly noise: Noise2;
+  readonly windDir: { x: number; z: number };
   /** Field cell → packed (view << 20 | k) of the nearest stamped sample, or -1. */
   private readonly field: Int32Array;
   private readonly fx0: number;
   private readonly fz0: number;
   private readonly fw: number;
   private readonly fh: number;
-  private readonly duneDir: { x: number; z: number };
-  private readonly sand: THREE.Color;
-  private readonly sandDark: THREE.Color;
-  private readonly sandLight: THREE.Color;
   private readonly pads: Pad[] = [];
   /** Landmark footprints: the corridor hides its boundary dressing inside them. */
   private readonly footprints: Pad[] = [];
 
   constructor(
     readonly views: RibbonView[],
-    readonly scenery: TrackScenery,
-    palette: TrackPalette,
+    readonly style: GroundStyle,
     seed: number,
   ) {
     let minY = Infinity;
@@ -87,13 +79,10 @@ export class Ground {
         maxZ = Math.max(maxZ, p.pos.z);
       }
     }
-    this.base = minY - 1.5;
+    this.base = style.base(minY);
     this.noise = valueNoise(seed * 7 + 3);
     const a = seed * 0.7;
-    this.duneDir = { x: Math.cos(a), z: Math.sin(a) };
-    this.sand = new THREE.Color(palette.sand);
-    this.sandDark = new THREE.Color(palette.sand).lerp(new THREE.Color(palette.rock), 0.25).multiplyScalar(0.82);
-    this.sandLight = new THREE.Color(palette.sand).lerp(new THREE.Color(0xffffff), 0.18);
+    this.windDir = { x: Math.cos(a), z: Math.sin(a) };
 
     // Nearest-sample field: each coarse cell remembers the closest stamped sample.
     this.fx0 = minX - FIELD_REACH;
@@ -170,18 +159,12 @@ export class Ground {
   }
 
   /**
-   * Open-desert height, ignoring the course. Small dunes only ripple near the course: far out
-   * the coarse terrain mesh couldn't sample them, and fog hides them anyway.
+   * Open-world height, ignoring the course. Small detail only ripples near the course: far out
+   * the coarse terrain mesh couldn't sample it, and fog hides it anyway.
    */
   natural(x: number, z: number, near: Nearest | null = this.nearest(x, z)): number {
-    const h = this.scenery.duneHeight;
-    const along = x * this.duneDir.x + z * this.duneDir.z;
-    const warp = fbm(this.noise, x / 380, z / 380, 2) * 2.2;
-    const ridge = 1 - Math.abs(Math.sin((Math.PI * along) / DUNE_WAVELENGTH + warp));
-    const broad = 0.5 + 0.5 * Math.sin((Math.PI * along) / BROAD_DUNE_WAVELENGTH + warp * 0.5);
-    const swell = fbm(this.noise, x / SWELL_SCALE + 40, z / SWELL_SCALE + 40, 3);
     const ripple = near ? 1 - smoothstep((Math.abs(near.d) - DUNE_FADE_START) / DUNE_FADE_LENGTH) : 0;
-    return this.base + h * (0.7 * ridge * ridge * ripple + 0.9 * broad + 1.1 * swell);
+    return this.style.natural(this, x, z, ripple);
   }
 
   /** Height of the road surface at lateral x of sample k on view v (the road is banked). */
@@ -197,7 +180,10 @@ export class Ground {
       const smp = this.views[near.v].ribbon.samples[near.k];
       const half = smp.width / 2;
       const out = Math.max(0, Math.abs(near.d) - half);
-      const roadSide = this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
+      // Beside a lagoon the ground drops to a shallow sea bed: the run-off is water.
+      const roadSide = this.views[near.v].shape.water[near.k]
+        ? SEA_LEVEL - LAGOON_DEPTH
+        : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
       h = roadSide + (h - roadSide) * smoothstep((out - SHOULDER_FLAT) / blend);
     }
@@ -221,6 +207,8 @@ export class Ground {
     // Inside a landmark's footprint the boundary dressing is hidden, so the ground shows.
     const edge = near.d > 0 ? smp.edgeR : smp.edgeL;
     if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
+    // Lagoon run-off is open water over a shallow bed: nothing covers it, so don't sink it.
+    if (view.shape.water[near.k] && Math.abs(near.d) > smp.width / 2 + 1) return h;
     return Math.min(h, smp.pos.y - Math.abs(smp.right.y) * smp.width * 0.5) - TERRAIN_SINK;
   }
 
@@ -231,14 +219,8 @@ export class Ground {
     return Math.abs(near.d) > this.views[near.v].shape.outer[sideIndex(near.d)][near.k] + margin;
   }
 
-  /** Sand colour: lighter crests, darker troughs and slopes. */
+  /** Ground colour from the biome. */
   color(x: number, z: number, y: number, slope: number, out: THREE.Color): THREE.Color {
-    const rel = this.scenery.duneHeight > 0 ? (y - this.base) / (this.scenery.duneHeight * 2) : 0.5;
-    const grain = this.noise(x / 9 + 100, z / 9 + 100) * 0.04;
-    const patch = fbm(this.noise, x / 160 + 7, z / 160 + 7, 2) * 0.07;
-    out.copy(this.sandDark).lerp(this.sand, smoothstep(rel * 1.6 + 0.2));
-    out.lerp(this.sandLight, smoothstep(rel - 0.4) * 0.8);
-    out.multiplyScalar(1 + grain + patch - Math.min(0.25, slope * 0.35));
-    return out;
+    return this.style.color(this, x, z, y, slope, out);
   }
 }

@@ -51,13 +51,13 @@ export const FINISH_GRACE = 20;
  * there is no player and once the player has finished.
  */
 /** Gap (metres along the lap) where the catch-up starts to act. */
-export const CATCHUP_START_GAP = 150;
+export const CATCHUP_START_GAP = 60;
 /** Gap where it reaches full strength. */
-export const CATCHUP_FULL_GAP = 600;
+export const CATCHUP_FULL_GAP = 450;
 /** Top speed an AI far ahead gives up (fraction). */
-export const CATCHUP_EASE = 0.05;
+export const CATCHUP_EASE = 0.06;
 /** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. */
-export const CATCHUP_PUSH = 0.03;
+export const CATCHUP_PUSH = 0.02;
 /** Skill of the AI that drives the player's racer after the finish (and in headless runs). */
 export const AUTOPILOT_SKILL = 0.85;
 
@@ -268,6 +268,9 @@ export const AI_BOOST_MIN_RUN_HI = 1.5;
 /** The AI swerves for a boost cell lying within this of its line, metres. */
 export const AI_CELL_DETOUR_LO = 2;
 export const AI_CELL_DETOUR_HI = 14;
+/** Seconds between the AI seeing where to be and steering for it: humans react late too. */
+export const AI_REACTION_LO = 0.3;
+export const AI_REACTION_HI = 0;
 /** Wander of the AI's target at skill 0 (scaled by 1 - skill), metres. */
 export const AI_TARGET_NOISE = 4;
 /** Correlation time of the target wander, seconds. */

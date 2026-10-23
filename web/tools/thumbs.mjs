@@ -9,6 +9,7 @@
 // few distances into <dir> with one contact sheet per track, for choosing the SHOTS below.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,10 @@ import { chromium } from 'playwright-core';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(WEB, 'public', 'thumbs');
-const PORT = 5181;
+/** Imported by the menus (src/ui/trackArt.ts): which s each thumb used, plus the outline. */
+const MANIFEST = join(WEB, 'src', 'data', 'trackThumbs.json');
+/** Outline vertices per ribbon; enough for a ~48 px corner icon. */
+const OUTLINE_POINTS = 96;
 const WIDTH = 640;
 const HEIGHT = 360;
 /** WebP quality: keeps each thumb under ~60 KB at 640x360. */
@@ -24,21 +28,23 @@ const WEBP_QUALITY = 0.72;
 const MAX_BYTES = 60 * 1024;
 /** Frames the scene gets to settle (textures, instancing) before the shot. */
 const SETTLE_MS = 1500;
-const EXPLORE_BACKS = [90, 220];
+/** Explore mode: evenly spaced candidate spots per lap. */
+const EXPLORE_SPOTS = 12;
 
 /**
- * The signature moment per track: `at` is a control-point parameter (like the track data),
- * the camera sits `back` metres before it at lateral `x`, on ribbon `branch` (-1 = main loop).
+ * The signature moment per track: `u` is the fraction of the ribbon's length where the chase
+ * camera sits, at lateral `x`, on ribbon `branch` (-1 = main loop). Re-pick with --explore
+ * when a track's layout changes.
  */
 const SHOTS = {
-  sunpan: { at: 8.5, back: 220, x: 0, branch: -1, why: 'spaceport' },
-  rattlesnake: { at: 7.9, back: 90, x: 0, branch: -1, why: 'mine' },
-  oasis: { at: 7.4, back: 90, x: 0, branch: -1, why: 'oasis town' },
-  bonecanyon: { at: 5.5, back: 220, x: 0, branch: -1, why: 'colossus' },
-  glasssea: { at: 8.4, back: 90, x: 0, branch: -1, why: 'sand beast' },
-  devilsteeth: { at: 5.45, back: 90, x: 0, branch: -1, why: 'mine' },
-  mirageh: { at: 14.5, back: 220, x: 0, branch: -1, why: 'colossus' },
-  stormfront: { at: 2.3, back: 220, x: 0, branch: -1, why: 'invasion' },
+  sunpan: { u: 0, x: 0, branch: -1, why: 'spaceport' },
+  rattlesnake: { u: 0, x: 0, branch: -1, why: 'mine' },
+  oasis: { u: 0, x: 0, branch: -1, why: 'oasis town' },
+  bonecanyon: { u: 0, x: 0, branch: -1, why: 'colossus' },
+  glasssea: { u: 0, x: 0, branch: -1, why: 'sand beast' },
+  devilsteeth: { u: 0, x: 0, branch: -1, why: 'mine' },
+  mirageh: { u: 0, x: 0, branch: -1, why: 'colossus' },
+  stormfront: { u: 0, x: 0, branch: -1, why: 'invasion' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
@@ -50,27 +56,48 @@ function build(outDir) {
   if (r.status !== 0) throw new Error(`vite build failed (${r.status})`);
 }
 
+/** Polling interval and limit while the preview server comes up. */
+const SERVER_POLL_MS = 200;
+const SERVER_TIMEOUT_MS = 30000;
+
+/** Other tools may hold fixed ports, so the preview takes whatever port the OS hands out. */
+async function freePort() {
+  const srv = createServer();
+  await new Promise((r) => srv.listen(0, r));
+  const { port } = srv.address();
+  await new Promise((r) => srv.close(r));
+  return port;
+}
+let PORT = 0;
+
 async function preview(outDir) {
-  const proc = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(PORT), '--strictPort'], { cwd: WEB, stdio: ['ignore', 'pipe', 'inherit'] });
-  await new Promise((resolve, reject) => {
-    proc.on('exit', (code) => reject(new Error(`vite preview exited (${code})`)));
-    proc.stdout.on('data', (d) => {
-      if (String(d).includes(String(PORT))) resolve();
-    });
-  });
-  return proc;
+  PORT = await freePort();
+  const proc = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(PORT), '--strictPort'], { cwd: WEB, stdio: 'ignore' });
+  let exited = null;
+  proc.on('exit', (code) => (exited = code));
+  const deadline = Date.now() + SERVER_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (exited !== null) throw new Error(`vite preview exited (${exited})`);
+    try {
+      if ((await fetch(`http://localhost:${PORT}/track-viewer.html`)).ok) return proc;
+    } catch {
+      // Not listening yet: the connection refusal is the expected "keep waiting" signal.
+    }
+    await new Promise((r) => setTimeout(r, SERVER_POLL_MS));
+  }
+  proc.kill();
+  throw new Error('vite preview did not come up');
 }
 
 async function shoot(page, trackId, shot) {
   await page.goto(`http://localhost:${PORT}/track-viewer.html?track=${trackId}&pause=1&view=fly`);
   await page.addStyleTag({ content: HIDE_OVERLAY });
   await page.waitForFunction(() => 'viewer' in window);
-  const s = await page.evaluate(({ at, back, x, branch }) => {
+  const s = await page.evaluate(({ u, x, branch }) => {
     const v = window.viewer;
-    const ribbon = v.track.ribbon(branch);
-    const target = ribbon.paramToS(at) - back;
+    const target = v.track.ribbon(branch).length * u;
     v.set({ branch, s: target, x, view: 'fly', paused: true });
-    return ribbon.wrap(target);
+    return target;
   }, shot);
   await page.waitForTimeout(SETTLE_MS);
   page.assertClean();
@@ -104,7 +131,8 @@ async function run() {
   const server = await preview(buildDir);
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: BROWSER_ARGS });
   try {
-    const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1 });
+    const page = await context.newPage();
     // A viewer error would silently produce a wrong thumb, so any page error fails the run.
     const errors = [];
     page.on('pageerror', (e) => errors.push(e));
@@ -123,43 +151,75 @@ async function run() {
   }
 }
 
+/**
+ * The lap (and shortcuts) as polylines in a 0..100 box, north up, aspect kept and centred.
+ * Precomputed here because building a Track in the menu costs 100-300 ms per track.
+ */
+async function outline(page) {
+  return page.evaluate((n) => {
+    const t = window.viewer.track;
+    const ribbons = [t.samples, ...t.branches.map((b) => b.ribbon.samples)].map((ss) => ss.map((p) => p.pos));
+    const all = ribbons.flat();
+    const minX = Math.min(...all.map((p) => p.x));
+    const minZ = Math.min(...all.map((p) => p.z));
+    const w = Math.max(...all.map((p) => p.x)) - minX;
+    const d = Math.max(...all.map((p) => p.z)) - minZ;
+    const k = 100 / Math.max(w, d);
+    const ox = (100 - w * k) / 2;
+    const oz = (100 - d * k) / 2;
+    const thin = (pts, count) =>
+      Array.from({ length: count }, (_, i) => pts[Math.floor((i * (pts.length - 1)) / (count - 1))]).map((p) => [
+        Math.round(((p.x - minX) * k + ox) * 10) / 10,
+        Math.round(((p.z - minZ) * k + oz) * 10) / 10,
+      ]);
+    const [loop, ...branches] = ribbons;
+    return { outline: thin(loop, n), branches: branches.map((b) => thin(b, Math.max(8, Math.round((n * b.length) / loop.length)))) };
+  }, OUTLINE_POINTS);
+}
+
+/** Every track the game ships, read from the viewer's track picker. */
+async function trackIds(page) {
+  await page.goto(`http://localhost:${PORT}/track-viewer.html?pause=1`);
+  return page.$$eval('select option', (os) => os.map((o) => o.value));
+}
+
 async function renderAll(page) {
   mkdirSync(OUT_DIR, { recursive: true });
   const manifest = {};
-  for (const [id, shot] of Object.entries(SHOTS)) {
+  for (const id of await trackIds(page)) {
+    const shot = SHOTS[id];
+    if (!shot) throw new Error(`No thumbnail shot for track "${id}": add it to SHOTS (pick one with --explore)`);
     const { s, png } = await shoot(page, id, shot);
     const webp = await toWebp(page, png);
     if (webp.length > MAX_BYTES) throw new Error(`${id}.webp is ${webp.length} bytes (> ${MAX_BYTES})`);
     writeFileSync(join(OUT_DIR, `${id}.webp`), webp);
-    manifest[id] = { s: Math.round(s), x: shot.x, branch: shot.branch, subject: shot.why };
+    manifest[id] = { image: `thumbs/${id}.webp`, s: Math.round(s), x: shot.x, branch: shot.branch, subject: shot.why, ...(await outline(page)) };
     console.log(`${id}: s=${Math.round(s)} ${(webp.length / 1024).toFixed(1)} KB (${shot.why})`);
   }
-  writeFileSync(join(OUT_DIR, 'thumbs.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(MANIFEST, `${JSON.stringify(manifest)}\n`);
 }
 
 async function explore(page, dir) {
   mkdirSync(dir, { recursive: true });
-  for (const id of Object.keys(SHOTS)) {
-    await page.goto(`http://localhost:${PORT}/track-viewer.html?track=${id}&pause=1`);
-    await page.waitForFunction(() => 'viewer' in window);
-    const landmarks = await page.evaluate(() => window.viewer.track.def.landmarks.filter((l) => !l.branch).map((l) => ({ kind: l.kind, at: l.at })));
+  const only = process.argv.includes('--track') ? process.argv[process.argv.indexOf('--track') + 1] : null;
+  for (const id of await trackIds(page)) {
+    if (only && id !== only) continue;
     const tiles = [];
-    for (const l of landmarks) {
-      for (const back of EXPLORE_BACKS) {
-        const { png } = await shoot(page, id, { at: l.at, back, x: 0, branch: -1 });
-        tiles.push({ label: `${l.kind} at ${l.at} back ${back}`, data: png.toString('base64') });
-      }
+    for (let k = 0; k < EXPLORE_SPOTS; k++) {
+      const u = k / EXPLORE_SPOTS;
+      const { png } = await shoot(page, id, { u, x: 0, branch: -1 });
+      tiles.push({ label: `${id} u=${u.toFixed(3)}`, data: png.toString('base64') });
     }
     const sheet = await page.context().newPage();
-    await sheet.setViewportSize({ width: 1280, height: 200 * Math.ceil(tiles.length / 2) + 10 });
+    await sheet.setViewportSize({ width: 1280, height: 400 });
     await sheet.setContent(
-      `<body style="margin:0;background:#111;display:grid;grid-template-columns:1fr 1fr;gap:4px;font:14px monospace;color:#fff">${tiles
+      `<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font:16px monospace;color:#fff">${tiles
         .map((t) => `<div><img style="width:100%;display:block" src="data:image/png;base64,${t.data}"><div>${t.label}</div></div>`)
         .join('')}</body>`,
     );
     await sheet.screenshot({ path: join(dir, `${id}-sheet.png`), fullPage: true });
     await sheet.close();
-    console.log(`explored ${id}: ${tiles.length} shots`);
+    console.log(`explored ${id}`);
   }
 }
 

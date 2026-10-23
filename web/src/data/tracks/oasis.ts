@@ -79,6 +79,7 @@ export const oasis: TrackDef = {
 };
 
 export const oasisScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 9,
   spires: 5,
   duneHeight: 5,

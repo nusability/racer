@@ -84,6 +84,7 @@ export const bonecanyon: TrackDef = {
 };
 
 export const bonecanyonScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 10,
   spires: 12,
   duneHeight: 5,

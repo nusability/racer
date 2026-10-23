@@ -12,7 +12,9 @@ import {
   RIDGE_OUTER,
   RIDGE_RISE,
   ROAD_TEXTURE_LENGTH,
+  LAGOON_DEPTH,
   RUNOFF_MIN,
+  SEA_LEVEL,
   STATION_STRIDE,
   type Quality,
 } from './config.ts';
@@ -51,6 +53,8 @@ export interface Scatter {
   pylons: { p: P3; out: P3; side: number; k: number; view: number }[];
   /** Lamp posts on top of walls: base point and the direction toward the road. */
   lights: { p: P3; inward: P3 }[];
+  /** Buoys floating on the hard boundary of lagoon run-off. */
+  buoys: P3[];
 }
 
 /** Side cross-section of one station: 7 points from the boundary foot outward. */
@@ -110,6 +114,11 @@ export class Corridor {
         if (this.open(k, side)) continue;
         const out = { x: this.shape.rx[k] * side, y: 0, z: this.shape.rz[k] * side };
         const sand = this.shape.run[sideIndex(side)][k] >= RUNOFF_MIN;
+        if (sand && this.shape.water[k] && k % every === 0) {
+          const b = this.beside(k, side, 0, SEA_LEVEL);
+          this.scatter.buoys.push(b);
+          continue;
+        }
         if (this.profile(k, side).hidden) continue;
         if (sand && k % every === 0) this.scatter.pylons.push({ p: this.profile(k, side).pts[2], out, side, k, view: this.vi });
         if (!sand && k % lamps === 0) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
@@ -185,8 +194,10 @@ export class Corridor {
       // Paved road on u 0..split; each run-off strip maps across the sand half of the atlas.
       const extL = towardMain < 0 && this.open(k, -1) ? JUNCTION_OVERLAP : 0;
       const extR = towardMain > 0 && this.open(k, 1) ? JUNCTION_OVERLAP : 0;
-      const runL = this.open(k, -1) ? extL : Math.max(0, smp.edgeL - half);
-      const runR = this.open(k, 1) ? extR : Math.max(0, smp.edgeR - half);
+      // Lagoon run-off is the sea itself: no sand strip.
+      const wet = this.shape.water[this.idx(k)] === 1;
+      const runL = this.open(k, -1) ? extL : wet ? 0 : Math.max(0, smp.edgeL - half);
+      const runR = this.open(k, 1) ? extR : wet ? 0 : Math.max(0, smp.edgeR - half);
       const S = ROAD_ATLAS_SPLIT;
       const row = [
         c.road.vertex(this.banked(k, -half - runL, runL > RUNOFF_MIN ? -RUNOFF_DROP : 0), shade, 1, v),
@@ -214,6 +225,7 @@ export class Corridor {
     if (k === c.k0 || k === c.k1 || k % this.stride === 0) return true;
     for (const d of [-1, 1]) {
       if (this.gap(k) !== this.gap(k + d) || this.tunnel(k) !== this.tunnel(k + d)) return true;
+      if (this.shape.water[this.idx(k)] !== this.shape.water[this.idx(k + d)]) return true;
       if (this.open(k, -1) !== this.open(k + d, -1) || this.open(k, 1) !== this.open(k + d, 1)) return true;
       for (const side of [-1, 1]) {
         const a = this.shape.run[sideIndex(side)][this.idx(k)] >= RUNOFF_MIN;
@@ -231,6 +243,7 @@ export class Corridor {
         if (this.tunnel(a) && this.tunnel(k)) tunnelStrip(this, c.rock, a, k);
         else if (!this.tunnel(a) && !this.tunnel(k)) {
           for (const side of [-1, 1]) if (!this.open(a, side) && !this.open(k, side)) this.sideStrip(c, a, k, side);
+          if (this.shape.water[this.idx(a)] && this.shape.water[this.idx(k)]) this.causewaySides(c, a, k);
         }
       }
       if (this.tunnel(k) && !this.gap(k)) {
@@ -252,7 +265,7 @@ export class Corridor {
     // A landmark replaces a run-off lip or a low wall it stands on; canyon walls always stay.
     const probe = this.beside(kk, side, HIDE_PROBE, 0);
     const covered = this.ground.inFootprint(prof.pts[2].x, prof.pts[2].z) || this.ground.inFootprint(probe.x, probe.z);
-    prof.hidden = covered && this.shape.canyon[kk] < CANYON_KEEP && !this.tunnel(kk);
+    prof.hidden = (covered && this.shape.canyon[kk] < CANYON_KEEP && !this.tunnel(kk)) || (run >= RUNOFF_MIN && this.shape.water[kk] === 1);
     this.profiles.set(key, prof);
     return prof;
   }
@@ -313,6 +326,21 @@ export class Corridor {
       cols.push(col);
     }
     return { pts, cols, sand: false, hidden: false };
+  }
+
+  /** Over lagoon water the road stands on a causeway: its faces drop into the sea. */
+  private causewaySides(c: Chunk, ka: number, kb: number) {
+    const bed = SEA_LEVEL - LAGOON_DEPTH - 0.5;
+    const col = this.paint.white.clone().multiplyScalar(0.62);
+    const wetCol = this.paint.white.clone().multiplyScalar(0.38);
+    for (const side of [-1, 1]) {
+      const half = (k: number) => (side * this.ribbon.samples[this.idx(k)].width) / 2;
+      const a = this.banked(ka, half(ka), 0);
+      const b = this.banked(kb, half(kb), 0);
+      const kk = this.idx(ka);
+      const out = { x: this.shape.rx[kk] * side, y: 0, z: this.shape.rz[kk] * side };
+      quadFacing(c.rock, { ...a, y: bed }, { ...b, y: bed }, b, a, out, wetCol, wetCol, col, col);
+    }
   }
 
   private sideStrip(c: Chunk, ka: number, kb: number, side: number) {

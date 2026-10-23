@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, range, type Rng } from '../../core/rng.ts';
-import type { TrackScenery } from '../../data/tracks/scenery.ts';
+import type { DesertScenery } from '../../data/tracks/scenery.ts';
 import { FlatBuilder, type P3 } from './builder.ts';
 import { HORIZON_MAX, HORIZON_MIN, type Quality } from './config.ts';
 import type { Corridor } from './corridor.ts';
@@ -43,7 +43,7 @@ function lathe(b: FlatBuilder, c: P3, rings: [number, number][], sides: number, 
   for (let i = 0; i < sides; i++) b.tri(top[(i + 1) % sides], top[i], topC, col);
 }
 
-export function buildHorizon(cor: Corridor, scenery: TrackScenery, quality: Quality, seed: number): FlatBuilder {
+export function buildHorizon(cor: Corridor, scenery: DesertScenery, quality: Quality, seed: number): FlatBuilder {
   const b = new FlatBuilder();
   const rng = mulberry32(seed ^ 0x3e5a);
   const S = cor.ground.views.flatMap((v) => v.ribbon.samples);

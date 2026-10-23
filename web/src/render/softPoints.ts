@@ -32,6 +32,8 @@ void main() {
   // Hardness bends the falloff: additive glows want a hot centre, dust wants a puffy body.
   float a = pow(1.0 - d2, uHardness) * vAlpha;
   gl_FragColor = vec4(vColor, a);
+  // Colours arrive in linear space like every three.js colour; convert for the screen.
+  #include <colorspace_fragment>
 }`;
 
 export type SoftPointsMode = 'additive' | 'normal';

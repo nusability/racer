@@ -107,6 +107,7 @@ export const stormfront: TrackDef = {
 };
 
 export const stormfrontScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 12,
   spires: 16,
   duneHeight: 7,

@@ -77,6 +77,7 @@ export const glasssea: TrackDef = {
 };
 
 export const glassseaScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 8,
   spires: 6,
   duneHeight: 3,

@@ -6,10 +6,18 @@ import type { LandmarkKind } from '../../render/landmarks/types.ts';
 
 export type ScatterKind = 'rocks' | 'cacti' | 'bones' | 'shards';
 
-/** What marks the hard boundary at the outside of the run-off sand. */
+/** What marks the hard boundary at the outside of the run-off (water run-off gets buoys). */
 export type BoundaryStyle = 'dune' | 'rock' | 'fence';
 
-export interface TrackScenery {
+interface SceneryBase {
+  boundary: BoundaryStyle;
+  /** Unique set pieces beside the course. */
+  landmarks: LandmarkPlacement[];
+}
+
+/** The desert: dunes, mesas and spires. */
+export interface DesertScenery extends SceneryBase {
+  biome: 'desert';
   /** Flat-topped mesas and buttes on the horizon. */
   mesas: number;
   /** Thin rock spires and hoodoos on the horizon. */
@@ -22,10 +30,29 @@ export interface TrackScenery {
   scatterPerKm: number;
   /** Palm groves around a pool beside the road; side -1 = left, 1 = right. */
   oases: { at: TrackParam; side: -1 | 1 }[];
-  boundary: BoundaryStyle;
-  /** Unique set pieces beside the course. */
-  landmarks: LandmarkPlacement[];
 }
+
+/** The coast: sea all round, beaches, islands, sea stacks, lagoons you skim across. */
+export interface BeachScenery extends SceneryBase {
+  biome: 'beach';
+  /** Main-loop spans where the run-off is shallow lagoon water instead of sand. */
+  lagoons: { from: TrackParam; to: TrackParam }[];
+  /** Share of the open map that is land rather than sea, 0..1. */
+  land: number;
+  /** Height of the dunes and islands away from the course, metres above the sea. */
+  landHeight: number;
+  /** Distant islands and headlands on the horizon. */
+  islands: number;
+  /** Sea stacks standing in the water near the course. */
+  stacks: number;
+  /** Beach dressing per kilometre of lap: palms, huts, towers and flags. */
+  palmsPerKm: number;
+  hutsPerKm: number;
+  /** What the road is made of. */
+  road: 'causeway' | 'boardwalk';
+}
+
+export type TrackScenery = DesertScenery | BeachScenery;
 
 export interface LandmarkPlacement {
   kind: LandmarkKind;
@@ -44,4 +71,6 @@ export interface LandmarkPlacement {
    * with a clear lane where the course runs, e.g. a market street a shortcut runs down.
    */
   straddle?: boolean;
+  /** Floats on the sea (a ship, whales, a pier's deck level): placed at sea level, ground left alone. */
+  afloat?: boolean;
 }

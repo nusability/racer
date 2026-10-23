@@ -11,11 +11,13 @@
   </head>
   <body>
     <script type="module">
-      // ?set=a (default) or ?set=b picks which landmark set's viewer runs; a set-B kind implies b.
+      // ?set=a (default), ?set=b or ?set=c picks which landmark set's viewer runs; a set-B kind implies b.
       const query = new URLSearchParams(location.search);
       const B_KINDS = ['bazaar', 'fair', 'grandstand', 'oasisTown', 'cliffVillage', 'colossus', 'windfarm', 'balloons'];
-      const set = query.get('set') === 'b' || B_KINDS.includes(query.get('kind')) ? 'B' : 'A';
-      import(`/src/render/landmarks/viewer${set}.ts`);
+      const set = query.get('set') === 'c' ? 'C' : query.get('set') === 'b' || B_KINDS.includes(query.get('kind')) ? 'B' : 'A';
+      // Literal imports so a static build bundles every viewer.
+      const viewers = { A: () => import('/src/render/landmarks/viewerA.ts'), B: () => import('/src/render/landmarks/viewerB.ts'), C: () => import('/src/render/landmarks/viewerC.ts') };
+      viewers[set]();
     </script>
   </body>
 </html>

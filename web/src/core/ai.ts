@@ -36,6 +36,8 @@ import {
   AI_PLAN_INTERVAL,
   AI_PLAN_STICKINESS,
   AI_RACER_LOOK_TIME,
+  AI_REACTION_HI,
+  AI_REACTION_LO,
   AI_SAMPLE_STEP,
   AI_SHORTCUT_HI,
   AI_SHORTCUT_LO,
@@ -96,6 +98,8 @@ export class AiDriver {
   private planTarget = 0;
   /** Where across the ribbon this driver last wanted to be (its target before steering). */
   aimX = 0;
+  /** Recent targets, oldest first: the reaction delay reads the oldest. */
+  private readonly seen: number[] = [];
   private readonly profiles = new Map<Ribbon, SpeedProfiles>();
   /** Per branch: the lap a shortcut was last decided on and whether it is being taken. */
   private readonly shortcut = new Map<number, { lap: number; take: boolean }>();
@@ -183,6 +187,11 @@ export class AiDriver {
     }
     target += this.noise;
     this.aimX = target;
+    // Act on what was seen a reaction time ago (an empty history means the current target).
+    this.seen.push(target);
+    const lag = Math.round(this.bySkill(AI_REACTION_LO, AI_REACTION_HI) / SIM_DT);
+    while (this.seen.length > lag + 1) this.seen.shift();
+    target = this.seen[0];
 
     // 3. Speed: brake when a bend ahead can't be held at this speed in the distance left.
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);

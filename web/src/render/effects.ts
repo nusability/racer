@@ -2,20 +2,20 @@
 // pool for dust/smoke/debris, one additive point pool for sparks/fire/flashes and one instanced
 // mesh of shock rings. Everything is preallocated; spawning overwrites the oldest particle.
 import * as THREE from 'three';
-import { SoftPointBuffer } from './softPoints.ts';
+import { ParticlePool } from './particlePool.ts';
+import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
 
 const POOL_SOFT = { high: 1600, low: 650 } as const;
 const POOL_GLOW = { high: 700, low: 320 } as const;
 const RING_COUNT = 8;
 /** Effects spawned further than this from the camera are skipped (m). */
 const SPAWN_RANGE = 320;
-/** Particles fade in over 1/FADE_IN of their life so they never pop. */
-const FADE_IN = 10;
 
 // Dust: per call, `amount` × this many puffs (fractional counts carry over between calls).
 const DUST_PER_CALL = { high: 2.0, low: 0.9 } as const;
 const DUST_SPREAD = 2.6;
-const DUST_DROP = 0.9;
+/** Puffs start just above the ground under the hovering craft. */
+const DUST_DROP = SKIMMER_RIDE_HEIGHT - 0.15;
 const DUST_LIFE = [0.7, 1.3] as const;
 const DUST_SIZE = [1.2, 6.0] as const;
 // Low on purpose: a racer tailing another must still see the road through its dust.
@@ -26,7 +26,7 @@ const DUST_LIFT = [1.5, 5.5] as const;
  * left behind in a single frame at 200 m/s. */
 const DUST_CARRY = 0.9;
 const DUST_DRAG = 1.1;
-/** Puffs start this far ahead of the racer origin: under the engines, where the thrust hits. */
+/** Puffs start this far ahead of the racer origin: under the wing, where the cushion pushes. */
 const DUST_LEAD = 3;
 /** Sun-lit sand in the air reads lighter than the ground it came from. */
 const DUST_LIGHTEN = 0.3;
@@ -58,94 +58,6 @@ const UNIT_Z = new THREE.Vector3(0, 0, 1);
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
-}
-
-class ParticlePool {
-  readonly buf: SoftPointBuffer;
-  private readonly vel: Float32Array;
-  private readonly life: Float32Array;
-  private readonly maxLife: Float32Array;
-  private readonly size0: Float32Array;
-  private readonly size1: Float32Array;
-  private readonly alpha0: Float32Array;
-  private readonly drag: Float32Array;
-  private readonly gravity: Float32Array;
-  private next = 0;
-  private live = 0;
-
-  constructor(readonly capacity: number, mode: 'additive' | 'normal', hardness: number) {
-    this.buf = new SoftPointBuffer(capacity, mode, hardness);
-    this.vel = new Float32Array(capacity * 3);
-    this.life = new Float32Array(capacity);
-    this.maxLife = new Float32Array(capacity).fill(1);
-    this.size0 = new Float32Array(capacity);
-    this.size1 = new Float32Array(capacity);
-    this.alpha0 = new Float32Array(capacity);
-    this.drag = new Float32Array(capacity);
-    this.gravity = new Float32Array(capacity);
-  }
-
-  spawn(
-    px: number, py: number, pz: number, vx: number, vy: number, vz: number,
-    life: number, size0: number, size1: number, color: THREE.Color, alpha: number, drag: number, gravity: number,
-  ): void {
-    const i = this.next;
-    this.next = (i + 1) % this.capacity;
-    const b = this.buf;
-    b.position[i * 3] = px;
-    b.position[i * 3 + 1] = py;
-    b.position[i * 3 + 2] = pz;
-    b.color[i * 3] = color.r;
-    b.color[i * 3 + 1] = color.g;
-    b.color[i * 3 + 2] = color.b;
-    b.size[i] = size0;
-    b.alpha[i] = 0;
-    this.vel[i * 3] = vx;
-    this.vel[i * 3 + 1] = vy;
-    this.vel[i * 3 + 2] = vz;
-    this.life[i] = life;
-    this.maxLife[i] = life;
-    this.size0[i] = size0;
-    this.size1[i] = size1;
-    this.alpha0[i] = alpha;
-    this.drag[i] = drag;
-    this.gravity[i] = gravity;
-    this.live = this.capacity;
-  }
-
-  update(dt: number): void {
-    if (this.live === 0) return;
-    const b = this.buf;
-    let alive = 0;
-    for (let i = 0; i < this.capacity; i++) {
-      if (this.life[i] <= 0) continue;
-      const left = this.life[i] - dt;
-      this.life[i] = left;
-      if (left <= 0) {
-        b.alpha[i] = 0;
-        continue;
-      }
-      alive++;
-      const t = 1 - left / this.maxLife[i];
-      const k = Math.max(0, 1 - this.drag[i] * dt);
-      const o = i * 3;
-      this.vel[o] *= k;
-      this.vel[o + 1] = this.vel[o + 1] * k - this.gravity[i] * dt;
-      this.vel[o + 2] *= k;
-      b.position[o] += this.vel[o] * dt;
-      b.position[o + 1] += this.vel[o + 1] * dt;
-      b.position[o + 2] += this.vel[o + 2] * dt;
-      b.size[i] = this.size0[i] + (this.size1[i] - this.size0[i]) * t;
-      b.alpha[i] = this.alpha0[i] * (1 - t) * Math.min(1, t * FADE_IN);
-    }
-    // Once everything has died, one last commit zeroes the buffer and further frames are free.
-    this.live = alive;
-    b.commit();
-  }
-
-  dispose(): void {
-    this.buf.dispose();
-  }
 }
 
 export class Effects {

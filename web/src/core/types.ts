@@ -225,7 +225,8 @@ export interface RacerStats {
   armor: number;
 }
 
-export type RacerStyle = 'twin' | 'needle' | 'heavy' | 'quad' | 'split' | 'ring';
+/** Ground-effect skimmer silhouettes (src/render/racerStyles.ts). */
+export type RacerStyle = 'skiff' | 'sponson' | 'dart' | 'quadfan' | 'swept' | 'ringwing';
 
 export interface RacerVisual {
   style: RacerStyle;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Track } from '../../core/track.ts';
 import type { TrackScenery } from '../../data/tracks/scenery.ts';
 import { LANDMARKS, type Landmark } from '../landmarks/index.ts';
-import { LANDMARK_PAD, LANDMARK_VIEW, type Quality } from './config.ts';
+import { LANDMARK_PAD, LANDMARK_VIEW, SEA_LEVEL, type Quality } from './config.ts';
 import type { Ground } from './ground.ts';
 
 // Set pieces beside the course (a spaceport, a fair, a battle): built by the landmark modules,
@@ -45,8 +45,8 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     const z = f.pos.z + rz * p.side * out;
     // Close to the course, level the ground with the road edge so the landmark meets it flush.
     const foot = ribbon.toWorld(s, p.side * edge, 0);
-    const y = p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
-    ground.addPad(x, z, radius * LANDMARK_PAD, y);
+    const y = p.afloat ? SEA_LEVEL : p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
+    if (!p.afloat) ground.addPad(x, z, radius * LANDMARK_PAD, y);
     ground.addFootprint(x, z, radius);
     // Local -Z faces the course: toward it is -side along the right vector.
     const tx = -rx * p.side;

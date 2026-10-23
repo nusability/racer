@@ -77,6 +77,7 @@ export const sunpan: TrackDef = {
 };
 
 export const sunpanScenery: TrackScenery = {
+  biome: 'desert',
   mesas: 10,
   spires: 6,
   duneHeight: 4,
