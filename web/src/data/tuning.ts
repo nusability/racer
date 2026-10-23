@@ -53,12 +53,12 @@ export const FINISH_GRACE = 20;
 /** Gap (metres along the lap) where the catch-up starts to act. */
 export const CATCHUP_START_GAP = 60;
 /** Gap where it reaches full strength. */
-export const CATCHUP_FULL_GAP = 600;
+export const CATCHUP_FULL_GAP = 450;
 /** Top speed an AI far ahead gives up (fraction). */
 export const CATCHUP_EASE = 0.03;
 /** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. A
  * strong push keeps a fast player from lapping the field; behind like that, AIs also boost freely. */
-export const CATCHUP_PUSH = 0.12;
+export const CATCHUP_PUSH = 0.15;
 /** Skill of the AI that drives the player's racer after the finish (and in headless runs). */
 export const AUTOPILOT_SKILL = 0.85;
 
@@ -154,11 +154,11 @@ export const ARCH_HALF_DEPTH = 3;
 /** Search distance for obstacles around a racer, metres (exceeds any radius sum). */
 export const OBSTACLE_QUERY_RANGE = 30;
 /** A hit closer to dead centre than this fraction of the combined radius... */
-export const OBSTACLE_WRECK_OFFSET = 0.2;
+export const OBSTACLE_WRECK_OFFSET = 0.25;
 /** ...above this fraction of top speed is an instant wreck. */
 export const OBSTACLE_WRECK_SPEED_FRACTION = 0.6;
 /** Hull a full-speed hit costs at its most central (before armour); glancing costs less. */
-export const OBSTACLE_DAMAGE = 0.6;
+export const OBSTACLE_DAMAGE = 0.7;
 /** Forward speed a hit costs, as a fraction, at its most central. */
 export const OBSTACLE_SPEED_LOSS = 0.35;
 /** Sideways speed a glancing hit throws the racer off with, m/s. */

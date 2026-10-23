@@ -5,6 +5,7 @@ import type { Landmark, LandmarkFactory } from './types.ts';
 import { createIcebreaker } from './d/icebreaker.ts';
 import { createAvalancheSlope } from './d/avalancheSlope.ts';
 import { createGlacierWall } from './d/glacierWall.ts';
+import { createMammothHerd } from './d/mammothHerd.ts';
 
 type SetDKind = 'icebreaker' | 'avalancheSlope' | 'glacierWall' | 'mammothHerd' | 'iceStation' | 'skiJump' | 'icePalace' | 'frozenFalls' | 'auroraSky' | 'snowcatConvoy';
 
@@ -24,7 +25,7 @@ export const LANDMARKS_D: Record<SetDKind, LandmarkFactory> = {
   icebreaker: createIcebreaker,
   avalancheSlope: createAvalancheSlope,
   glacierWall: createGlacierWall,
-  mammothHerd: placeholder(0x8a5a3a),
+  mammothHerd: createMammothHerd,
   iceStation: placeholder(0xff8a20),
   skiJump: placeholder(0xd0d8e0),
   icePalace: placeholder(0xa0e0ff),

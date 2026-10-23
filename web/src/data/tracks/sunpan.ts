@@ -51,6 +51,11 @@ export const sunpan: TrackDef = {
     { kind: 'boostCells', at: 12.8, lateral: -12, count: 6, spacing: 30 },
     { kind: 'boostPad', at: 12.1, lateral: 8 },
     { kind: 'boostPad', at: 12.14, lateral: 8 },
+    // A freighter lifting off the spaceport crosses low over the road: its downdraft shoves.
+    {
+      kind: 'hazard',
+      hazard: { type: 'gust', id: 'liftoff', from: 8.3, to: 8.65, strength: 4, on: 4, period: 18, phase: 3 },
+    },
   ],
   branches: [
     {
@@ -87,7 +92,7 @@ export const sunpanScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
-    { kind: 'spaceport', at: 8.5, side: -1, distance: 0 },
+    { kind: 'spaceport', at: 8.5, side: -1, distance: 0, hazard: 'liftoff' },
     { kind: 'skyfleet', at: 2.5, side: -1, distance: 250 },
     { kind: 'balloons', at: 12.5, side: 1, distance: 120 },
   ],

@@ -75,7 +75,8 @@ interface Outcome {
   wreck: string | null;
   /** A rival still running was a lap or more behind when the bot finished. */
   lapped: boolean;
-  crashes: number;
+  /** Hull lost by the end (1 = destroyed). */
+  damage: number;
   /** Championship points every entrant scored, by entrant id. */
   points: Map<string, number>;
 }
@@ -114,7 +115,7 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     margin: me.finishTime === null ? NaN : rivalEta - me.finishTime,
     wreck,
     lapped,
-    crashes: c.destroyed + c.fell + c.offEdge + c.loopStall + c.obstacle + c.hazard,
+    damage: me.damage,
     points,
   };
 }
@@ -164,10 +165,12 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
   const within3 = all.filter((o) => o.gap <= 3).length;
   const counts = [1, 2, 3, 4, 5, 6].map((p) => `${p}:${all.filter((o) => o.place === p && o.wreck === null).length}`).join(' ');
   const wrecks = all.filter((o) => o.wreck !== null);
+  const finished = all.filter((o) => o.wreck === null);
   const reasons = [...new Set(wrecks.map((o) => o.wreck))].map((r) => `${r} ${wrecks.filter((o) => o.wreck === r).length}`).join(', ');
   console.log(
     `  total: race wins ${wins}/${all.length}, cups won ${Math.round(res.cupWinShare * STUDY_RUNS)}/${STUDY_RUNS}, ` +
-      `within 3 s of 1st ${within3}/${all.length}, places ${counts}, DNF ${wrecks.length}/${all.length}${reasons ? ` (${reasons})` : ''}`,
+      `within 3 s of 1st ${within3}/${all.length}, places ${counts}, DNF ${wrecks.length}/${all.length}${reasons ? ` (${reasons})` : ''}, ` +
+      `mean hull lost by finishers ${Math.round((100 * finished.reduce((t, o) => t + o.damage, 0)) / Math.max(1, finished.length))}%`,
   );
   const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);
   if (margins.length) {
