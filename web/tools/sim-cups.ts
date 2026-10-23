@@ -34,21 +34,23 @@ export interface PlayerBot {
   holdBoost: boolean;
   /** Uses the air brake where the eyes would. */
   brakes: boolean;
-  /** Takes shortcuts and swerves for cells (otherwise only the cells on its line). */
-  routes: boolean;
+  /** Takes shortcuts. */
+  shortcuts: boolean;
+  /** Swerves for cells (otherwise only the cells on its line). */
+  cells: boolean;
 }
 
 /** A self-described bad racer: late, wobbly, boost always held, never brakes. */
-export const NOVICE: PlayerBot = { name: 'novice', eyes: 0.4, delay: 0.25, holdBoost: true, brakes: false, routes: false };
-/** A decent player: a fair line, quicker hands, boosts on the straights, brakes for hairpins. */
-export const DECENT: PlayerBot = { name: 'decent', eyes: 0.5, delay: 0.15, holdBoost: false, brakes: true, routes: false };
+export const NOVICE: PlayerBot = { name: 'novice', eyes: 0.4, delay: 0.25, holdBoost: true, brakes: false, shortcuts: false, cells: false };
+/** A decent player: a fair line, quicker hands, boosts on the straights, brakes for hairpins, picks up cells. */
+export const DECENT: PlayerBot = { name: 'decent', eyes: 0.5, delay: 0.15, holdBoost: false, brakes: true, shortcuts: false, cells: true };
 /** A skilled player: a sharp line, quick hands, takes shortcuts and goes for cells. */
-export const SKILLED: PlayerBot = { name: 'skilled', eyes: 0.9, delay: 0.1, holdBoost: false, brakes: true, routes: true };
+export const SKILLED: PlayerBot = { name: 'skilled', eyes: 0.9, delay: 0.1, holdBoost: false, brakes: true, shortcuts: true, cells: true };
 
 /** The bot's eyes are an AI driver; what it does with them is the bot's. */
 export function botDriver(race: Race, seed: number, bot: PlayerBot): (r: Race) => PlayerInput {
   const index = race.entrants.findIndex((e) => e.isPlayer);
-  const eyes = new AiDriver(bot.eyes, seed, { shortcuts: bot.routes, cellDetours: bot.routes });
+  const eyes = new AiDriver(bot.eyes, seed, { shortcuts: bot.shortcuts, cellDetours: bot.cells });
   const delay = Math.round(bot.delay / SIM_DT);
   const seen: number[] = [];
   return (r: Race) => {
@@ -206,7 +208,7 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
   );
   const mean = (f: (o: Outcome) => number) => fmt(all.reduce((t, o) => t + f(o), 0) / all.length);
   console.log(
-    `  per race: lead changes ${mean((o) => o.leadChanges)}, bot passed ${mean((o) => o.passed)}x, ` +
+    `  per race: mean place ${mean((o) => o.place)}, lead changes ${mean((o) => o.leadChanges)}, bot passed ${mean((o) => o.passed)}x, ` +
       `bot overtook ${mean((o) => o.overtakes)}x, bot boosting ${Math.round(100 * all.reduce((t, o) => t + o.boostShare, 0) / all.length)}% of its race`,
   );
   const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);

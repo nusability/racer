@@ -178,6 +178,17 @@ export class Ground {
   }
 
   /**
+   * Height of the drivable surface under a ground point: the banked road plane, which the
+   * run-off continues, held at its hard-boundary height beyond it. On a banked corner the
+   * inside run-off sits well below the road's centre, and the ground must follow it down.
+   */
+  surfaceY(near: Nearest): number {
+    const smp = this.views[near.v].ribbon.samples[near.k];
+    const edge = near.d < 0 ? smp.edgeL : smp.edgeR;
+    return this.roadY(near.v, near.k, Math.sign(near.d) * Math.min(Math.abs(near.d), edge));
+  }
+
+  /**
    * The visible ground surface: road level by the corridor, easing out to the dunes. Nothing
    * rises inside the drivable width (road and run-off up to the hard boundary): the ease only
    * starts past the boundary, after landmark pads, so no dune, sand bar or pad edge ever
@@ -204,7 +215,7 @@ export class Ground {
           ? sh.gy[near.k] - DROP_FALL
           : sh.loop[near.k]
             ? sh.gy[near.k] - SHOULDER_DROP
-            : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
+            : this.surfaceY(near) - SHOULDER_DROP;
       const flat = falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
       h = roadSide + (h - roadSide) * smoothstep((out - flat) / blend);
@@ -227,8 +238,8 @@ export class Ground {
     if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
     // Lagoon run-off is open water over a shallow bed: nothing covers it, so don't sink it.
     if (view.shape.water[near.k] && Math.abs(near.d) > smp.width / 2 + 1) return h;
-    const tilt = view.shape.loop[near.k] ? 0 : Math.abs(smp.right.y) * smp.width * 0.5;
-    return Math.min(h, view.shape.gy[near.k] - tilt) - TERRAIN_SINK;
+    const under = view.shape.loop[near.k] ? view.shape.gy[near.k] : this.surfaceY(near);
+    return Math.min(h, under) - TERRAIN_SINK;
   }
 
   /** True when (x, z) is at least `margin` past the corridor geometry of every ribbon. */
