@@ -53,11 +53,12 @@ export const FINISH_GRACE = 20;
 /** Gap (metres along the lap) where the catch-up starts to act. */
 export const CATCHUP_START_GAP = 60;
 /** Gap where it reaches full strength. */
-export const CATCHUP_FULL_GAP = 450;
+export const CATCHUP_FULL_GAP = 600;
 /** Top speed an AI far ahead gives up (fraction). */
-export const CATCHUP_EASE = 0.06;
-/** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. */
-export const CATCHUP_PUSH = 0.02;
+export const CATCHUP_EASE = 0.03;
+/** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. A
+ * strong push keeps a fast player from lapping the field; behind like that, AIs also boost freely. */
+export const CATCHUP_PUSH = 0.12;
 /** Skill of the AI that drives the player's racer after the finish (and in headless runs). */
 export const AUTOPILOT_SKILL = 0.85;
 
@@ -116,10 +117,12 @@ export const SAND_DRAG = 8;
 export const BOUNDARY_SPEED_LOSS = 0.4;
 /** Grinding along a boundary, m/s². */
 export const BOUNDARY_FRICTION_DECEL = 20;
-/** Boundary hits below this sideways speed do no damage, m/s: only a hard angle hurts. */
-export const BOUNDARY_DAMAGE_FREE_SPEED = 30;
+/** Boundary hits below this sideways speed do no damage, m/s. */
+export const BOUNDARY_DAMAGE_FREE_SPEED = 8;
 /** Damage per m/s of sideways speed above the free speed (before armour). */
-export const BOUNDARY_DAMAGE_PER_SPEED = 0.008;
+export const BOUNDARY_DAMAGE_PER_SPEED = 0.006;
+/** Grinding along a boundary wears the hull too, per second (before armour). */
+export const BOUNDARY_GRIND_DAMAGE = 0.03;
 /** Fraction of the sideways speed bounced back off a boundary. */
 export const BOUNDARY_RESTITUTION = 0.3;
 /** Scrape intensity of a gentle grind; impact speed adds to it. */
@@ -147,39 +150,43 @@ export const CEILING_SPEED_LOSS = 0.5;
 /** Half-thickness of an arch's span along s: inside it the arch is a ceiling, metres. */
 export const ARCH_HALF_DEPTH = 3;
 
-// Obstacles and other racers
+// Obstacles and other racers. Hull is life: damage reaching 1 wrecks the racer for the race.
 /** Search distance for obstacles around a racer, metres (exceeds any radius sum). */
 export const OBSTACLE_QUERY_RANGE = 30;
-/** A hit closer to dead centre than this fraction of the combined radius can be a crash. */
-export const OBSTACLE_CRASH_OFFSET = 0.15;
-/** ...but only above this fraction of top speed. */
-export const OBSTACLE_CRASH_SPEED_FRACTION = 0.7;
-/** Forward speed lost by a glancing hit, as a fraction, at its most central. */
-export const OBSTACLE_SPEED_LOSS = 0.1;
-/** Damage of a glancing hit at its most central (before armour). */
-export const OBSTACLE_DAMAGE = 0.12;
+/** A hit closer to dead centre than this fraction of the combined radius... */
+export const OBSTACLE_WRECK_OFFSET = 0.2;
+/** ...above this fraction of top speed is an instant wreck. */
+export const OBSTACLE_WRECK_SPEED_FRACTION = 0.6;
+/** Hull a full-speed hit costs at its most central (before armour); glancing costs less. */
+export const OBSTACLE_DAMAGE = 0.6;
+/** Forward speed a hit costs, as a fraction, at its most central. */
+export const OBSTACLE_SPEED_LOSS = 0.35;
 /** Sideways speed a glancing hit throws the racer off with, m/s. */
 export const OBSTACLE_DEFLECT_SPEED = 25;
-/** Lateral separation acceleration per metre of overlap between racers, 1/s². Soft on purpose. */
-export const RACER_PUSH_RATE = 60;
+/** Sideways shove between racers per m/s of closing speed, before mass sharing (m/s). */
+export const RACER_SHOVE = 0.8;
+/** Smallest shove of any contact, m/s: touching always pushes apart. */
+export const RACER_SHOVE_MIN = 6;
+/** A shove moves the victim's line this many seconds' worth: a nudge sends it off its line. */
+export const RACER_SHOVE_TARGET_TIME = 0.25;
+/** Hull per m/s of closing speed in a racer contact (before armour). */
+export const RACER_DAMAGE_PER_SPEED = 0.008;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
 export const RACER_BUMP_SHARE = 0.3;
-/** Racer contacts are mild: opponents are secondary to the track. */
-export const RACER_HIT_INTENSITY = 0.15;
+/** Closing speed that makes a racer contact full intensity, m/s. */
+export const RACER_HIT_INTENSITY_SPEED = 30;
+/** Hull a repair cell restores. */
+export const REPAIR_VALUE = 0.25;
 
-// Crash and respawn
-/** Seconds a crashed racer is out before respawning. */
-export const RESPAWN_DELAY = 2;
-/** Respawn this far behind the crash point, metres. */
-export const RESPAWN_BACKOFF = 30;
-/** Respawns near a jump move this far before its ramp, so there is room to reach speed. */
-export const RESPAWN_JUMP_RUNUP = 250;
-/** Speed after respawning, as a fraction of top speed. */
-export const RESPAWN_SPEED_FRACTION = 0.6;
-/** Damage after respawning is at most this. */
-export const RESPAWN_DAMAGE = 0.3;
-/** Seconds after respawning during which obstacles and racers pass through you. */
-export const RESPAWN_INVULNERABLE = 1.5;
+// Course shapes and hazards
+/** Below this speed in the upper half of a loop a racer falls out: a wreck. */
+export const LOOP_MIN_SPEED = 75;
+/** On an open-edge side the target may go this far past the edge: you can drive off a cliff. */
+export const DROP_OVERREACH = 8;
+/** A gust drifts the lateral target: m/s of drift per m/s² of push. */
+export const GUST_DRIFT = 0.25;
+/** On a slick surface (grip < 1) the chase's damping ratio is the grip (below 1: it overshoots). */
+export const SLICK_DAMPING_FLOOR = 0.35;
 
 // Boost tank
 /** Tank fill at the start of a race: enough for a launch and a first straight. */

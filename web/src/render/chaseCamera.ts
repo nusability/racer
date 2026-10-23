@@ -20,6 +20,7 @@ import {
   CAM_PORTRAIT_FOV_SCALE,
   CAM_SHAKE_DECAY,
   CAM_SMOOTH,
+  CAM_UP_BLEND,
   CAM_UP_FOLLOW,
   CAM_WALL_MARGIN,
 } from './cameraTuning.ts';
@@ -38,6 +39,7 @@ export class ChaseCamera {
   private readonly trackUp = new THREE.Vector3();
   private initialised = false;
   private branch = -1;
+  private upFollow = CAM_UP_FOLLOW;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(CAM_FOV_MIN, aspect, 0.5, 3200);
@@ -79,8 +81,11 @@ export class ChaseCamera {
     placeOnCourse(track, p.branch, p.s + CAM_LOOK_AHEAD, p.x, p.y + CAM_LOOK_HEIGHT, this.tmp, this.frame);
     this.target.set(this.tmp.x, this.tmp.y, this.tmp.z);
 
-    // Follow the road's bank partly so turns lean, but never fully (nausea on phones).
-    this.up.set(0, 1, 0).lerp(this.trackUp, CAM_UP_FOLLOW).normalize();
+    // Follow the road's bank partly so turns lean, but never fully (nausea on phones) — except
+    // where the road leaves the ground plane (loops, corkscrews): there only the road is "up".
+    const upTarget = ribbon.isMagnet(p.s) || ribbon.isMagnet(sCam) ? 1 : CAM_UP_FOLLOW;
+    this.upFollow += (upTarget - this.upFollow) * (1 - Math.exp(-CAM_UP_BLEND * dt));
+    this.up.set(0, 1, 0).lerp(this.trackUp, this.upFollow).normalize();
     this.camera.up.copy(this.up);
 
     if (this.shake > 0) {
@@ -100,6 +105,7 @@ export class ChaseCamera {
   /** Snap instead of easing on the next update (start, restart). */
   reset() {
     this.initialised = false;
+    this.upFollow = CAM_UP_FOLLOW;
     this.branch = -1;
   }
 

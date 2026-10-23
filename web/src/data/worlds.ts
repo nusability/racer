@@ -41,6 +41,16 @@ export const WORLDS: WorldDef[] = [
     unlockedBy: 'dust',
     card: { from: 0x4fd6e0, to: 0x125a8a },
   },
+  {
+    id: 'ice',
+    name: 'Frostline',
+    blurb: 'Glacier canyons, frozen harbours and avalanches that do not wait for you.',
+    biome: 'ice',
+    trackIds: ['snowfield', 'frozenharbor', 'glacier', 'icefalls', 'avalanche', 'auroracrown'],
+    cupIds: ['frost', 'blizzard', 'aurora'],
+    unlockedBy: 'shoreline',
+    card: { from: 0xcdeeff, to: 0x2b4a8a },
+  },
 ];
 
 export function worldById(id: string): WorldDef {

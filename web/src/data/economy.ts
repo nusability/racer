@@ -17,7 +17,7 @@ export const TIER_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];
  * Payout multiplier per world, by its index in WORLDS (desert, coast, ...). A new world appends
  * one entry; a world without one is an error, not a silent default.
  */
-export const WORLD_PAYOUT_MULTIPLIER: number[] = [1, 1.6];
+export const WORLD_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];
 
 /** Bonus for winning a cup, per tier (index = tier - 1), before the world multiplier. */
 export const CUP_WIN_BONUS: number[] = [1200, 2400, 4000];

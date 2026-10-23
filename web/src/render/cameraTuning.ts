@@ -32,3 +32,5 @@ export const POSE_VISUAL_HOVER = SKIMMER_RIDE_HEIGHT;
 export const POSE_MAX_PITCH = 0.45;
 /** Opponents closer than this to the camera are hidden instead of filling the lens. */
 export const CAM_HIDE_NEAR = 9;
+/** Rate the horizon blends to and from following the road fully (loops, corkscrews). */
+export const CAM_UP_BLEND = 4;

@@ -33,7 +33,18 @@ export type LandmarkKind =
   | 'volcano'
   | 'whales'
   | 'beachParty'
-  | 'airshow';
+  | 'airshow'
+  // Set D: the ice
+  | 'icebreaker'
+  | 'avalancheSlope'
+  | 'glacierWall'
+  | 'mammothHerd'
+  | 'iceStation'
+  | 'skiJump'
+  | 'icePalace'
+  | 'frozenFalls'
+  | 'auroraSky'
+  | 'snowcatConvoy';
 
 /**
  * A landmark that IS part of the course (the sand beast that crosses the road, the digger

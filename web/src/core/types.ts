@@ -377,11 +377,11 @@ export interface RacerState {
   roll: number;
   /** Boost tank fill, 0..1. Holding boost drains it; boost cells refill it. No penalty for using it. */
   boost: number;
-  /** 0..1; 1 = destroyed. */
+  /** Hull damage 0..1; reaching 1 wrecks the racer. Repair cells take it back down. */
   damage: number;
   boosting: boolean;
   airborne: boolean;
-  /** Seconds left before respawn after a crash; 0 when racing. */
+  /** Seconds since this racer wrecked; 0 while racing. A wreck is final for the race. */
   crashed: number;
   /** Laps completed. */
   lap: number;
@@ -403,7 +403,12 @@ export type RaceEvent =
   /** Entered (on: true) or left (on: false) the sand run-off beyond the road edge. */
   | { type: 'offroad'; id: string; on: boolean }
   | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number }
-  | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'obstacle' }
+  /**
+   * A wreck: the racer is out of this race (no respawn). destroyed = hull gone, fell = into a
+   * chasm, offEdge = off an open edge, loopStall = too slow at the top of a loop, obstacle /
+   * hazard = a dead-centre hit at speed.
+   */
+  | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'offEdge' | 'loopStall' | 'obstacle' | 'hazard' }
   | { type: 'respawn'; id: string }
   | { type: 'launch'; id: string }
   | { type: 'land'; id: string; impact: number }
@@ -426,4 +431,6 @@ export interface RaceResultRow {
   time: number | null;
   bestLap: number | null;
   isPlayer: boolean;
+  /** Wrecked: did not finish. Placed after every racer still running, latest wreck first. */
+  dnf: boolean;
 }

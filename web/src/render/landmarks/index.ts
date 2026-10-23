@@ -4,7 +4,8 @@ import type { LandmarkFactory, LandmarkKind } from './types.ts';
 import { LANDMARKS_A } from './setA.ts';
 import { LANDMARKS_B } from './setB.ts';
 import { LANDMARKS_C } from './setC.ts';
+import { LANDMARKS_D } from './setD.ts';
 
-export const LANDMARKS: Record<LandmarkKind, LandmarkFactory> = { ...LANDMARKS_A, ...LANDMARKS_B, ...LANDMARKS_C };
+export const LANDMARKS: Record<LandmarkKind, LandmarkFactory> = { ...LANDMARKS_A, ...LANDMARKS_B, ...LANDMARKS_C, ...LANDMARKS_D };
 
 export type { Landmark, LandmarkFactory, LandmarkKind, LandmarkOptions } from './types.ts';
