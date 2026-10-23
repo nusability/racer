@@ -84,6 +84,7 @@ const CAUSEWAY_HALF = 15;
 const CHANNEL = 160;
 /** The road sits a little proud of the embankment so they never z-fight. */
 const ROAD_LIFT = 0.2;
+const ROAD_PIECES = 120;
 /** Where each bound kind sits relative to the road (its centre's world z) and its sample hazard. */
 const HAZARDS: Partial<Record<Kind, { z: number; def: HazardDef }>> = {
   volcano: { z: 900, def: { type: 'dropper', id: 'lava', from: 0, to: 0, count: 6, radius: 3, period: 8, warn: 2.6, stay: 3, phase: 0 } },
@@ -222,7 +223,8 @@ if (hz) {
   const bank = new THREE.MeshLambertMaterial({ color: palette.sand });
   const half = (GROUND_SIZE - CHANNEL) / 4;
   for (const sx of [-1, 1]) scene.add(new THREE.Mesh(new THREE.BoxGeometry(GROUND_SIZE / 2 - CHANNEL / 2, CAUSEWAY_Y + 3, CAUSEWAY_HALF * 2 + 10).translate(sx * (half + CHANNEL / 2), (CAUSEWAY_Y + 3) / 2 - 3, 0), bank));
-  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, CAUSEWAY_HALF * 2).rotateX(-Math.PI / 2).translate(0, CAUSEWAY_Y + ROAD_LIFT, 0), new THREE.MeshLambertMaterial({ color: palette.road, side: THREE.DoubleSide })));
+  // Subdivided: one huge quad clipped at the near plane loses precision on some GPUs.
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, CAUSEWAY_HALF * 2, ROAD_PIECES, 1).rotateX(-Math.PI / 2).translate(0, CAUSEWAY_Y + ROAD_LIFT, 0), new THREE.MeshLambertMaterial({ color: palette.road, side: THREE.DoubleSide })));
 } else {
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, ROAD_WIDTH).rotateX(-Math.PI / 2).translate(0, ROAD_Y, 0), new THREE.MeshLambertMaterial({ color: palette.road })));
 }
@@ -244,8 +246,9 @@ if (wire && course) {
 }
 const wireAt = new THREE.Vector3();
 function showCollisions(time: number): void {
-  if (!course || !wire) return;
+  if (!course) return;
   hazardObstacles([course], time, obstacles);
+  if (!wire) return;
   wires.forEach((w, i) => {
     const o = obstacles[i];
     w.visible = o !== undefined;

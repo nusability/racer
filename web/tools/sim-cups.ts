@@ -66,7 +66,10 @@ interface Outcome {
   place: number;
   /** Seconds behind the winner (0 when it won); Infinity when it wrecked. */
   gap: number;
-  /** Seconds ahead of the best rival when it won (negative = behind it); NaN when it wrecked. */
+  /**
+   * Seconds ahead of the best rival still running (negative = behind it); NaN when it wrecked,
+   * Infinity when every rival wrecked.
+   */
   margin: number;
   /** The wreck that ended its race, or null when it finished. */
   wreck: string | null;
@@ -82,11 +85,21 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const race = new Race(track, { laps: track.def.laps, seed, entrants: field });
   const drive = botDriver(race, seed, bot);
   const maxSteps = Math.ceil((track.def.laps * TIMEOUT_PER_LAP) / SIM_DT);
+  const me = race.player();
+  // The race ends a grace period after the player finishes, so a rival still running then
+  // gets its margin from how far it had left at the player's finish, at its average pace.
+  let rivalEta = Infinity;
   for (let n = 0; race.phase !== 'finished'; n++) {
     if (n > maxSteps) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} race timed out`);
     race.step(race.phase === 'countdown' ? HOLD_BOOST : drive(race));
+    if (me.finishTime !== null && rivalEta === Infinity) {
+      for (const r of race.racers) {
+        if (r === me || r.crashed > 0) continue;
+        const eta = r.finishTime ?? race.time + (track.length * track.def.laps - r.distance) / (r.distance / race.time);
+        rivalEta = Math.min(rivalEta, eta);
+      }
+    }
   }
-  const me = race.player();
   const index = race.racers.indexOf(me);
   const c = race.vehicles[index].drive.crashes;
   const wreck = (Object.keys(c) as (keyof typeof c)[]).find((k) => c[k] > 0) ?? null;
@@ -94,12 +107,11 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const points = new Map(race.results().map((r) => [r.id, CUP_POINTS[r.place - 1]]));
   const rivals = race.racers.filter((r) => r !== me);
   const winner = Math.min(...race.racers.map((r) => r.finishTime ?? Infinity));
-  const bestRival = Math.min(...rivals.map((r) => r.finishTime ?? Infinity));
   const lapped = me.finishTime !== null && rivals.some((r) => r.crashed <= 0 && r.distance < me.distance - track.length);
   return {
     place: me.place,
     gap: me.finishTime === null ? Infinity : me.finishTime - winner,
-    margin: me.finishTime === null ? NaN : bestRival - me.finishTime,
+    margin: me.finishTime === null ? NaN : rivalEta - me.finishTime,
     wreck,
     lapped,
     crashes: c.destroyed + c.fell + c.offEdge + c.loopStall + c.obstacle + c.hazard,
@@ -157,10 +169,13 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
     `  total: race wins ${wins}/${all.length}, cups won ${Math.round(res.cupWinShare * STUDY_RUNS)}/${STUDY_RUNS}, ` +
       `within 3 s of 1st ${within3}/${all.length}, places ${counts}, DNF ${wrecks.length}/${all.length}${reasons ? ` (${reasons})` : ''}`,
   );
-  const margins = all.filter((o) => o.wreck === null && o.margin > 0).map((o) => o.margin).sort((a, b) => a - b);
+  const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);
   if (margins.length) {
+    const bands = [1, 3, 6, 10, Infinity];
+    const counts = bands.map((hi, i) => margins.filter((m) => m >= (bands[i - 1] ?? 0) && m < hi).length);
     console.log(
-      `  winning margins: median ${fmt(margins[Math.floor(margins.length / 2)])} s, max ${fmt(margins[margins.length - 1])} s; ` +
+      `  winning margins: median ${fmt(margins[Math.floor(margins.length / 2)])} s, max ${fmt(margins[margins.length - 1])} s ` +
+        `(<1 s ${counts[0]}, 1-3 ${counts[1]}, 3-6 ${counts[2]}, 6-10 ${counts[3]}, 10+ ${counts[4]}); ` +
         `lapped a rival in ${all.filter((o) => o.lapped).length}/${all.length} races`,
     );
   }

@@ -211,7 +211,8 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
           m4.compose(at(r, it.s, it.x, RING_LIFT * 0.5), rq, sc.setScalar(d.radius * (0.4 + 0.8 * close)));
           shadows.setMatrixAt(i, m4);
           const left = (1 - close) * d.warn;
-          if (left < FALL_TIME) {
+          // A bound landmark (the digger, the volcano) throws the falling object itself.
+          if (left < FALL_TIME && !bound.has(d.id)) {
             const fall = left / FALL_TIME;
             m4.compose(at(r, it.s, it.x, height / 2 + FALL_HEIGHT * fall * fall), rq, sc.set(d.radius, height / 2, d.radius));
             debris.setMatrixAt(i, m4);
