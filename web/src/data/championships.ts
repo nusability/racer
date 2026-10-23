@@ -1,14 +1,26 @@
 // The championship ladder: three cups of four races, each with a fixed rival roster so the
 // standings tell a story (the same five names chase you all cup). Rivals get tougher per cup.
 //
-// Every field is tight: five rivals of one machine class in a narrow skill band, matching
-// what a decent player can own on reaching that tier (tools/sim-economy.ts walks the
-// economy). The same band per tier in every world: worlds scale the money, not the difficulty.
-// Assumed player machines on first entering each tier:
+// Every field is tight: five rivals of one machine class in a narrow skill band. The roster's
+// machine is each cup's baseline; it is a floor, not the rival's machine. Machine parity
+// (game/opponents.ts): when a field is built, every rival is lifted to at least
+// RIVAL_PARITY_SHARE of the player's performance index, first by upgrading its own glider
+// (performance tracks first), then by moving up glider classes. So a cup is won by driving:
+// upgrades and better gliders still pay (harder cups come within reach sooner, the glider
+// choice is a handling and armour choice) but never trivialise a cup.
+// The same skill band per tier in every world: worlds scale the money, not the difficulty.
+// Assumed player machines on first entering each tier (what tools/sim-check.ts races):
 // - Rookie: stock Dustwing (nothing earned yet).
 // - Pro: Scarab GT with engine 1 (bought from the rookie cup's winnings).
 // - Elite: Sirocco with engine 1, thrusters 1, steering 1.
-// tools/sim-check.ts races these assumptions against each cup.
+
+/** Rivals are lifted to at least this share of the player's performance index. */
+export const RIVAL_PARITY_SHARE = 0.98;
+/**
+ * Weight of boost (power x tank seconds) in the performance index, beside top speed. Fitted
+ * to solo lap times across gliders and upgrade sets (top speed dominates; boost adds a few %).
+ */
+export const PERFORMANCE_BOOST_WEIGHT = 0.045;
 
 import { CUPS_ICE } from './cupsIce.ts';
 

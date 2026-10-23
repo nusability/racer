@@ -64,71 +64,6 @@ function arc(kit: IceKit['b'], f: Frame, a: V3, b: V3, c: V3, r: number, color: 
   }
 }
 
-/** Where a piece rides: a bone, a leg index, or a light on the head ('glow') or body ('lamp'). */
-type Part = 'body' | 'head' | 'tail' | 'glow' | 'lamp' | number;
-type Emit = (geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, part: Part, m: THREE.Matrix4) => void;
-
-interface Colours {
-  fur: THREE.Color;
-  frost: THREE.Color;
-  spine: THREE.Color;
-  lamp: THREE.Color;
-}
-
-/**
- * A frostback, facing +X, feet on y = 0, in its own metres. Legs hang from their hips; the head
- * is authored about its neck. Returns where a lantern hangs, in the head's frame (z mirrored).
- */
-function frostback(emit: Emit, c: Colours, rng: Rng, lead: boolean, accent: THREE.ColorRepresentation): THREE.Vector3 {
-  const fur = (k: number) => vary(rng, shade(c.fur, k), 0.06);
-  emit(ball(1, 10, 7), fur(1), 'body', T(0, HIP_Y + 2.2, 0, 0, 0, 0, [BODY_R + 0.6, 4.4, 3.9]));
-  emit(ball(1, 8, 5), fur(1.08), 'body', T(1.8, HIP_Y + 4.6, 0, 0, 0, 0, [3.8, 2.6, 3]));
-  // A shaggy skirt of fur hanging round the belly, frosted at the hem.
-  emit(new THREE.CylinderGeometry(1, 1.15, 1, 9, 1, true), fur(0.85), 'body', T(0, HIP_Y - 0.4, 0, 0, 0, 0, [BODY_R + 0.8, 3, 4.3]));
-  emit(new THREE.CylinderGeometry(1.15, 1.2, 1, 9, 1, true), c.frost, 'body', T(0, HIP_Y - 1.9, 0, 0, 0, 0, [BODY_R + 0.9, 0.5, 4.5]));
-  // Crystal spines along the back.
-  for (let i = 0; i < 6; i++) emit(new THREE.ConeGeometry(0.5, 2.2 + (i % 2) * 1.2, 4).translate(0, 1, 0), c.spine, 'body', T(-3.6 + i * 1.6, HIP_Y + 6.2 - Math.abs(i - 2.5) * 0.35, 0, 0, 0, -0.3));
-  LEGS.forEach((_, leg) => {
-    emit(prism(0.75, 1.1, LEG_LEN, 6).translate(0, -LEG_LEN, 0), fur(0.75), leg, T(0, 0, 0));
-    emit(prism(1.05, 1.05, 0.7, 6).translate(0, -LEG_LEN, 0), DARK, leg, T(0, 0, 0));
-  });
-  // Head with a drooping trunk-like snout and the lantern tusks.
-  emit(ball(1, 8, 6), fur(0.95), 'head', T(1, 0, 0, 0, 0, 0, [2.2, 2, 1.9]));
-  emit(prism(0.8, 0.4, 4.5, 6), fur(0.8), 'head', T(2.6, -0.5, 0, 0, 0, -2.4));
-  // Tusks sweep forward and down, then curl up; three segments, each turned TUSK_CURL further.
-  const tip = new THREE.Vector3();
-  for (const side of [-1, 1]) {
-    let px = 2.2;
-    let py = -0.9;
-    for (let k = 0; k < 3; k++) {
-      const a = TUSK_START + k * TUSK_CURL;
-      emit(prism(0.32 - k * 0.06, 0.38 - k * 0.06, TUSK_SEG, 5), 0xf2ead8, 'head', T(px, py, side * (1.1 + k * 0.25), 0, 0, a));
-      px -= Math.sin(a) * TUSK_SEG;
-      py += Math.cos(a) * TUSK_SEG;
-    }
-    tip.set(px + 0.3, py - 0.9, 1.9);
-    emit(new THREE.OctahedronGeometry(0.55), c.lamp, 'glow', T(tip.x, tip.y, side * tip.z));
-    emit(prism(0.05, 0.05, 0.9, 3), DARK, 'head', T(tip.x, tip.y, side * tip.z));
-  }
-  emit(prism(0.25, 0.5, 3, 5), fur(0.8), 'tail', T(0, 0, 0, 0, 0, Math.PI * 0.75));
-  if (!lead) return tip;
-  // The lead: a blanket in the track's colours and a lit howdah with a pennant.
-  emit(box(BODY_R * 1.4, 0.5, 8.6), accent, 'body', T(-0.5, HIP_Y + 4.8, 0, 0, 0, -0.05));
-  emit(box(4.4, 3, 4.2), shade(accent, 0.7), 'body', T(-0.6, HIP_Y + 6.4, 0));
-  emit(new THREE.ConeGeometry(3.6, 2.4, 4).translate(0, 1.2, 0), DARK, 'body', T(-0.6, HIP_Y + 9.4, 0, Math.PI / 4));
-  emit(box(1.6, 1.2, 4.3), WARM_LIGHT, 'lamp', T(-0.6, HIP_Y + 7.4, 0));
-  emit(prism(0.1, 0.1, 5, 3), DARK, 'body', T(-0.6, HIP_Y + 11.6, 0));
-  emit(new THREE.PlaneGeometry(3, 1.6).translate(1.5, 0, 0), accent, 'body', T(-0.6, HIP_Y + 15.6, 0));
-  return tip;
-}
-
-/** Head and tail mount points on the body (frostback frame). */
-const HEAD_AT: readonly [number, number] = [BODY_R + 0.4, HIP_Y + 3.4];
-const TAIL_AT: readonly [number, number] = [-BODY_R - 0.4, HIP_Y + 3];
-const TUSK_START = -2;
-const TUSK_CURL = 0.7;
-const TUSK_SEG = 2.4;
-
 /** Where a piece rides: a bone or a leg index. */
 type Part = 'body' | 'head' | 'tail' | number;
 type Emit = (geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, part: Part, m: THREE.Matrix4) => void;
@@ -158,8 +93,8 @@ function mammoth(emit: Emit, c: Coat, rng: Rng, shags: number, lead: boolean): v
   emit(ball(1, 10, 7), fur(0.95), 'body', T(-2.6, 7.2, 0, 0, 0, -0.1, [3.4, 2.7, 2.7]));
   emit(ball(1, 10, 6), fur(1.05), 'body', T(2.2, 10.4, 0, 0, 0, 0.25, [2.6, 1.7, 2.1]));
   // Frost lying along the hump and back.
-  emit(ball(1, 10, 4), c.frost, 'body', T(1.2, 11.2, 0, 0, 0, 0.12, [3.2, 0.7, 1.6]));
-  emit(ball(1, 8, 4), mix(c.frost, c.fur, 0.35), 'body', T(-2.4, 9.4, 0, 0, 0, -0.18, [2.6, 0.55, 1.5]));
+  emit(ball(1, 10, 4), c.frost, 'body', T(1.6, 11.45, 0, 0, 0, 0.18, [2.6, 0.5, 1.15]));
+  emit(ball(1, 8, 4), mix(c.frost, c.fur, 0.45), 'body', T(-2.2, 9.65, 0, 0, 0, -0.18, [2.2, 0.4, 1.1]));
   if (lead) emit(ball(1, 10, 6), c.mane, 'body', T(3.6, 8.6, 0, 0, 0, 0.5, [2.4, 3.2, 2.9]));
   // Layered skirts of long hair round the flanks: an upper layer in the body colour, a longer
   // lower one in the dark guard hair, so the coat darkens toward its ragged hem.
@@ -253,7 +188,7 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
   // Muted, natural coats: dark umber guard hair over warmer brown, frost on the back.
   const coat = (k: number): Coat => {
     const fur = vary(rng, mix(0x5a4030, opts.palette.rock, 0.15), 0.06).multiplyScalar(k);
-    return { fur, shag: shade(mix(fur, 0x2a1e16, 0.5), 0.9), frost: mix(ik.snow, fur, 0.25), mane: mix(fur, 0xd8cfc0, 0.45) };
+    return { fur, shag: shade(mix(fur, 0x2a1e16, 0.5), 0.9), frost: mix(ik.snow, fur, 0.4), mane: mix(fur, 0xd8cfc0, 0.45) };
   };
   const nShag = ik.q(SHAGS.high, SHAGS.low);
 

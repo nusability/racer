@@ -17,7 +17,7 @@ import { brush, disposeKit, glowBoost, makeKit, mix, mulberry32, shade, smooth }
 /** Path samples per frame (each is one toLocal call). */
 const SAMPLES = 40;
 /** Head radius over body radius, and segment length over body radius. */
-const HEAD_OVER_BODY = 1.25;
+const HEAD_OVER_BODY = 1.55;
 const SEG_OVER_BODY = 1.1;
 const MAX_SEGS = { high: 48, low: 28 } as const;
 
@@ -46,7 +46,7 @@ const HEAVE = 1.6;
 
 const EMIT_STEP = 0.05;
 /** Sand streams poured off the back per emission tick. */
-const SAND_STREAMS = 3;
+const SAND_STREAMS = 5;
 
 export function createBoundBeast(opts: LandmarkOptions): Landmark {
   const bound = boundHazard(opts, 'sandbeast', ['sweeper', 'blocker'] as const);
@@ -87,7 +87,7 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
   const rk = r * k;
   const sandBurst = brush({ life: 4, size0: rk * 2, size1: rk * 7, c0: shade(c.sand, 1.1), c1: mix(opts.palette.sand, opts.palette.horizon, 0.5), alpha: 0.7, keep: 0.4, lift: 1.5 * k });
   const spray = brush({ life: 1.8, size0: rk * 0.8, size1: rk * 2.4, c0: shade(c.sand, 1.1), c1: mix(opts.palette.sand, opts.palette.horizon, 0.4), alpha: 0.65, keep: 0.45, lift: -9 * k });
-  const sandFall = brush({ life: 2.4, size0: rk * 0.35, size1: rk * 1.1, c0: shade(c.sand, 1.05), c1: c.sand, alpha: 0.85, keep: 0.8, lift: -22 * k });
+  const sandFall = brush({ life: 2.4, size0: rk * 0.5, size1: rk * 1.8, c0: shade(c.sand, 1.05), c1: c.sand, alpha: 0.9, keep: 0.8, lift: -22 * k });
 
   // Path in track space (x, height, ds) per sample, then local positions and arc lengths.
   const px = new Float32Array(SAMPLES);

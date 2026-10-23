@@ -69,7 +69,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
 
   rig.build(kit.group, RADIUS, HEIGHT);
 
-  const sandFall = brush({ life: 2.6, size0: 3.5, size1: 6, c0: shade(sand, 1.05), c1: sand, alpha: 0.85, keep: 0.8, lift: -22 });
+  const sandFall = brush({ life: 2.6, size0: 5, size1: 16, c0: shade(sand, 1.05), c1: sand, alpha: 0.85, keep: 0.8, lift: -22 });
   const plume = brush({ life: 6, size0: 16, size1: 70, c0: shade(sand, 1.1), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.65, keep: 0.45, lift: 2 });
   const spray = brush({ life: 2.2, size0: 6, size1: 18, c0: shade(sand, 1.1), c1: mix(palette.sand, palette.horizon, 0.4), alpha: 0.6, keep: 0.4, lift: -6 });
 

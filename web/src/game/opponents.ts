@@ -1,9 +1,10 @@
 // Builds the field for a race. Deterministic: the same cup, standings and player give the same
-// grid, so a retried race lines up exactly as before.
-import type { RaceEntrant } from '../core/types.ts';
-import { PLAYER_ENTRANT_ID } from '../data/championships.ts';
+// grid, so a retried race lines up exactly as before. Rivals are lifted to the player's
+// machine (see the parity note in data/championships.ts): the race is won by driving.
+import type { RaceEntrant, RacerStats } from '../core/types.ts';
+import { PERFORMANCE_BOOST_WEIGHT, PLAYER_ENTRANT_ID, RIVAL_PARITY_SHARE } from '../data/championships.ts';
 import type { CupDef, RivalDef } from '../data/championships.ts';
-import { racerById } from '../data/racers.ts';
+import { RACERS, racerById } from '../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, effectiveStats } from '../data/upgrades.ts';
 import type { UpgradeLevels } from '../data/upgrades.ts';
 
@@ -30,12 +31,47 @@ export function playerEntrant(racerId: string, levels: UpgradeLevels): RaceEntra
   };
 }
 
-export function rivalEntrant(rival: RivalDef): RaceEntrant {
+/**
+ * How fast a machine is, as one number: top speed, plus a little for boost (power x tank).
+ * Handling and armour are left out: they are the gliders' character, not their pace.
+ */
+export function performanceIndex(stats: RacerStats): number {
+  return stats.topSpeed * (1 + PERFORMANCE_BOOST_WEIGHT * stats.boostPower * stats.boostTank);
+}
+
+/** Upgrade order when lifting a rival: pace first, then character. */
+const LIFT_ORDER: (keyof UpgradeLevels)[] = ['engine', 'thrusters', 'tank', 'steering', 'armor'];
+
+/**
+ * The rival's roster machine, lifted until it reaches `target` performance: its own glider is
+ * upgraded one level at a time (round robin in LIFT_ORDER), then the next glider class up from
+ * stock, and so on. Past the best glider fully upgraded there is nothing left to lift.
+ */
+function liftedMachine(rival: RivalDef, target: number): { racerId: string; stats: RacerStats } {
+  const from = RACERS.findIndex((r) => r.id === rival.racerId);
+  if (from < 0) throw new Error(`Rival ${rival.id}: unknown racer "${rival.racerId}"`);
+  for (let g = from; ; g++) {
+    const levels = uniformLevels(g === from ? rival.upgradeLevel : 0);
+    for (;;) {
+      const stats = effectiveStats(RACERS[g], levels);
+      const next = LIFT_ORDER.reduce((low, id) => (levels[id] < levels[low] ? id : low), LIFT_ORDER[0]);
+      const maxed = levels[next] >= MAX_UPGRADE_LEVEL;
+      if (performanceIndex(stats) >= target || (maxed && g === RACERS.length - 1)) return { racerId: RACERS[g].id, stats };
+      if (maxed) break;
+      levels[next]++;
+    }
+  }
+}
+
+/** A rival on its roster machine, lifted to parity with `player` (when given). */
+export function rivalEntrant(rival: RivalDef, player?: RaceEntrant): RaceEntrant {
+  const target = player ? performanceIndex(player.stats) * RIVAL_PARITY_SHARE : 0;
+  const machine = liftedMachine(rival, target);
   return {
     id: rival.id,
     name: rival.name,
-    racerId: rival.racerId,
-    stats: effectiveStats(racerById(rival.racerId), uniformLevels(rival.upgradeLevel)),
+    racerId: machine.racerId,
+    stats: machine.stats,
     isPlayer: false,
     skill: rival.skill,
   };
@@ -51,7 +87,7 @@ export function championshipGrid(
   player: RaceEntrant,
   points: Record<string, number>,
 ): RaceEntrant[] {
-  const rivals = cup.rivals.map(rivalEntrant);
+  const rivals = cup.rivals.map((r) => rivalEntrant(r, player));
   if (raceIndex === 0) return [...rivals, player];
   const field = [...rivals, player];
   const order = new Map(field.map((e, i) => [e.id, i]));
@@ -61,7 +97,7 @@ export function championshipGrid(
 
 /** Quick race: the rival roster of the world's hardest open cup, player mid-pack. */
 export function quickRaceGrid(cup: CupDef, player: RaceEntrant): RaceEntrant[] {
-  const field = cup.rivals.map(rivalEntrant);
+  const field = cup.rivals.map((r) => rivalEntrant(r, player));
   field.splice(QUICK_RACE_PLAYER_SLOT, 0, player);
   return field;
 }

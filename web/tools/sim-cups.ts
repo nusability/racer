@@ -232,6 +232,9 @@ export const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeL
   3: { racerId: 'sirocco', levels: { engine: 1, thrusters: 1, steering: 1 }, label: 'Sirocco E1 T1 S1' },
 };
 
+/** The best glider fully upgraded: what a leaked save (or a long career) brings to cup 1. */
+const OVER_UPGRADED = { racerId: 'halo', levels: { engine: 5, thrusters: 5, steering: 5, tank: 5, armor: 5 }, label: 'maxed Halo Comet' };
+
 export function allCupStudies() {
   for (const cup of CUPS) {
     const a = ASSUMED[cup.tier];
@@ -243,6 +246,8 @@ export function allCupStudies() {
       cupStudy(cup, NOVICE, a.racerId, levels, a.label);
       cupStudy(cup, SKILLED, a.racerId, levels, a.label);
     }
+    // Machine parity: an over-upgraded bad driver must not steamroll the first cup.
+    if (cup === CUPS[0]) cupStudy(cup, NOVICE, OVER_UPGRADED.racerId, OVER_UPGRADED.levels, OVER_UPGRADED.label);
     cupStudy(cup, DECENT, a.racerId, levels, a.label);
   }
 }

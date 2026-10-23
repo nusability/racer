@@ -2,7 +2,7 @@
 // Split from invasion.ts, which walks them and fires their guns.
 
 import * as THREE from 'three';
-import { T, between, box, cyl, rock, strut, type Rig } from './kit.ts';
+import { T, between, box, cyl, type Rig } from './kit.ts';
 
 export const HIP_Y = 30;
 const THIGH_X = 15;
@@ -64,15 +64,21 @@ export function buildStrider(
     // Each leg's frame points outward and a little forward/back, so the stance is wide.
     hip.userData.base = Math.atan2(-sz * 0.7, sx);
     hip.rotation.y = hip.userData.base;
-    const thighA = new THREE.Vector3(0, 0, 0);
+    // Thigh: a tapering armoured beam with a plate along its top; shin: a long greave that
+    // narrows to the ankle; foot: three splayed claws. Heavy, not stick-insect thin.
     const knee = new THREE.Vector3(THIGH_X, THIGH_Y, 0);
-    rig.add(strut(), c.invader, { bone: hip, m: between(thighA, knee, 3.4) });
-    rig.add(box(5, 3, 3), c.invaderLight, { bone: hip, m: T(THIGH_X * 0.5, THIGH_Y * 0.5 + 1.5, 0, 0, 0, Math.atan2(THIGH_Y, THIGH_X)) });
+    rig.add(cyl(2.2, 3.4, 1, 5), c.invader, { bone: hip, m: between(new THREE.Vector3(), knee, 1) });
+    rig.add(box(4.5, 1.6, 4.2), c.invaderLight, { bone: hip, m: T(THIGH_X * 0.45, THIGH_Y * 0.45 + 2.6, 0, 0, 0, Math.atan2(THIGH_Y, THIGH_X)).multiply(T(0, 0, 0, 0, 0, 0, 3, 1, 1)) });
+    rig.add(cyl(2.6, 2.6, 5, 6).rotateX(Math.PI / 2).translate(0, 0, -2.5), c.dark, { bone: hip, m: T(THIGH_X, THIGH_Y, 0) });
     const shin = rig.bone(hip, THIGH_X, THIGH_Y, 0);
     const foot = new THREE.Vector3(SHIN_X, SHIN_Y, 0);
-    rig.add(strut(), c.dark, { bone: shin, m: between(new THREE.Vector3(), foot, 2.8) });
-    rig.add(cyl(3, 1.8, 2.5, 5), c.invader, { bone: shin, m: T(foot.x, foot.y, 0) });
-    rig.add(rock(2.4), c.invaderLight, { bone: shin });
+    rig.add(cyl(1.1, 2.6, 1, 6), c.dark, { bone: shin, m: between(new THREE.Vector3(), foot, 1) });
+    rig.add(cyl(0.6, 2.4, 1, 4), c.invader, { bone: shin, m: between(new THREE.Vector3(0.6, 0, 0), foot.clone().multiplyScalar(0.55).setX(foot.x * 0.55 + 1.4), 1) });
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.5;
+      const toe = new THREE.Vector3(foot.x + Math.cos(a) * 5, foot.y, Math.sin(a) * 5);
+      rig.add(cyl(0.3, 1.2, 1, 4), c.invader, { bone: shin, m: between(foot.clone().setY(foot.y + 1.6), toe, 1) });
+    }
     hips.push(hip);
     shins.push(shin);
   }
