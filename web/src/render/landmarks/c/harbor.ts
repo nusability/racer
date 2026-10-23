@@ -29,6 +29,15 @@ function containerColour(kit: Kit): THREE.Color {
   return vary(kit.rng, BOX_COLOURS[Math.floor(kit.rng() * BOX_COLOURS.length)], 0.08);
 }
 
+/** A stack of `n` boxes; on low quality one tall box in a single colour stands in for it. */
+function stack(kit: Kit, x: number, y: number, z: number, n: number): void {
+  if (!kit.high) {
+    kit.solid.add(box(BOX.l, n * BOX.h - 0.15, BOX.w - 0.2), containerColour(kit), T(x, y, z));
+    return;
+  }
+  for (let k = 0; k < n; k++) kit.solid.add(box(BOX.l, BOX.h - 0.15, BOX.w - 0.2), containerColour(kit), T(x, y + k * BOX.h, z));
+}
+
 function quay(kit: Kit): void {
   const concrete = mix(kit.palette.road, 0xc8c4bc, 0.5);
   kit.solid.add(box(QUAY.x * 2, QUAY.top - QUAY.floor, QUAY.z1 - QUAY.z0), concrete, T(0, QUAY.floor, (QUAY.z0 + QUAY.z1) / 2));
@@ -76,7 +85,7 @@ function ship(kit: Kit): void {
     for (let r = 0; r < ROWS; r++) {
       const zz = z - ((ROWS - 1) / 2) * BOX.w + r * BOX.w;
       const n = worked ? 1 : Math.max(1, tall - (r === 0 || r === ROWS - 1 ? 1 : 0) - (rng() < 0.2 ? 1 : 0));
-      for (let k = 0; k < n; k++) kit.solid.add(box(BOX.l, BOX.h - 0.15, BOX.w - 0.2), containerColour(kit), T(x, deck + k * BOX.h, zz));
+      stack(kit, x, deck, zz, n);
     }
   }
 }
@@ -125,7 +134,7 @@ function yard(kit: Kit): void {
     for (let x = -QUAY.x + 14; x < QUAY.x - 10; x += BOX.l + 1) {
       if (rng() < 0.12) continue;
       const n = 1 + Math.floor(rng() * 4);
-      for (let k = 0; k < n; k++) kit.solid.add(box(BOX.l, BOX.h - 0.15, BOX.w - 0.2), containerColour(kit), T(x, QUAY.top + k * BOX.h, z, 0));
+      stack(kit, x, QUAY.top, z, n);
     }
   }
 }

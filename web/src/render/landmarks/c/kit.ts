@@ -6,9 +6,12 @@ import * as THREE from 'three';
 import type { Landmark } from '../types.ts';
 import type { Kit } from '../b/kit.ts';
 import type { Particles } from '../b/points.ts';
-import type { Motion, V3 } from '../b/motion.ts';
+import type { Motion, Twinkle, V3 } from '../b/motion.ts';
+import type { Bucket } from '../b/bucket.ts';
 import type { Rng } from '../../../core/rng.ts';
 
+/** Foam floats this far above the water plane, so it never z-fights with the sea far away. */
+export const FOAM_Y = 0.35;
 export const WHITE = 0xf4f1ea;
 export const FOAM = 0xf8fbff;
 export const STEEL = 0x5a6470;
@@ -108,6 +111,21 @@ export function trail(p: Particles, rng: Rng, points: readonly V3[], when: (i: n
     const phase = (((-t % opts.period) + opts.period) % opts.period);
     p.add(pt, [drift[0] + (rng() - 0.5), drift[1] + (rng() - 0.5), drift[2] + (rng() - 0.5)], opts.color, opts.size * (0.8 + rng() * 0.4), { period: opts.period, lifetime: opts.lifetime, phase, grow: opts.grow ?? 0.12 }, { drag: 0.3, jitter: opts.jitter ?? 0, fadeIn: 0.02 });
   });
+}
+
+/**
+ * A cone of light along local +Y from the origin of `m`, in `segments` pieces that dim with
+ * distance, so the beam fades out instead of ending in a hard rim.
+ */
+export function lightCone(b: Bucket, m: THREE.Matrix4, length: number, r0: number, r1: number, segments: number, color: THREE.ColorRepresentation, motion?: Motion, tw?: Twinkle): void {
+  const step = length / segments;
+  const base = new THREE.Color(color);
+  for (let s = 0; s < segments; s++) {
+    const ra = r0 + ((r1 - r0) * s) / segments;
+    const rb = r0 + ((r1 - r0) * (s + 1)) / segments;
+    const k = (1 - s / segments) ** 1.5;
+    b.add(new THREE.CylinderGeometry(rb, ra, step, 10, 1, true).translate(0, step * (s + 0.5), 0), base.clone().multiplyScalar(k), m, motion, tw);
+  }
 }
 
 /** A ring of flat foam shards on the water round a point, breathing in and out. */

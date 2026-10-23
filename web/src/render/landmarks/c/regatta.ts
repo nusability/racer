@@ -8,7 +8,7 @@ import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { T, beam, box, cone, lathe, mix, prism, shade } from '../b/shapes.ts';
 import { bunting } from '../b/props.ts';
-import { DARK, FOAM, GREEN_LIGHT, RED_LIGHT, WHITE, finishCoast, hull, sail, wake } from './kit.ts';
+import { DARK, FOAM, GREEN_LIGHT, RED_LIGHT, WHITE, finishCoast, hull, sail, wake, FOAM_Y } from './kit.ts';
 
 const SALT = 0x4e6a77a;
 const RADIUS = 200;
@@ -59,8 +59,8 @@ function local(m: THREE.Matrix4, x: number, y: number, z: number): V3 {
 /** Bow spray and a wake, carried round with the boat but not heeled with it. */
 function water(kit: Kit, b: Boat, length: number, width: number): void {
   const orbit: Motion = { hub: [0, 0, 0], axisA: [0, 1, 0], spinA: b.spin };
-  const flat = T(b.at[0], 0.15, b.at[2], Math.PI / 2 - b.a, 0, 0, BOAT_SCALE);
-  kit.moving.add(wake(length * 3.2, width * 4), mix(FOAM, 0x7ad0e0, 0.2), flat.clone().multiply(T(-length * 0.4, 0, 0)), orbit);
+  const flat = T(b.at[0], FOAM_Y, b.at[2], Math.PI / 2 - b.a, 0, 0, BOAT_SCALE);
+  kit.moving.add(wake(length * 2.6, width * 2.6), mix(FOAM, 0x5ab8d0, 0.35), flat.clone().multiply(T(-length * 0.4, 0, 0)), orbit);
   for (const side of [-1, 1]) {
     const spray: Motion = { ...orbit, hop: 1.6, freq: 3.2 + kit.rng(), phase: b.phase + side };
     kit.moving.add(new THREE.OctahedronGeometry(0.9).scale(1.4, 0.8, 1), FOAM, flat.clone().multiply(T(length * 0.38, 0.4, side * width * 0.5)), spray);
@@ -130,7 +130,7 @@ function buoys(kit: Kit): void {
     kit.moving.add(beam([x, 6, z], [x, 9, z], 0.08, 3), DARK, undefined, bob);
     kit.moving.add(box(1.8, 1.1, 0.1).translate(0.9, 0, 0), WHITE, T(x, 8.4, z), bob);
     kit.lamp(new THREE.OctahedronGeometry(0.35), [x, 9.2, z], i % 2 ? RED_LIGHT : GREEN_LIGHT, 3, bob, { depth: 0.9, freq: 2, phase: i, sharp: 5 });
-    kit.moving.add(prism(4, 4, 0.1, 10), FOAM, T(x, 0.1, z), { drift: [0, 0.05, 0], driftFreq: 1.1, phase: i * 1.7 });
+    kit.moving.add(prism(4, 4, 0.1, 10), FOAM, T(x, FOAM_Y, z), { drift: [0, 0.05, 0], driftFreq: 1.1, phase: i * 1.7 });
   }
 }
 

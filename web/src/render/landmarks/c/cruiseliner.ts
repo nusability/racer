@@ -8,7 +8,7 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { T, ball, beam, box, mix, prism, shade } from '../b/shapes.ts';
-import { DARK, FOAM, GLASS, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, hull, smoke, splash, wake } from './kit.ts';
+import { DARK, FOAM, GLASS, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, hull, smoke, splash, wake, FOAM_Y } from './kit.ts';
 
 const SALT = 0xc205e;
 const RADIUS = 170;
@@ -166,8 +166,8 @@ function plumes(kit: Kit): void {
     puff.add([-LENGTH / 2 - 2, 0.5, (rng() - 0.5) * BEAM_W * 0.6], [-WATER_SPEED - rng() * 3, 0.8, (rng() - 0.5) * 6], FOAM, 4 + rng() * 3, { period, lifetime: period, phase: rng() * period, grow: 0.35 }, { drag: 0.15, fadeIn: 0.1 });
   }
   // A long flat V of churned water behind the stern.
-  kit.moving.add(wake(150, 70), mix(FOAM, 0x6ac8d8, 0.25), T(-LENGTH / 2 + 4, 0.12, 0), { drift: [0, 0, 2], driftFreq: 0.4 });
-  kit.moving.add(wake(26, 44), FOAM, T(LENGTH / 2 - 4, 0.15, 0), { drift: [1.2, 0, 0], driftFreq: 1.1 });
+  kit.moving.add(wake(150, 70), mix(FOAM, 0x6ac8d8, 0.25), T(-LENGTH / 2 + 4, FOAM_Y, 0), { drift: [0, 0, 2], driftFreq: 0.4 });
+  kit.moving.add(wake(26, 44), FOAM, T(LENGTH / 2 - 4, FOAM_Y + 0.05, 0), { drift: [1.2, 0, 0], driftFreq: 1.1 });
 }
 
 export function createCruiseliner(opts: LandmarkOptions): Landmark {

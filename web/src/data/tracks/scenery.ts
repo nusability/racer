@@ -71,6 +71,9 @@ export interface LandmarkPlacement {
    * with a clear lane where the course runs, e.g. a market street a shortcut runs down.
    */
   straddle?: boolean;
-  /** Floats on the sea (a ship, whales, a pier's deck level): placed at sea level, ground left alone. */
+  /**
+   * Stands in the sea (ships, whales, a pier, a harbour, an island): placed at sea level with
+   * the ground under it dug to a sea bed.
+   */
   afloat?: boolean;
 }

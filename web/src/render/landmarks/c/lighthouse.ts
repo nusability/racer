@@ -8,7 +8,7 @@ import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { T, beam, box, cone, mix, prism, shade, vary } from '../b/shapes.ts';
 import { lampString } from '../b/props.ts';
-import { DARK, GLASS, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, foamRing, hull, splash } from './kit.ts';
+import { DARK, GLASS, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, foamRing, hull, splash, FOAM_Y } from './kit.ts';
 
 const SALT = 0x11647;
 const RADIUS = 70;
@@ -17,7 +17,7 @@ const SEA_FLOOR = -6;
 const PLATEAU = { r: 17, y: 11 } as const;
 const TOWER = { x: 2, z: 4, h: 50, rBase: 6.2, rTop: 4.0, bands: 6 } as const;
 const LAMP_Y = PLATEAU.y + TOWER.h + 3.2;
-const BEAM = { spin: 0.75, segments: 6, segLength: 38, r0: 1.2, rGrowth: 3, day: 0.014, dusk: 0.12 } as const;
+const BEAM = { spin: 0.75, segments: 6, segLength: 38, r0: 1.2, rGrowth: 3, day: 0.004, dusk: 0.07 } as const;
 const COTTAGE = { x: -9, z: -3, w: 9, d: 7, h: 4.5 } as const;
 const JETTY = { x: -14, z: -26, len: 20 } as const;
 const ROCKS = { high: 16, low: 10 } as const;
@@ -79,7 +79,8 @@ function tower(kit: Kit): void {
 function lamp(kit: Kit): void {
   const hub: V3 = [TOWER.x, LAMP_Y, TOWER.z];
   const spin: Motion = { hub, axisA: [0, 1, 0], spinA: BEAM.spin };
-  const strength = BEAM.day + (BEAM.dusk - BEAM.day) * kit.dusk;
+  // Additive light over a bright sky saturates fast, so the beam only comes up late in the day.
+  const strength = BEAM.day + (BEAM.dusk - BEAM.day) * kit.dusk * kit.dusk;
   const light = new THREE.Color(0xfff2c0);
   kit.lamp(new THREE.OctahedronGeometry(1.3).scale(1, 1, 0.5), hub, 0xffffff, 6 + 16 * kit.dusk, spin, { depth: 0.35, freq: BEAM.spin * 2, phase: Math.PI / 2, sharp: 3 });
   for (const dir of [1, -1]) {
@@ -153,8 +154,8 @@ function gulls(kit: Kit): void {
 /** Waves rolling in on the rocks: foam skirts breathing at the waterline and white bursts. */
 function surf(kit: Kit): void {
   const { rng } = kit;
-  foamRing(kit, [0, 0.15, 0], PLATEAU.r + 13, kit.q(22, 12), 3.2, 1.6, 0.9);
-  foamRing(kit, [0, 0.1, 0], PLATEAU.r + 20, kit.q(16, 8), 2, 2.6, 0.6);
+  foamRing(kit, [0, FOAM_Y + 0.05, 0], PLATEAU.r + 13, kit.q(22, 12), 3.2, 1.6, 0.9);
+  foamRing(kit, [0, FOAM_Y, 0], PLATEAU.r + 20, kit.q(16, 8), 2, 2.6, 0.6);
   const spray = kit.particles(false, 1.2);
   const n = kit.q(WAVE_SPOTS.high, WAVE_SPOTS.low);
   for (let i = 0; i < n; i++) {

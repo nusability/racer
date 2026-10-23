@@ -88,7 +88,7 @@ export const boardwalkScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.05, side: 1, distance: -148, straddle: true },
     { kind: 'fair', at: 1.8, side: -1, distance: 10 },
-    { kind: 'harbor', at: 10.2, side: -1, distance: 40 },
+    { kind: 'harbor', at: 10.2, side: -1, distance: 40, afloat: true },
     { kind: 'pier', at: 8.2, side: -1, distance: 30, afloat: true },
     { kind: 'cruiseliner', at: 12.0, side: -1, distance: 350, afloat: true },
     { kind: 'beachParty', at: 4.6, side: -1, distance: 20 },

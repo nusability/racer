@@ -9,7 +9,7 @@ import type { Bucket } from '../b/bucket.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { Frame, T, beam, box, cone, lathe, mix, prism, shade, vary } from '../b/shapes.ts';
 import { bunting, lampString, stripedAwning } from '../b/props.ts';
-import { DARK, RED_LIGHT, WHITE, finishCoast, foamRing } from './kit.ts';
+import { DARK, RED_LIGHT, WHITE, finishCoast, foamRing, FOAM_Y } from './kit.ts';
 
 const SALT = 0x91e7;
 const RADIUS = 165;
@@ -243,6 +243,6 @@ export function createPier(opts: LandmarkOptions): Landmark {
   dropTower(kit);
   flagsAndPeople(kit);
   // Surf curling round the outermost stilts.
-  for (const [x, z] of [[PLAT.x0, PLAT.z1], [PLAT.x1, PLAT.z1], [0, PLAT.z1 + 4]] as const) foamRing(kit, [x, 0.12, z], 5, kit.q(8, 5), 1.6, 1.2, 0.8);
+  for (const [x, z] of [[PLAT.x0, PLAT.z1], [PLAT.x1, PLAT.z1], [0, PLAT.z1 + 4]] as const) foamRing(kit, [x, FOAM_Y, z], 5, kit.q(8, 5), 1.6, 1.2, 0.8);
   return finishCoast(kit, RADIUS);
 }

@@ -9,7 +9,7 @@ import { Kit } from '../b/kit.ts';
 import type { V3 } from '../b/motion.ts';
 import { T, mix, shade, vary } from '../b/shapes.ts';
 import { quadPts } from '../b/props.ts';
-import { finishCoast, foamRing, smoke } from './kit.ts';
+import { finishCoast, foamRing, smoke, FOAM_Y } from './kit.ts';
 
 const SALT = 0x701ca;
 const RADIUS = 600;
@@ -148,6 +148,6 @@ export function createVolcano(opts: LandmarkOptions): Landmark {
     fire.add([(rng() - 0.5) * 40, floorY + 2, (rng() - 0.5) * 40], [(rng() - 0.5) * 8, 25 + rng() * 25, (rng() - 0.5) * 8], LAVA_HOT, 5 + rng() * 3, { period, lifetime: period, phase: rng() * period }, { gravity: 6, drag: 0.3, fadeIn: 0.05 });
   }
 
-  foamRing(kit, [0, 0.2, 0], SHORE_R + 2, kit.q(96, 48), 3.5, 3, 0.5);
+  foamRing(kit, [0, FOAM_Y, 0], SHORE_R + 2, kit.q(96, 48), 3.5, 3, 0.5);
   return finishCoast(kit, RADIUS);
 }

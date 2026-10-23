@@ -11,7 +11,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
@@ -51,8 +51,16 @@ const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-uns
 /** The viewer's overlay (stats, minimap canvas, picker) is added after its WebGL canvas; hide it all. */
 const HIDE_OVERLAY = 'body > canvas ~ * { display: none !important; }';
 
+/**
+ * Builds only the track viewer: the game itself imports the manifest this tool writes, so
+ * building it here would need the output before it exists.
+ */
 function build(outDir) {
-  const r = spawnSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], { cwd: WEB, stdio: 'inherit' });
+  const config = join(outDir, '..', `${basename(outDir)}.vite.config.mjs`);
+  const viewer = JSON.stringify(join(WEB, 'track-viewer.html'));
+  writeFileSync(config, `export default { root: ${JSON.stringify(WEB)}, base: './', build: { target: 'es2022', chunkSizeWarningLimit: 1500, rollupOptions: { input: { trackViewer: ${viewer} } } } };\n`);
+  const r = spawnSync('npx', ['vite', 'build', '--config', config, '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], { cwd: WEB, stdio: 'inherit' });
+  rmSync(config);
   if (r.status !== 0) throw new Error(`vite build failed (${r.status})`);
 }
 

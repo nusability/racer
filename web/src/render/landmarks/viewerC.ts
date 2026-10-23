@@ -152,7 +152,7 @@ lm.group.traverse((o) => {
 
 // Sea everywhere at y = 0, a beach from behind the road out to this landmark's shoreline.
 const seaColor = new THREE.Color(SEA_DEEP).lerp(horizon, SEA_SHALLOW_MIX);
-const sea = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: seaColor, emissive: seaColor.clone().multiplyScalar(SEA_GLOW) }));
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: seaColor, emissive: seaColor.clone().multiplyScalar(SEA_GLOW), polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
 scene.add(sea);
 const shoreZ = centreZ + SHORE[kind] * R;
 const beachDepth = shoreZ + BEACH_BACK;
@@ -185,7 +185,7 @@ function budget(root: THREE.Object3D): { calls: number; tris: number; points: nu
 }
 const cost = budget(lm.group);
 
-const camera = new THREE.PerspectiveCamera(cam === 'race' ? RACE_FOV : VIEW_FOV, innerWidth / innerHeight, 0.5, 4000);
+const camera = new THREE.PerspectiveCamera(cam === 'race' ? RACE_FOV : VIEW_FOV, innerWidth / innerHeight, 1, 4000);
 
 function placeCamera(t: number): void {
   const c = lm.group.position;

@@ -20,6 +20,8 @@ export interface PlacedLandmark {
 /** Landmarks nearer the boundary than this sit flush with the road edge. */
 const CLOSE = 60;
 const FLUSH_DROP = 0.35;
+/** Sea bed under a floating landmark, so hulls and island skirts always stand in open water. */
+const AFLOAT_BED = 6;
 
 /**
  * Instantiates and positions every landmark. Must run before the corridor and terrain are
@@ -46,7 +48,7 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     // Close to the course, level the ground with the road edge so the landmark meets it flush.
     const foot = ribbon.toWorld(s, p.side * edge, 0);
     const y = p.afloat ? SEA_LEVEL : p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
-    if (!p.afloat) ground.addPad(x, z, radius * LANDMARK_PAD, y);
+    ground.addPad(x, z, radius * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
     ground.addFootprint(x, z, radius);
     // Local -Z faces the course: toward it is -side along the right vector.
     const tx = -rx * p.side;
