@@ -12,6 +12,8 @@ export type OneShotName =
   | 'land'
   | 'pickup'
   | 'tankEmpty'
+  | 'repair'
+  | 'wreck'
   | 'lap'
   | 'finish'
   | 'click'
@@ -42,6 +44,17 @@ const SMOOTH_S = 0.06;
 const MAX_ONE_SHOTS = 24;
 const ONE_SHOT_REPEAT_S = 0.04;
 const NOISE_SECONDS = 2;
+/** Menu sounds bypass the race bus, so slow-mo never drags a button click. */
+const MENU_SOUNDS: ReadonlySet<OneShotName> = new Set(['click', 'buy']);
+/** Slow-mo: race sounds keep at least this much pitch, and the bus closes to this cutoff, at timescale 0. */
+const SLOWMO_PITCH_FLOOR = 0.45;
+const SLOWMO_CUTOFF_MIN_HZ = 500;
+const FULL_BAND_HZ = 20000;
+const SLOWMO_SMOOTH_S = 0.08;
+/** Debris tinkles after a wreck: count, spread (s) and pitch band (Hz). */
+const WRECK_DEBRIS = 9;
+const WRECK_DEBRIS_SPREAD_S = 1.4;
+const WRECK_DEBRIS_HZ: [number, number] = [2200, 6200];
 /** Pickups closer together than this climb the scale, so a line of cells rings upward. */
 const PICKUP_CHAIN_S = 0.6;
 /** Pickup chime pitch: base frequency, semitone step per chained cell, and the cap on steps. */
@@ -71,6 +84,10 @@ interface NoiseLoop {
 export class GameAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** Everything raced (engine, loops, race one-shots) goes through here so slow-mo can bend it. */
+  private raceBus: GainNode | null = null;
+  private slowFilter: BiquadFilterNode | null = null;
+  private timeScale = 1;
   private noiseBuf: AudioBuffer | null = null;
   private enabled = true;
   private engineVoice: EngineVoice | null = null;
@@ -93,6 +110,14 @@ export class GameAudio {
     const master = ctx.createGain();
     master.gain.value = this.enabled ? MASTER_GAIN : 0;
     master.connect(comp);
+    const slowFilter = ctx.createBiquadFilter();
+    slowFilter.type = 'lowpass';
+    slowFilter.frequency.value = FULL_BAND_HZ;
+    slowFilter.connect(master);
+    const raceBus = ctx.createGain();
+    raceBus.connect(slowFilter);
+    this.raceBus = raceBus;
+    this.slowFilter = slowFilter;
     const buf = ctx.createBuffer(1, ctx.sampleRate * NOISE_SECONDS, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -118,9 +143,28 @@ export class GameAudio {
     p.catch((err: unknown) => console.error('[audio] Could not change the audio context state', err));
   }
 
-  private live(): { ctx: AudioContext; out: GainNode; noise: AudioBuffer } | null {
-    if (!this.ctx || !this.master || !this.noiseBuf || !this.enabled || this.ctx.state !== 'running') return null;
-    return { ctx: this.ctx, out: this.master, noise: this.noiseBuf };
+  private live(): { ctx: AudioContext; out: GainNode; menu: GainNode; noise: AudioBuffer } | null {
+    if (!this.ctx || !this.master || !this.raceBus || !this.noiseBuf || !this.enabled || this.ctx.state !== 'running') return null;
+    return { ctx: this.ctx, out: this.raceBus, menu: this.master, noise: this.noiseBuf };
+  }
+
+  /**
+   * Slow-motion (0..1, 1 = real time): race sounds pitch down and lose their top end, and
+   * one-shots stretch, so a slow-mo wreck sounds heavy instead of chipmunk-normal.
+   */
+  setTimeScale(f: number): void {
+    this.timeScale = Math.max(0, Math.min(1, f));
+    const ctx = this.ctx;
+    if (!ctx || !this.slowFilter) return;
+    const cutoff = SLOWMO_CUTOFF_MIN_HZ + (FULL_BAND_HZ - SLOWMO_CUTOFF_MIN_HZ) * this.timeScale * this.timeScale;
+    this.slowFilter.frequency.setTargetAtTime(cutoff, ctx.currentTime, SLOWMO_SMOOTH_S);
+    // The engine retargets on its next call instead of waiting out its update interval.
+    if (this.engineVoice) this.engineVoice.lastUpdate = -1;
+  }
+
+  /** Pitch (and inverse stretch) applied to race sounds at the current time scale. */
+  private racePitch(): number {
+    return SLOWMO_PITCH_FLOOR + (1 - SLOWMO_PITCH_FLOOR) * this.timeScale;
   }
 
   // --- Continuous sounds --------------------------------------------------------------------
@@ -134,7 +178,7 @@ export class GameAudio {
     v.lastUpdate = t;
     const r = Math.max(0, view.speed / view.topSpeed);
     const pitch = (view.boosting ? ENGINE_BOOST_PITCH : 1) * (view.airborne ? ENGINE_AIR_PITCH : 1);
-    const f = (ENGINE_BASE_HZ + ENGINE_RANGE_HZ * Math.min(r, 1.4)) * pitch;
+    const f = (ENGINE_BASE_HZ + ENGINE_RANGE_HZ * Math.min(r, 1.4)) * pitch * this.racePitch();
     v.oscs[0].frequency.setTargetAtTime(f, t, SMOOTH_S);
     v.oscs[1].frequency.setTargetAtTime(f * 1.006, t, SMOOTH_S);
     v.oscs[2].frequency.setTargetAtTime(f * 0.5, t, SMOOTH_S);
@@ -230,6 +274,8 @@ export class GameAudio {
   }
 
   stopRaceSounds(): void {
+    // Whatever slow-mo the race ended in, the next one starts in real time.
+    this.setTimeScale(1);
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -270,7 +316,8 @@ export class GameAudio {
     // A line of cells is collected faster than the repeat gate, and each one should ring.
     if (name !== 'pickup' && t - (this.lastShot.get(name) ?? -1) < ONE_SHOT_REPEAT_S) return;
     this.lastShot.set(name, t);
-    const { ctx, out, noise } = a;
+    const { ctx, noise } = a;
+    const out = MENU_SOUNDS.has(name) ? a.menu : a.out;
     const k = clamp01(intensity);
     switch (name) {
       case 'countdown':
@@ -326,6 +373,25 @@ export class GameAudio {
       case 'click':
         this.tone(ctx, out, 'square', 1800, 1100, 0.035, 0.08, 0);
         break;
+      case 'repair':
+        // Warm rising major third with a soft shimmer: health back, not boost.
+        this.tone(ctx, out, 'sine', 523, 659, 0.16, 0.3, 0);
+        this.tone(ctx, out, 'triangle', 784, 1046, 0.24, 0.18, 0.08);
+        this.noise(ctx, out, noise, 0.25, 'highpass', 6000, 9000, 0.05, 0.05);
+        break;
+      case 'wreck': {
+        // Impact crunch, then the explosion's body and boom, then debris raining down.
+        this.noise(ctx, out, noise, 0.35, 'bandpass', 2400, 260, 1, 0);
+        this.tone(ctx, out, 'sawtooth', 180, 40, 0.5, 0.5, 0, 700);
+        this.noise(ctx, out, noise, 1.9, 'lowpass', 3200, 90, 1, 0.04);
+        this.tone(ctx, out, 'sine', 78, 22, 1.4, 1, 0.03);
+        for (let i = 0; i < WRECK_DEBRIS; i++) {
+          const at = 0.3 + Math.random() * WRECK_DEBRIS_SPREAD_S;
+          const hz = WRECK_DEBRIS_HZ[0] + Math.random() * (WRECK_DEBRIS_HZ[1] - WRECK_DEBRIS_HZ[0]);
+          this.tone(ctx, out, 'sine', hz, hz * 0.97, 0.09, 0.12 * (1 - at / (WRECK_DEBRIS_SPREAD_S + 0.6)), at);
+        }
+        break;
+      }
       case 'buy':
         this.tone(ctx, out, 'sine', 1320, 1320, 0.09, 0.3, 0);
         this.tone(ctx, out, 'sine', 1760, 1760, 0.3, 0.3, 0.08);
@@ -340,6 +406,11 @@ export class GameAudio {
   }
 
   private tone(ctx: AudioContext, out: AudioNode, type: OscillatorType, f0: number, f1: number, dur: number, gain: number, delay: number, lowpass?: number): void {
+    const k = out === this.master ? 1 : this.racePitch();
+    f0 *= k;
+    f1 *= k;
+    dur /= k;
+    delay /= k;
     const t = ctx.currentTime + delay;
     const o = ctx.createOscillator();
     o.type = type;
@@ -360,9 +431,15 @@ export class GameAudio {
   }
 
   private noise(ctx: AudioContext, out: AudioNode, buf: AudioBuffer, dur: number, type: BiquadFilterType, f0: number, f1: number, gain: number, delay: number): void {
+    const k = out === this.master ? 1 : this.racePitch();
+    f0 *= k;
+    f1 *= k;
+    dur = Math.min(NOISE_SECONDS, dur / k);
+    delay /= k;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = k;
     const f = ctx.createBiquadFilter();
     f.type = type;
     f.frequency.setValueAtTime(f0, t);

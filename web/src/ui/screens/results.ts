@@ -6,6 +6,7 @@ import { trackById } from '../../data/tracks/index.ts';
 import type { RaceReport } from '../../game/career.ts';
 import type { RaceRequest } from '../../game/types.ts';
 import { button, formatCredits, formatTime, h, ordinal, panel } from '../kit.ts';
+import { wreckCopy } from '../wreckCopy.ts';
 import type { AppCtx, Nav, Screen } from './context.ts';
 
 interface NextStep {
@@ -19,9 +20,11 @@ function nextStep(ctx: AppCtx, report: RaceReport): NextStep {
   const career = ctx.career;
   const req = report.request;
   if (req.mode === 'quick') {
+    // After a wreck the same race is a retry; after a finish it's another go.
+    const wrecked = report.playerWreck !== null;
     return {
-      label: 'RACE AGAIN',
-      aria: 'Race again',
+      label: wrecked ? 'RETRY' : 'RACE AGAIN',
+      aria: wrecked ? 'Retry this race' : 'Race again',
       build: () => career.quickRaceRequest(req.trackId, req.laps),
       back: { screen: 'quick', trackId: req.trackId, laps: req.laps },
     };
@@ -51,10 +54,10 @@ function resultsTable(report: RaceReport): HTMLElement {
   const rows = report.results.map((r) => {
     const tr = h(
       'tr',
-      r.isPlayer ? 'is-player' : '',
-      h('td', null, String(r.place)),
+      `${r.isPlayer ? 'is-player' : ''}${r.dnf ? ' is-dnf' : ''}`,
+      h('td', null, r.dnf ? '✕' : String(r.place)),
       h('td', null, r.name),
-      h('td', 'num', r.time === null ? 'DNF' : formatTime(r.time)),
+      r.dnf ? h('td', 'num dnf', 'WRECKED') : h('td', 'num', r.time === null ? '--' : formatTime(r.time)),
       h('td', 'num hide-narrow', formatTime(r.bestLap)),
     );
     if (pts) tr.append(h('td', 'num hot', `+${pts[r.id] ?? 0}`));
@@ -81,7 +84,10 @@ function standingsTable(report: RaceReport): HTMLElement | null {
 
 function headline(report: RaceReport): HTMLElement {
   const c = report.cup;
-  const place = h('div', `results__place p${report.playerPlace}`, ordinal(report.playerPlace).toUpperCase());
+  const wreck = report.playerWreck ? wreckCopy(report.playerWreck) : null;
+  const place = wreck
+    ? h('div', 'results__wreck', h('div', 'results__wreck-title', wreck.title), h('div', 'results__wreck-sub', `${wreck.sub} · ${c ? 'no points' : 'no pay'}`))
+    : h('div', `results__place p${report.playerPlace}`, ordinal(report.playerPlace).toUpperCase());
   const track = trackById(report.request.trackId);
   const sub = c
     ? `${cupById(c.cupId).name} · Race ${c.raceIndex + 1}/${c.racesTotal} · ${track.name}`

@@ -32,7 +32,7 @@ const SPRITE_SIZE_SCALED = 'size * length(modelMatrix[0].xyz) * projectionMatrix
 export function finishCoast(kit: Kit, radius: number): Landmark {
   const lm = kit.finish(radius);
   lm.group.traverse((o) => {
-    if (!(o instanceof THREE.Points)) return;
+    if (!(o instanceof THREE.Points) || o.userData.scalesWithPlacement === true) return;
     const mat = o.material as THREE.ShaderMaterial;
     if (!mat.vertexShader.includes(SPRITE_SIZE)) throw new Error('set-B sprite shader changed: coast kit cannot scale sprites');
     mat.vertexShader = mat.vertexShader.replace(SPRITE_SIZE, SPRITE_SIZE_SCALED);

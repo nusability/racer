@@ -9,7 +9,9 @@ import { Kit } from '../b/kit.ts';
 import type { V3 } from '../b/motion.ts';
 import { T, mix, shade, vary } from '../b/shapes.ts';
 import { quadPts } from '../b/props.ts';
-import { finishCoast, foamRing, smoke, FOAM_Y } from './kit.ts';
+import { FOAM_Y, finishCoast, foamRing, smoke } from './kit.ts';
+import { bindingOf, withBound } from './hazard.ts';
+import { lavaBombs } from './lavaBombs.ts';
 
 const SALT = 0x701ca;
 const RADIUS = 600;
@@ -40,6 +42,7 @@ const JUNGLE = 0x3f8a3a;
 const ASH = 0x2e2826;
 
 export function createVolcano(opts: LandmarkOptions): Landmark {
+  const bound = bindingOf(opts, 'volcano', ['dropper'] as const);
   const kit = new Kit(opts, SALT);
   const { rng } = kit;
   const ridgePhase = RIDGES.map(() => rng() * Math.PI * 2);
@@ -149,5 +152,8 @@ export function createVolcano(opts: LandmarkOptions): Landmark {
   }
 
   foamRing(kit, [0, FOAM_Y, 0], SHORE_R + 2, kit.q(96, 48), 3.5, 3, 0.5);
-  return finishCoast(kit, RADIUS);
+  // Bound to a dropper: the scheduled bombs fly from the crater onto their spots on the course.
+  const drive = bound && lavaBombs(kit, bound, [0, floorY + 6, 0]);
+  const lm = finishCoast(kit, RADIUS);
+  return drive ? withBound(lm, drive) : lm;
 }

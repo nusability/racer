@@ -164,17 +164,26 @@ export const OBSTACLE_SPEED_LOSS = 0.35;
 /** Sideways speed a glancing hit throws the racer off with, m/s. */
 export const OBSTACLE_DEFLECT_SPEED = 25;
 /** Sideways shove between racers per m/s of closing speed, before mass sharing (m/s). */
-export const RACER_SHOVE = 0.8;
+export const RACER_SHOVE = 0.3;
 /** Smallest shove of any contact, m/s: touching always pushes apart. */
-export const RACER_SHOVE_MIN = 6;
+export const RACER_SHOVE_MIN = 4;
 /** A shove moves the victim's line this many seconds' worth: a nudge sends it off its line. */
 export const RACER_SHOVE_TARGET_TIME = 0.25;
-/** Hull per m/s of closing speed in a racer contact (before armour). */
-export const RACER_DAMAGE_PER_SPEED = 0.008;
+/** Racer contacts closing slower than this do no damage, m/s: rubbing is free, ramming is not. */
+export const RACER_DAMAGE_FREE_SPEED = 8;
+/** Hull per m/s of closing speed above that in a racer contact (before armour). */
+export const RACER_DAMAGE_PER_SPEED = 0.003;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
 export const RACER_BUMP_SHARE = 0.3;
+/**
+ * Two racers must be apart this long, seconds, before their next touch counts as a new hit:
+ * a shove, the drivers steering back and touching again is one tussle, not a string of hits.
+ */
+export const RACER_CONTACT_COOLDOWN = 1;
 /** Closing speed that makes a racer contact full intensity, m/s. */
 export const RACER_HIT_INTENSITY_SPEED = 30;
+/** A flat crossing's junction zone reaches this far past half the other road's width, metres. */
+export const CROSSING_MARGIN = 6;
 /** Hull a repair cell restores. */
 export const REPAIR_VALUE = 0.25;
 
@@ -241,8 +250,13 @@ export const AI_PLAN_STEP = 5;
 export const AI_PLAN_LATERAL = 0.5;
 /** The planner only considers this far either side of the racer, metres. */
 export const AI_PLAN_HALF_SPAN = 30;
-/** Lateral metres per metre of travel the planner assumes the racer can swerve. */
+/** Lateral metres per metre of travel the planner assumes the racer can swerve, at most. */
 export const AI_PLAN_MAX_SLOPE = 0.25;
+/**
+ * Share of the full steer rate a plan may count on at speed: the AI steers its target in
+ * proportion to the error, so it slows as it closes in, and the hull trails the target.
+ */
+export const AI_PLAN_RATE_SHARE = 0.5;
 /** Obstacles block this many seconds of travel in front of and behind them. */
 export const AI_OBSTACLE_LEAD_TIME = 0.1;
 /** The AI steers around racers it would catch within this many seconds. */
@@ -292,6 +306,20 @@ export const AI_JUMP_SPEED_MARGIN = 1.3;
 export const AI_START_BOOST_CHANCE = 0.8;
 /** The AI detours to a boost pad when it lies within this of its line, metres. */
 export const AI_PAD_DETOUR = 7;
+/** An AI keeps this far from an open edge, metres (novices give cliffs a wide berth). */
+export const AI_DROP_MARGIN_LO = 6;
+export const AI_DROP_MARGIN_HI = 2;
+/** With a loop's top this close ahead the AI won't brake and boosts: stalling there is a wreck. */
+export const AI_LOOP_LOOK = 500;
+/** Hull damage at which an AI starts going for repair cells. */
+export const AI_REPAIR_WANT = 0.35;
+/** It swerves for a repair cell within this of its line, metres. */
+export const AI_REPAIR_DETOUR = 20;
+/** AIs at or above this skill steer around rivals; below it they bump and barge. */
+export const AI_AVOID_RACERS_SKILL = 0.5;
+/** Arrival-time window (s) inside which an AI yields to cross traffic at a flat crossing. */
+export const AI_CROSSING_WINDOW_LO = 0;
+export const AI_CROSSING_WINDOW_HI = 0.7;
 /** Chance per lap that an AI takes a shortcut it comes to. */
 export const AI_SHORTCUT_LO = 0;
 export const AI_SHORTCUT_HI = 0.8;

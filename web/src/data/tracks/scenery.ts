@@ -50,6 +50,8 @@ export interface BeachScenery extends SceneryBase {
   hutsPerKm: number;
   /** What the road is made of. */
   road: 'causeway' | 'boardwalk';
+  /** A volcanic island: what falls on the road is molten lava bombs, not rock. */
+  lava?: boolean;
 }
 
 export type TrackScenery = DesertScenery | BeachScenery;

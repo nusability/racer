@@ -118,6 +118,7 @@ export const volcanoisleScenery: TrackScenery = {
   palmsPerKm: 6,
   hutsPerKm: 1,
   road: 'causeway',
+  lava: true,
   landmarks: [
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
     { kind: 'harbor', at: 1.0, side: -1, distance: 30, afloat: true },

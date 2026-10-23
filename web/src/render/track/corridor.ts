@@ -23,6 +23,7 @@ import { valueNoise } from './noise.ts';
 import { quadFacing, rockQuad, type Paint } from './paint.ts';
 import { sideIndex, type RibbonView } from './shape.ts';
 import { portal, tunnelStrip } from './tunnel.ts';
+import { buildSupports, deckStrip, dropFace } from './deck.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
 const TUNNEL_ROAD_SHADE = 0.42;
@@ -102,6 +103,7 @@ export class Corridor {
       this.buildSides(chunk);
     }
     this.collectPylons();
+    buildSupports(this);
   }
 
   /** Marker pylons along the crest of every run-off lip; lamp posts along the top of walls. */
@@ -109,9 +111,9 @@ export class Corridor {
     const every = Math.round(PYLON_SPACING / this.ribbon.step);
     const lamps = Math.round(LIGHT_SPACING / this.ribbon.step);
     for (let k = 0; k < this.n; k++) {
-      if (this.gap(k) || this.tunnel(k)) continue;
+      if (this.gap(k) || this.tunnel(k) || this.deck(k) || this.junction(k)) continue;
       for (const side of [-1, 1]) {
-        if (this.open(k, side)) continue;
+        if (this.open(k, side) || this.drop(k, side)) continue;
         const out = { x: this.shape.rx[k] * side, y: 0, z: this.shape.rz[k] * side };
         const sand = this.shape.run[sideIndex(side)][k] >= RUNOFF_MIN;
         if (sand && this.shape.water[k] && k % every === 0) {
@@ -174,6 +176,15 @@ export class Corridor {
   open(k: number, side: number): boolean {
     return this.shape.open[sideIndex(side)][this.idx(k)] === 1;
   }
+  deck(k: number): boolean {
+    return this.shape.deck[this.idx(k)] === 1;
+  }
+  drop(k: number, side: number): boolean {
+    return this.shape.drop[sideIndex(side)][this.idx(k)] === 1;
+  }
+  junction(k: number): boolean {
+    return this.shape.junction[this.idx(k)] === 1;
+  }
 
   // --- Road and run-off ribbon ---------------------------------------------------------------
 
@@ -195,18 +206,22 @@ export class Corridor {
       const extL = towardMain < 0 && this.open(k, -1) ? JUNCTION_OVERLAP : 0;
       const extR = towardMain > 0 && this.open(k, 1) ? JUNCTION_OVERLAP : 0;
       // Lagoon run-off is the sea itself: no sand strip.
-      const wet = this.shape.water[this.idx(k)] === 1;
-      const runL = this.open(k, -1) ? extL : wet ? 0 : Math.max(0, smp.edgeL - half);
-      const runR = this.open(k, 1) ? extR : wet ? 0 : Math.max(0, smp.edgeR - half);
+      // In a flat X junction the other road fills the shoulders.
+      const bare = this.shape.water[this.idx(k)] === 1 || this.junction(k);
+      const runL = this.open(k, -1) ? extL : bare ? 0 : Math.max(0, smp.edgeL - half);
+      const runR = this.open(k, 1) ? extR : bare ? 0 : Math.max(0, smp.edgeR - half);
       const S = ROAD_ATLAS_SPLIT;
+      // A deck's run-off is part of the deck, level with the road.
+      const lip = (run: number) => (run > RUNOFF_MIN && !this.deck(k) ? -RUNOFF_DROP : 0);
+      const y = -this.shape.sink[this.idx(k)];
       const row = [
-        c.road.vertex(this.banked(k, -half - runL, runL > RUNOFF_MIN ? -RUNOFF_DROP : 0), shade, 1, v),
-        c.road.vertex(this.banked(k, -half, 0), shade, S, v),
-        c.road.vertex(this.banked(k, -half, 0), shade, 0, v),
-        c.road.vertex(this.banked(k, 0, 0), shade, S / 2, v),
-        c.road.vertex(this.banked(k, half, 0), shade, S, v),
-        c.road.vertex(this.banked(k, half, 0), shade, S, v),
-        c.road.vertex(this.banked(k, half + runR, runR > RUNOFF_MIN ? -RUNOFF_DROP : 0), shade, 1, v),
+        c.road.vertex(this.banked(k, -half - runL, y + lip(runL)), shade, 1, v),
+        c.road.vertex(this.banked(k, -half, y), shade, S, v),
+        c.road.vertex(this.banked(k, -half, y), shade, 0, v),
+        c.road.vertex(this.banked(k, 0, y), shade, S / 2, v),
+        c.road.vertex(this.banked(k, half, y), shade, S, v),
+        c.road.vertex(this.banked(k, half, y), shade, S, v),
+        c.road.vertex(this.banked(k, half + runR, y + lip(runR)), shade, 1, v),
       ];
       if (prev) {
         // Pairs: [0-1] left run-off, [2-3] [3-4] road, [5-6] right run-off.
@@ -226,6 +241,8 @@ export class Corridor {
     for (const d of [-1, 1]) {
       if (this.gap(k) !== this.gap(k + d) || this.tunnel(k) !== this.tunnel(k + d)) return true;
       if (this.shape.water[this.idx(k)] !== this.shape.water[this.idx(k + d)]) return true;
+      if (this.deck(k) !== this.deck(k + d) || this.junction(k) !== this.junction(k + d)) return true;
+      if (this.drop(k, -1) !== this.drop(k + d, -1) || this.drop(k, 1) !== this.drop(k + d, 1)) return true;
       if (this.open(k, -1) !== this.open(k + d, -1) || this.open(k, 1) !== this.open(k + d, 1)) return true;
       for (const side of [-1, 1]) {
         const a = this.shape.run[sideIndex(side)][this.idx(k)] >= RUNOFF_MIN;
@@ -241,8 +258,13 @@ export class Corridor {
       if (!this.isStation(k, c)) continue;
       if (a >= 0 && !this.gap(a) && !this.gap(k)) {
         if (this.tunnel(a) && this.tunnel(k)) tunnelStrip(this, c.rock, a, k);
-        else if (!this.tunnel(a) && !this.tunnel(k)) {
-          for (const side of [-1, 1]) if (!this.open(a, side) && !this.open(k, side)) this.sideStrip(c, a, k, side);
+        else if (this.deck(a) && this.deck(k)) deckStrip(this, c, a, k);
+        else if (!this.tunnel(a) && !this.tunnel(k) && !this.junction(a) && !this.junction(k)) {
+          for (const side of [-1, 1]) {
+            if (this.open(a, side) || this.open(k, side)) continue;
+            if (this.drop(a, side) && this.drop(k, side)) dropFace(this, c, a, k, side);
+            else if (!this.drop(a, side) && !this.drop(k, side)) this.sideStrip(c, a, k, side);
+          }
           if (this.shape.water[this.idx(a)] && this.shape.water[this.idx(k)]) this.causewaySides(c, a, k);
         }
       }

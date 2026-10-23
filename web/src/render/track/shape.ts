@@ -57,6 +57,20 @@ export interface CorridorShape {
   gx: Float32Array;
   gy: Float32Array;
   gz: Float32Array;
+  /**
+   * The road stands in the air on a deck (rails, underside, piers) instead of on the ground:
+   * loops, corkscrews and the upper stretch of a bridge crossing.
+   */
+  deck: Uint8Array;
+  /** Upper stretch of a bridge: the ground ignores it and follows what runs underneath. */
+  bridge: Uint8Array;
+  /**
+   * Beside a flat X crossing: no run-off strip and no boundary dressing, the roads meet in an
+   * open junction.
+   */
+  junction: Uint8Array;
+  /** The road surface sits this far under its true height, so the other road of a flat X wins. */
+  sink: Float32Array;
 }
 
 /** Below this horizontal length the right vector is too steep to define the side by. */
@@ -79,6 +93,7 @@ export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
     const len = track.wrap(track.paramToS(w.to) - s0);
     for (let d = 0; d <= len; d += track.step / 2) mainWater[Math.round(track.wrap(s0 + d) / track.step) % track.samples.length] = 1;
   }
+  for (const c of track.crossings) markCrossing(track, views[0].shape, c);
   for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon, b.def.features) });
   // Junctions: each ribbon's side facing the other opens, since the other's road covers it.
   for (const b of track.branches) {
@@ -105,13 +120,13 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
   const wall = new Float32Array(n);
   for (let k = 0; k < n; k++) wall[k] = r.samples[k].wallHeight;
   // Taper both ends with a forward and a backward pass (twice round when the ribbon loops).
-  const drop = WALL_TAPER * r.step;
+  const taper = WALL_TAPER * r.step;
   if (r.closed) {
-    for (let q = 1; q <= 2 * n; q++) wall[q % n] = Math.max(wall[q % n], wall[(q - 1) % n] - drop);
-    for (let q = 2 * n; q >= 1; q--) wall[(q - 1) % n] = Math.max(wall[(q - 1) % n], wall[q % n] - drop);
+    for (let q = 1; q <= 2 * n; q++) wall[q % n] = Math.max(wall[q % n], wall[(q - 1) % n] - taper);
+    for (let q = 2 * n; q >= 1; q--) wall[(q - 1) % n] = Math.max(wall[(q - 1) % n], wall[q % n] - taper);
   } else {
-    for (let k = 1; k < n; k++) wall[k] = Math.max(wall[k], wall[k - 1] - drop);
-    for (let k = n - 2; k >= 0; k--) wall[k] = Math.max(wall[k], wall[k + 1] - drop);
+    for (let k = 1; k < n; k++) wall[k] = Math.max(wall[k], wall[k - 1] - taper);
+    for (let k = n - 2; k >= 0; k--) wall[k] = Math.max(wall[k], wall[k + 1] - taper);
   }
   const canyon = new Float32Array(n);
   const tunnel = new Uint8Array(n);
@@ -170,7 +185,78 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
       rz[k] = smp.tangent.x / t;
     }
   }
-  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz };
+  const deck = Uint8Array.from(magnet);
+  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge: new Uint8Array(n), junction: new Uint8Array(n), sink: new Float32Array(n) };
+}
+
+/** Samples of the other stretch searched either side of a crossing, metres of s. */
+const CROSS_WINDOW = 420;
+/** The bridge deck runs on this far past the lower corridor's reach. */
+const BRIDGE_MARGIN = 25;
+/** A flat X opens the boundary dressing this far past the other road's hard boundary. */
+const JUNCTION_MARGIN = 30;
+/** The lower road of a flat X sits this far down, under the other road's surface. */
+const JUNCTION_SINK = 0.06;
+
+/** Horizontal distance from (x, z) to the centreline of `r` near s0, and that sample. */
+function distanceTo(r: Ribbon, s0: number, x: number, z: number): { d: number; k: number } {
+  const n = r.samples.length;
+  const c = Math.round(r.wrap(s0) / r.step);
+  const w = Math.round(CROSS_WINDOW / r.step);
+  let best = Infinity;
+  let bk = c;
+  for (let q = c - w; q <= c + w; q++) {
+    const k = ((q % n) + n) % n;
+    const p = r.samples[k].pos;
+    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+    if (d < best) {
+      best = d;
+      bk = k;
+    }
+  }
+  return { d: Math.sqrt(best), k: bk };
+}
+
+/**
+ * A declared crossing of the main loop with itself. A bridge turns the upper stretch into a
+ * deck for as long as it is over the lower corridor; a flat X opens both corridors into one
+ * junction and tucks the second road a hair under the first.
+ */
+function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: number; style: 'bridge' | 'flat' }) {
+  const n = r.samples.length;
+  const at = (s: number) => Math.round(r.wrap(s) / r.step) % n;
+  const w = Math.round(CROSS_WINDOW / r.step);
+  const reachOf = (k: number) => Math.max(sh.outer[0][k], sh.outer[1][k]);
+  if (c.style === 'bridge') {
+    const [up, low] = r.samples[at(c.s)].pos.y >= r.samples[at(c.other)].pos.y ? [c.s, c.other] : [c.other, c.s];
+    const ku = at(up);
+    for (let q = ku - w; q <= ku + w; q++) {
+      const k = ((q % n) + n) % n;
+      const p = r.samples[k].pos;
+      const near = distanceTo(r, low, p.x, p.z);
+      const half = r.samples[k].width / 2;
+      if (near.d < reachOf(near.k) + half + BRIDGE_MARGIN) {
+        sh.deck[k] = 1;
+        sh.bridge[k] = 1;
+      }
+    }
+    return;
+  }
+  for (const [mine, other, sinkIt] of [
+    [c.s, c.other, false],
+    [c.other, c.s, true],
+  ] as const) {
+    const km = at(mine);
+    for (let q = km - w; q <= km + w; q++) {
+      const k = ((q % n) + n) % n;
+      const p = r.samples[k].pos;
+      const near = distanceTo(r, other, p.x, p.z);
+      const o = r.samples[near.k];
+      const otherEdge = Math.max(o.edgeL, o.edgeR);
+      if (near.d < otherEdge + r.samples[k].width / 2 + JUNCTION_MARGIN) sh.junction[k] = 1;
+      if (sinkIt && near.d < otherEdge + r.samples[k].width) sh.sink[k] = JUNCTION_SINK;
+    }
+  }
 }
 
 /** Inside a loop the ground follows the straight line from the sample before it to the one after. */

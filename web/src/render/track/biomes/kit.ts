@@ -46,4 +46,9 @@ export interface BiomeKit {
   dress(ctx: DressContext): Dressing;
   /** What a craft kicks up: over the road, over run-off sand, over water (sRGB hex). */
   spray: { road: number; runoff: number; water: number };
+  /**
+   * What hazards throw onto the road and blow across it: dropped rocks (`glow` > 0 makes them
+   * molten), the dust of their impact and the streaks of a gust (sRGB hex).
+   */
+  debris: { color: number; glow: number; dust: number; streak: number };
 }

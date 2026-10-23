@@ -2,8 +2,7 @@
 // Prices are always on the button before the tap; unaffordable buttons are disabled.
 import type { RacerStats } from '../../core/types.ts';
 import { RACERS } from '../../data/racers.ts';
-import { MAX_UPGRADE_LEVEL, UPGRADES, effectiveStats, noUpgrades } from '../../data/upgrades.ts';
-import type { UpgradeLevels } from '../../data/upgrades.ts';
+import { MAX_UPGRADE_LEVEL, UPGRADES, effectiveStats } from '../../data/upgrades.ts';
 import { button, creditsChip, formatCredits, h, panel, pips, statBar } from '../kit.ts';
 import type { AppCtx, Screen } from './context.ts';
 
@@ -21,18 +20,28 @@ const STATS: StatSpec[] = [
   { label: 'ARMOUR', get: (s) => s.armor },
 ];
 
-/** Bars start this far below the weakest stock racer so the weakest still shows a sliver. */
-const STAT_FLOOR_FRACTION = 0.8;
+/**
+ * Bars are scaled to the best stock glider for each stat, so the catalogue's differences read
+ * at a glance: the best glider fills BEST_GLIDER_FILL of the bar, the weakest sits
+ * WEAKEST_SPREAD of the stock spread above empty, and upgrades extend toward the end.
+ */
+const BEST_GLIDER_FILL = 0.8;
+const WEAKEST_SPREAD = 0.25;
 
-const maxLevels: UpgradeLevels = noUpgrades();
-for (const u of UPGRADES) maxLevels[u.id] = MAX_UPGRADE_LEVEL;
-
-/** Bar ranges span every racer from stock to fully upgraded, so bars compare across the catalogue. */
+/** Per stat: the value drawn as empty, and the value drawn at BEST_GLIDER_FILL. */
 const RANGES = STATS.map((st) => {
-  const lo = Math.min(...RACERS.map((r) => st.get(r.base))) * STAT_FLOOR_FRACTION;
-  const hi = Math.max(...RACERS.map((r) => st.get(effectiveStats(r, maxLevels))));
-  return { lo, hi };
+  const stock = RACERS.map((r) => st.get(r.base));
+  const best = Math.max(...stock);
+  const weakest = Math.min(...stock);
+  // When every glider is equal on a stat the spread is 0; scale off the value itself instead.
+  const spread = best - weakest || best;
+  return { lo: weakest - WEAKEST_SPREAD * spread, best };
 });
+
+function fillOf(i: number, v: number): number {
+  const { lo, best } = RANGES[i];
+  return (BEST_GLIDER_FILL * (v - lo)) / (best - lo);
+}
 
 export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
   const career = ctx.career;
@@ -52,8 +61,7 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
     const credits = career.save.credits;
 
     const bars = STATS.map((st, i) => {
-      const { lo, hi } = RANGES[i];
-      return statBar(st.label, (st.get(base) - lo) / (hi - lo), (st.get(eff) - lo) / (hi - lo));
+      return statBar(st.label, fillOf(i, st.get(base)), fillOf(i, st.get(eff)));
     });
 
     const info = h(

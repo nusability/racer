@@ -1,6 +1,8 @@
-// Low-poly part builders for the skimmer hulls. Every part is baked (transform + flat colour) into
-// one non-indexed geometry per material, so a whole hull is a single draw call. Built hulls also
-// carry a per-facet `scorch` threshold so damage chars the hull in patches (see racerModel.ts).
+// Low-poly part builders for the skimmer hulls. Every primitive is baked (transform + flat colour)
+// into one non-indexed geometry per material, so a whole hull is a single draw call. Each
+// primitive is also tagged with the breakable part it belongs to (as a one-bone skin index), so a
+// wreck can fling the parts apart without separate meshes. Built hulls also carry a per-facet
+// `scorch` threshold so damage chars the hull in patches (see racerModel.ts).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -19,6 +21,11 @@ const scratchPos = new THREE.Vector3();
 /** Chamfer on slab edges: catches a highlight so thin wings still read as solid. */
 const SLAB_BEVEL = 0.06;
 
+/** Decides which breakable part a primitive belongs to, from its centre (craft space). */
+export interface PartAssigner {
+  assign(centre: THREE.Vector3): number;
+}
+
 export function placement(
   x: number, y: number, z: number,
   rx = 0, ry = 0, rz = 0,
@@ -34,6 +41,8 @@ export function placement(
 
 export class PartBuilder {
   private readonly parts: THREE.BufferGeometry[] = [];
+
+  constructor(private readonly assigner: PartAssigner) {}
 
   /** Bakes `geo` (consumed) with a flat colour under `local` then the optional `frame`. */
   add(geo: THREE.BufferGeometry, color: number, local?: THREE.Matrix4, frame?: THREE.Matrix4): this {
@@ -53,18 +62,28 @@ export class PartBuilder {
       colors[i * 3 + 2] = scratchColor.b;
     }
     flat.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    flat.computeBoundingBox();
+    const part = this.assigner.assign((flat.boundingBox as THREE.Box3).getCenter(scratchPos));
+    const skinIndex = new Uint16Array(count * 4);
+    const skinWeight = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      skinIndex[i * 4] = part;
+      skinWeight[i * 4] = 1;
+    }
+    flat.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndex, 4));
+    flat.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
     this.parts.push(flat);
     return this;
   }
 
   /** Surface of revolution around the Z axis, one flat-coloured band per profile step. */
-  lathe(profile: ProfilePoint[], segments: number, frame?: THREE.Matrix4, phase = 0): this {
+  lathe(profile: ProfilePoint[], segments: number, frame?: THREE.Matrix4, phase = 0, arc = Math.PI * 2): this {
     for (let i = 0; i < profile.length - 1; i++) {
       const a = profile[i];
       const b = profile[i + 1];
       if (a.r === 0 && b.r === 0) continue;
       // LatheGeometry spins around +Y; rotating +90° about X maps its Y axis onto +Z.
-      const band = new THREE.LatheGeometry([new THREE.Vector2(a.r, a.z), new THREE.Vector2(b.r, b.z)], segments, phase);
+      const band = new THREE.LatheGeometry([new THREE.Vector2(a.r, a.z), new THREE.Vector2(b.r, b.z)], segments, phase, arc);
       band.rotateX(Math.PI / 2);
       this.add(band, a.color, undefined, frame);
     }
@@ -83,8 +102,19 @@ export class PartBuilder {
     return this.add(geo, color, local, frame);
   }
 
-  /** A flat chamfered plate from a top-view outline of (x, z) points; its top face sits at `top`. */
+  /** A flat chamfered plate from a top-view outline of (x, z) points; its top face sits at `top`.
+   * Plates straddling the centreline are cut in two so each side can break off on its own. */
   slab(outline: [number, number][], thickness: number, top: number, color: number, frame?: THREE.Matrix4): this {
+    const hasLeft = outline.some(([x]) => x < -1e-6);
+    const hasRight = outline.some(([x]) => x > 1e-6);
+    if (hasLeft && hasRight) {
+      this.slabPiece(clipHalfPlane(outline, -1), thickness, top, color, frame);
+      return this.slabPiece(clipHalfPlane(outline, 1), thickness, top, color, frame);
+    }
+    return this.slabPiece(outline, thickness, top, color, frame);
+  }
+
+  private slabPiece(outline: [number, number][], thickness: number, top: number, color: number, frame?: THREE.Matrix4): this {
     const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x, z)));
     const depth = Math.max(0.01, thickness - SLAB_BEVEL * 2);
     const geo = new THREE.ExtrudeGeometry(shape, {
@@ -117,6 +147,23 @@ export class PartBuilder {
     merged.computeBoundingSphere();
     return merged;
   }
+}
+
+/** Sutherland–Hodgman clip of a polygon to the side of x = 0 given by `side` (−1 or 1). */
+function clipHalfPlane(poly: [number, number][], side: -1 | 1): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ina = a[0] * side >= 0;
+    const inb = b[0] * side >= 0;
+    if (ina) out.push(a);
+    if (ina !== inb) {
+      const t = a[0] / (a[0] - b[0]);
+      out.push([0, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  return out;
 }
 
 /** Deterministic per-facet threshold 0..1: low values char first, in blotches rather than noise. */

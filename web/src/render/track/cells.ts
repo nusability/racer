@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Ribbon } from '../../core/track.ts';
 
-// Boost cells: floating energy canisters the racer flies through to fill the boost tank.
-// Every cell of every ribbon is one instance of a lit-looking core plus one billboard halo,
-// so the whole track's cells cost two draw calls. Collected cells pop and hide until the
-// next lap.
+// Boost and repair cells: floating canisters the racer flies through, cyan ones filling the
+// boost tank and green-and-white ones patching the hull. Every cell of one kind on every
+// ribbon is one instance of a core plus one billboard halo, so each kind costs two draw calls.
+// Collected cells pop and hide until the next lap.
 
 /** Height of a cell's centre above the road, metres (racers hover around 1–2 m). */
 const CELL_HEIGHT = 2.6;
@@ -17,9 +17,14 @@ const HALO_SIZE = 11;
 const POP_TIME = 0.35;
 const POP_SWELL = 2.2;
 const POP_FLARE = 2.6;
-const CORE_COLOUR = new THREE.Color(0x9ff4ff);
-/** Additive, so it is pushed past 1 to stay vivid over bright sand. */
-const HALO_COLOUR = new THREE.Color(0x1ab8ff).multiplyScalar(1.5);
+export type CellItem = 'boost' | 'repair';
+
+/** Halos are additive, so they are pushed past 1 to stay vivid over bright sand and snow. */
+const LOOK: Record<CellItem, { core: THREE.Color; halo: THREE.Color; name: string }> = {
+  boost: { core: new THREE.Color(0x9ff4ff), halo: new THREE.Color(0x1ab8ff).multiplyScalar(1.5), name: 'boostCells' },
+  // A white cross on green: reads as "repair" at a glance and never as a boost cell.
+  repair: { core: new THREE.Color(0xf2fff4), halo: new THREE.Color(0x2bff6a).multiplyScalar(1.4), name: 'repairCells' },
+};
 
 const HALO_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -58,22 +63,23 @@ export interface CellField {
 }
 
 /** ribbons[0] is the main loop (-1 in the public API), then branches in order. */
-export function buildCells(ribbons: Ribbon[]): CellField {
+export function buildCells(ribbons: Ribbon[], item: CellItem): CellField {
+  const look = LOOK[item];
   const items: { pos: THREE.Vector3; phase: number; popAt: number; taken: boolean }[] = [];
   const lookup = new Map<string, number>();
   ribbons.forEach((r, ri) => {
-    for (const c of r.cells) {
+    for (const c of item === 'boost' ? r.cells : r.repairCells) {
       const p = r.toWorld(c.s, c.x, CELL_HEIGHT);
       lookup.set(`${ri - 1}:${c.index}`, items.length);
       items.push({ pos: new THREE.Vector3(p.x, p.y, p.z), phase: (c.s * 0.37) % (Math.PI * 2), popAt: -1, taken: false });
     }
   });
   const n = Math.max(1, items.length);
-  // A canister: capsule core with a bright band, faceted for a crisp silhouette.
-  const coreGeo = new THREE.CapsuleGeometry(0.9, 1.8, 3, 8);
-  const coreMat = new THREE.MeshBasicMaterial({ color: CORE_COLOUR });
+  // Boost: a capsule canister, faceted for a crisp silhouette. Repair: a chunky plus sign.
+  const coreGeo = item === 'boost' ? new THREE.CapsuleGeometry(0.9, 1.8, 3, 8) : plusGeometry();
+  const coreMat = new THREE.MeshBasicMaterial({ color: look.core });
   const core = new THREE.InstancedMesh(coreGeo, coreMat, n);
-  core.name = 'boostCells';
+  core.name = look.name;
   const haloGeo = new THREE.PlaneGeometry(HALO_SIZE, HALO_SIZE);
   const haloMat = new THREE.ShaderMaterial({
     vertexShader: HALO_VERTEX,
@@ -85,7 +91,7 @@ export function buildCells(ribbons: Ribbon[]): CellField {
     fog: true,
   });
   const halo = new THREE.InstancedMesh(haloGeo, haloMat, n);
-  halo.name = 'boostCellHalos';
+  halo.name = `${look.name}Halos`;
   // Cells move every frame; their bounds are the whole track, so skip per-mesh culling.
   core.frustumCulled = false;
   halo.frustumCulled = false;
@@ -98,7 +104,7 @@ export function buildCells(ribbons: Ribbon[]): CellField {
   const sc = new THREE.Vector3();
   const pos = new THREE.Vector3();
   const col = new THREE.Color();
-  for (let i = 0; i < items.length; i++) halo.setColorAt(i, HALO_COLOUR);
+  for (let i = 0; i < items.length; i++) halo.setColorAt(i, look.halo);
   let now = 0;
 
   const field: CellField = {
@@ -131,7 +137,7 @@ export function buildCells(ribbons: Ribbon[]): CellField {
         sc.setScalar(haloScale);
         m.compose(pos, q.identity(), sc);
         halo.setMatrixAt(i, m);
-        halo.setColorAt(i, col.copy(HALO_COLOUR).multiplyScalar(haloGain * (0.85 + 0.15 * Math.sin(time * 6 + it.phase))));
+        halo.setColorAt(i, col.copy(look.halo).multiplyScalar(haloGain * (0.85 + 0.15 * Math.sin(time * 6 + it.phase))));
       }
       core.instanceMatrix.needsUpdate = true;
       halo.instanceMatrix.needsUpdate = true;
@@ -139,7 +145,7 @@ export function buildCells(ribbons: Ribbon[]): CellField {
     },
     collect(ribbon, cell) {
       const i = lookup.get(`${ribbon}:${cell}`);
-      if (i === undefined) throw new Error(`No boost cell ${cell} on ribbon ${ribbon}`);
+      if (i === undefined) throw new Error(`No ${item} cell ${cell} on ribbon ${ribbon}`);
       if (items[i].taken) return;
       items[i].taken = true;
       items[i].popAt = now;
@@ -159,4 +165,20 @@ export function buildCells(ribbons: Ribbon[]): CellField {
   };
   field.update(now);
   return field;
+}
+
+/** Arm length and thickness of the repair cell's plus sign. */
+const PLUS_ARM = 1.5;
+const PLUS_THICK = 0.75;
+
+function plusGeometry(): THREE.BufferGeometry {
+  const a = new THREE.BoxGeometry(PLUS_ARM * 2, PLUS_THICK, PLUS_THICK);
+  const b = new THREE.BoxGeometry(PLUS_THICK, PLUS_ARM * 2, PLUS_THICK);
+  const pos = [...a.toNonIndexed().attributes.position.array, ...b.toNonIndexed().attributes.position.array];
+  a.dispose();
+  b.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
 }

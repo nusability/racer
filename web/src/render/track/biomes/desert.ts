@@ -68,5 +68,6 @@ export function desertKit(scenery: DesertScenery, palette: TrackPalette): BiomeK
       };
     },
     spray: { road: palette.road, runoff: palette.sand, water: palette.sand },
+    debris: { color: palette.rock, glow: 0, dust: palette.sand, streak: palette.sand },
   };
 }

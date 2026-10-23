@@ -34,6 +34,8 @@ const buildMs = performance.now() - t0;
 let s = Number(params.get('s') ?? 0);
 let speed = Number(params.get('speed') ?? 150);
 let paused = params.get('pause') === '1';
+/** Pins the race clock (hazard schedules) for screenshots; null runs it from the wall clock. */
+let raceTime: number | null = null;
 let view = params.get('view') ?? 'fly';
 let lateral = Number(params.get('x') ?? 0);
 /** Which ribbon the camera flies: -1 the main loop, else a shortcut. */
@@ -158,7 +160,7 @@ function frame(now: number) {
     s = ribbon.wrap(s);
   }
   placeCamera();
-  ts.update(now / 1000, camera.position);
+  ts.update(raceTime ?? now / 1000, camera.position);
   renderer.render(scene, camera);
   if (frames++ % 10 === 0) {
     const i = renderer.info.render;
@@ -188,7 +190,8 @@ function totals() {
 }
 Object.assign(window, {
   viewer: {
-    set(next: { branch?: number; s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number }) {
+    set(next: { branch?: number; s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number; time?: number }) {
+      if (next.time !== undefined) raceTime = next.time;
       if (next.branch !== undefined) ribbon = track.ribbon(next.branch);
       if (next.s !== undefined) s = ribbon.wrap(next.s);
       if (next.view) view = next.view;
@@ -199,10 +202,10 @@ Object.assign(window, {
       if (next.pitch !== undefined) orbit.pitch = next.pitch;
       if (next.dist !== undefined) orbit.dist = next.dist;
       placeCamera();
-      ts.update(performance.now() / 1000, camera.position);
+      ts.update(raceTime ?? performance.now() / 1000, camera.position);
       renderer.render(scene, camera);
     },
-    collect: (branch: number, cell: number) => ts.collectCell(branch, cell),
+    collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => ts.collectCell(item, branch, cell),
     resetCells: () => ts.resetCells(),
     landmarks: () =>
       ts.group.children

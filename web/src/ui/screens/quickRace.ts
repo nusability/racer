@@ -3,23 +3,31 @@
 import { cupById } from '../../data/championships.ts';
 import { trackById } from '../../data/tracks/index.ts';
 import { WORLDS, worldById, worldOfTrack } from '../../data/worlds.ts';
+import type { WorldDef } from '../../data/worlds.ts';
 import { MAX_QUICK_LAPS, MIN_QUICK_LAPS } from '../../game/career.ts';
 import { racePayout } from '../../game/economy.ts';
 import { button, difficultyDots, formatCredits, formatTime, h, header, segmented, stepper } from '../kit.ts';
-import { trackOutline, trackThumb } from '../trackArt.ts';
+import { trackIfBuilt, trackOutline, trackThumb } from '../trackArt.ts';
 import type { AppCtx, Screen } from './context.ts';
+
+/** Laps shown before any track of the world is built (no standard lap count to copy). */
+const DEFAULT_QUICK_LAPS = 3;
 
 export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack?: string, initialLaps?: number): Screen {
   const career = ctx.career;
   let world = initialWorld ? worldById(initialWorld) : initialTrack ? worldOfTrack(initialTrack) : WORLDS[0];
-  let trackId = initialTrack ?? world.trackIds[0];
-  let laps = initialLaps ?? trackById(trackId).laps;
+  /** First raceable track of a world; null while none of its tracks is built yet. */
+  const firstBuilt = (w: WorldDef) => w.trackIds.find((id) => trackIfBuilt(id) !== null) ?? null;
+  let trackId: string | null = initialTrack ?? firstBuilt(world);
+  let laps = initialLaps ?? (trackId ? trackById(trackId).laps : DEFAULT_QUICK_LAPS);
   const list = h('div', 'trackcards list-scroll');
   let cards: HTMLButtonElement[] = [];
 
   function buildCards(): void {
     const open = career.isWorldUnlocked(world.id);
-    cards = world.trackIds.map(trackById).map((t) => {
+    cards = world.trackIds.map((id) => {
+      const t = trackIfBuilt(id);
+      if (!t) return comingSoonCard(id);
       const rec = career.save.records[t.id];
       const card = button({
         id: `quick_track_${t.id}_button`,
@@ -33,7 +41,9 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
       });
       card.classList.add('trackcard');
       card.dataset.track = t.id;
-      card.prepend(trackThumb(t.id, 'trackcard__img'), trackOutline(t.id, 'trackcard__map'));
+      const outline = trackOutline(t.id, 'trackcard__map');
+      card.prepend(trackThumb(t.id, 'trackcard__img'));
+      if (outline) card.append(outline);
       card.append(
         h(
           'span',
@@ -49,6 +59,16 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
     list.scrollTo(0, 0);
   }
 
+  /** A track not built yet: its world's gradient, its id-free label, never raceable. */
+  function comingSoonCard(id: string): HTMLButtonElement {
+    const card = button({ id: `quick_track_${id}_button`, label: 'COMING SOON', aria: 'Track coming soon', disabled: true, onTap: () => {} });
+    card.classList.add('trackcard', 'is-soon');
+    card.dataset.track = id;
+    card.prepend(trackThumb(id, 'trackcard__img'));
+    card.append(h('span', 'trackcard__blurb', 'This track is still being built.'));
+    return card;
+  }
+
   const worldTabs = segmented(
     'quick_world',
     'World',
@@ -56,8 +76,8 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
     world.id,
     (id) => {
       world = worldById(id);
-      trackId = world.trackIds[0];
-      laps = trackById(trackId).laps;
+      trackId = firstBuilt(world);
+      if (trackId) laps = trackById(trackId).laps;
       lapsPicker.replaceWith((lapsPicker = makeLapsPicker()));
       buildCards();
       refresh();
@@ -88,14 +108,23 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
     aria: 'Start quick race',
     variant: 'primary',
     big: true,
-    onTap: () => ctx.race(career.quickRaceRequest(trackId, laps), { screen: 'quick', worldId: world.id, trackId, laps }),
+    onTap: () => {
+      if (!trackId) throw new Error('Quick race: RACE tapped with no track selected');
+      ctx.race(career.quickRaceRequest(trackId, laps), { screen: 'quick', worldId: world.id, trackId, laps });
+    },
   });
   const pays = h('span', 'quick__pays');
 
   function refresh(): void {
     for (const c of cards) c.classList.toggle('is-on', c.dataset.track === trackId);
-    const t = trackById(trackId);
     raceBtn.querySelector('.btn__sub')?.remove();
+    if (!trackId) {
+      pays.textContent = `${world.name}'s tracks are still being built`;
+      raceBtn.disabled = true;
+      raceBtn.append(h('span', 'btn__sub', 'Coming soon'));
+      return;
+    }
+    const t = trackById(trackId);
     if (!career.isWorldUnlocked(world.id)) {
       const by = world.unlockedBy ? cupById(world.unlockedBy).name : '';
       pays.textContent = `Win the ${by} to open ${world.name}`;

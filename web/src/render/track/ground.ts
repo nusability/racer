@@ -97,6 +97,8 @@ export class Ground {
     views.forEach((view, vi) => {
       const sh = view.shape;
       for (let k = 0; k < sh.gx.length; k += FIELD_STRIDE) {
+        // A bridge deck is in the air: the ground under it follows the road below.
+        if (sh.bridge[k]) continue;
         const p = { x: sh.gx[k], z: sh.gz[k] };
         const cx = Math.round((p.x - this.fx0) / FIELD_CELL);
         const cz = Math.round((p.z - this.fz0) / FIELD_CELL);
@@ -149,7 +151,7 @@ export class Ground {
     for (const dir of [1, -1]) {
       for (;;) {
         const q = closed ? (k + dir + n) % n : k + dir;
-        if (q < 0 || q >= n) break;
+        if (q < 0 || q >= n || view.shape.bridge[q]) break;
         const dq = d2(q);
         if (dq >= best) break;
         best = dq;

@@ -1,5 +1,4 @@
-// Jump geometry questions about a ribbon: how fast you must be to clear one, and whether a
-// point lies in one's ramp or chasm (respawns must not land there).
+// Jump geometry: how fast you must be to clear one.
 
 import type { Jump } from './types.ts';
 import type { Ribbon } from './track.ts';
@@ -18,14 +17,4 @@ export function minJumpSpeed(ribbon: Ribbon, jump: Jump): number {
   const reach = lipHeight + (2 * jump.rampHeight * gap) / rampLength + LANDING_STEP_TOLERANCE;
   if (reach <= 0) return Infinity;
   return gap * Math.sqrt(GRAVITY / (2 * reach));
-}
-
-/** The jump whose ramp or chasm contains s (with `before` metres of run-up), or null. */
-export function jumpAround(ribbon: Ribbon, s: number, before: number): Jump | null {
-  for (const j of ribbon.jumps) {
-    const from = j.rampStart - before;
-    const d = ribbon.closed ? ribbon.wrap(s - from) : s - from;
-    if (d >= 0 && d <= ribbon.delta(from, j.gapEnd)) return j;
-  }
-  return null;
 }

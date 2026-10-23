@@ -14,6 +14,8 @@ import type { Motion, V3 } from '../b/motion.ts';
 import { T, beam, box, lathe, mix, shade, vary } from '../b/shapes.ts';
 import { bunting } from '../b/props.ts';
 import { DARK, FOAM, GLASS, WHITE, finishCoast, hull, splash } from './kit.ts';
+import { bindingOf, withBound } from './hazard.ts';
+import { leviathan } from './leviathan.ts';
 
 const SALT = 0x3e41e5;
 const RADIUS = 190;
@@ -152,10 +154,14 @@ function boat(kit: Kit, splashes: Particles): void {
 }
 
 export function createWhales(opts: LandmarkOptions): Landmark {
+  const bound = bindingOf(opts, 'whales', ['blocker'] as const);
   const kit = new Kit(opts, SALT);
   const splashes = kit.particles(false, 1.1);
   const pod = kit.high ? POD : POD.slice(0, POD_LOW);
   for (const w of pod) swimmer(kit, w, splashes);
   boat(kit, splashes);
-  return finishCoast(kit, RADIUS);
+  // Bound to a blocker: the leviathan that leaps across the causeway and lies over it.
+  const drive = bound && leviathan(kit, bound, splashes);
+  const lm = finishCoast(kit, RADIUS);
+  return drive ? withBound(lm, drive) : lm;
 }

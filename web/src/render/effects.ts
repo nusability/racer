@@ -1,8 +1,9 @@
-// Pooled race effects in world space. Three draw calls total: one soft (normal-blended) point
-// pool for dust/smoke/debris, one additive point pool for sparks/fire/flashes and one instanced
-// mesh of shock rings. Everything is preallocated; spawning overwrites the oldest particle.
+// Pooled race effects in world space. Four draw calls total: one soft (normal-blended) point
+// pool for dust/smoke/debris, one additive point pool for sparks/fire/flashes, one instanced
+// mesh of shock rings and one of ground scorch marks. Everything is preallocated; spawning overwrites the oldest particle.
 import * as THREE from 'three';
 import { ParticlePool } from './particlePool.ts';
+import { ScorchDecals } from './scorchDecals.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
 
 const POOL_SOFT = { high: 1600, low: 650 } as const;
@@ -47,6 +48,21 @@ const BOOST_RING_SIZE = [2.5, 15] as const;
  * the chase camera instead of vanishing behind in one frame. */
 const BOOST_CARRY = 165;
 
+// Wreck: the big one. Two shock rings, a fireball with a white flash, burning chunks flung in
+// arcs, a smoke column and a scorch mark on the ground.
+const WRECK_RING = { size: 14, life: 0.8 } as const;
+const WRECK_SIDE_RING = { size: 8, life: 0.45 } as const;
+/** The ground ring is a dusty shock front, not a second fireball. */
+const WRECK_RING_GAIN = 0.55;
+const WRECK_FIREBALL = 36;
+const WRECK_FLASH = 3;
+const WRECK_CHUNKS = 28;
+const WRECK_SMOKE = 40;
+const WRECK_SCORCH_RADIUS = 7.5;
+/** Share of the racer's velocity the fireball keeps: it rolls on a little past the crash. */
+const WRECK_CARRY = 0.25;
+const FLASH_COLOR = new THREE.Color(0xfff6e0);
+
 const tmpColor = new THREE.Color();
 const tmpGlow = new THREE.Color();
 const WHITE = new THREE.Color(0xffffff);
@@ -68,6 +84,9 @@ export class Effects {
   private readonly ringMat: THREE.MeshBasicMaterial;
   private readonly ringLife = new Float32Array(RING_COUNT);
   private readonly ringCarry = new Float32Array(RING_COUNT);
+  private readonly ringMaxLife = new Float32Array(RING_COUNT).fill(BOOST_RING_LIFE);
+  private readonly ringSize = new Float32Array(RING_COUNT).fill(BOOST_RING_SIZE[1]);
+  private readonly scorch = new ScorchDecals();
   private readonly ringPos: THREE.Vector3[] = [];
   private readonly ringDir: THREE.Vector3[] = [];
   private readonly ringColor: THREE.Color[] = [];
@@ -100,7 +119,7 @@ export class Effects {
     this.soft.buf.points.renderOrder = 1;
     this.glow.buf.points.renderOrder = 2;
     this.rings.renderOrder = 2;
-    scene.add(this.soft.buf.points, this.glow.buf.points, this.rings);
+    scene.add(this.soft.buf.points, this.glow.buf.points, this.rings, this.scorch.mesh);
   }
 
   private inRange(pos: THREE.Vector3): boolean {
@@ -112,14 +131,15 @@ export class Effects {
     this.cameraKnown = true;
     this.soft.update(dt);
     this.glow.update(dt);
+    this.scorch.update(dt);
     for (let i = 0; i < RING_COUNT; i++) {
       if (this.ringLife[i] <= 0) continue;
       this.ringLife[i] -= dt;
-      const t = 1 - Math.max(0, this.ringLife[i]) / BOOST_RING_LIFE;
+      const t = 1 - Math.max(0, this.ringLife[i]) / this.ringMaxLife[i];
       const dir = this.ringDir[i];
       this.ringPos[i].addScaledVector(dir, this.ringCarry[i] * dt * (1 - t * 0.5));
       const ease = 1 - (1 - t) * (1 - t);
-      const s = BOOST_RING_SIZE[0] + (BOOST_RING_SIZE[1] - BOOST_RING_SIZE[0]) * ease;
+      const s = BOOST_RING_SIZE[0] + (this.ringSize[i] - BOOST_RING_SIZE[0]) * ease;
       tmpQuat.setFromUnitVectors(UNIT_Z, dir);
       tmpScale.set(s, s, s);
       this.rings.setMatrixAt(i, tmpMat.compose(this.ringPos[i], tmpQuat, this.ringLife[i] > 0 ? tmpScale : tmpScale.set(0, 0, 0)));
@@ -197,6 +217,55 @@ export class Effects {
     this.addRing(pos, UPWARD, FIRE_COLORS[1], 0);
   }
 
+  /** A racer wrecking: shock rings, fireball, burning chunks, smoke column and a scorch mark.
+   * `pos`: its hover position (model root). `vel`: its world velocity. `color`: its glow colour.
+   * Pair it with RacerModel.shatter() on the same frame. */
+  wreck(pos: THREE.Vector3, vel: THREE.Vector3, color: number): void {
+    if (!this.inRange(pos)) return;
+    const q = this.quality === 'high' ? 1 : 0.5;
+    const racerGlow = tmpGlow.setHex(color);
+    this.addRing(pos, UPWARD, tmpColor.copy(FIRE_COLORS[1]).multiplyScalar(WRECK_RING_GAIN), 0, WRECK_RING.size, WRECK_RING.life);
+    if (vel.lengthSq() > 1) this.addRing(pos, tmpPos.copy(vel).normalize(), racerGlow, 0, WRECK_SIDE_RING.size, WRECK_SIDE_RING.life);
+    const cx = vel.x * WRECK_CARRY;
+    const cy = vel.y * WRECK_CARRY;
+    const cz = vel.z * WRECK_CARRY;
+    for (let i = 0; i < WRECK_FLASH; i++) {
+      randomInSphere(tmpPos);
+      this.glow.spawn(pos.x + tmpPos.x, pos.y + tmpPos.y, pos.z + tmpPos.z, cx, cy, cz, rand(0.12, 0.22), 6, 14, FLASH_COLOR, 0.8, 2, 0);
+    }
+    for (let i = 0; i < WRECK_FIREBALL * q; i++) {
+      randomInSphere(tmpPos);
+      const c = i % 6 === 0 ? racerGlow : FIRE_COLORS[i % FIRE_COLORS.length];
+      this.glow.spawn(
+        pos.x + tmpPos.x * 2, pos.y + tmpPos.y, pos.z + tmpPos.z * 2,
+        cx + tmpPos.x * 18, cy + tmpPos.y * 10 + 5, cz + tmpPos.z * 18,
+        rand(0.6, 1.3), rand(2.5, 4), rand(7, 11), c, 0.75, 2.5, -3,
+      );
+    }
+    for (let i = 0; i < WRECK_CHUNKS * q; i++) {
+      randomInSphere(tmpPos);
+      // Flung embers on high arcs, and separate dark shrapnel on lower, faster ones.
+      this.glow.spawn(pos.x, pos.y, pos.z, cx + tmpPos.x * 30, rand(10, 26), cz + tmpPos.z * 30,
+        rand(1.4, 2.4), rand(0.5, 0.75), 0.15, FIRE_COLORS[i % FIRE_COLORS.length], 1, 0.3, 20);
+      randomInSphere(tmpPos);
+      this.soft.spawn(pos.x, pos.y, pos.z, cx + tmpPos.x * 40, rand(5, 14), cz + tmpPos.z * 40,
+        rand(1.0, 1.8), rand(0.3, 0.5), 0.25, DEBRIS_COLOR, 1, 0.3, 24);
+    }
+    for (let i = 0; i < WRECK_SMOKE * q; i++) {
+      randomInSphere(tmpPos);
+      this.soft.spawn(
+        pos.x + tmpPos.x * 3, pos.y + tmpPos.y, pos.z + tmpPos.z * 3,
+        cx * 0.4 + tmpPos.x * 5, rand(3, 10), cz * 0.4 + tmpPos.z * 5,
+        rand(3, 5), rand(4, 6), rand(14, 22), SMOKE_COLOR, 0.7, 0.8, -1.8,
+      );
+    }
+    tmpPos.copy(vel).normalize().negate();
+    this.sparks(pos, tmpPos, 1);
+    this.sparks(pos, UPWARD, 1);
+    tmpPos.set(pos.x, pos.y - SKIMMER_RIDE_HEIGHT, pos.z);
+    this.scorch.add(tmpPos, WRECK_SCORCH_RADIUS);
+  }
+
   /** Dust ring blown out when a racer lands. `intensity` 0..1. */
   landing(pos: THREE.Vector3, intensity: number): void {
     if (!this.inRange(pos)) return;
@@ -232,10 +301,15 @@ export class Effects {
     }
   }
 
-  private addRing(pos: THREE.Vector3, dir: THREE.Vector3, color: THREE.Color, carry: number): void {
+  private addRing(
+    pos: THREE.Vector3, dir: THREE.Vector3, color: THREE.Color, carry: number,
+    size: number = BOOST_RING_SIZE[1], life: number = BOOST_RING_LIFE,
+  ): void {
     const i = this.ringNext;
     this.ringNext = (i + 1) % RING_COUNT;
-    this.ringLife[i] = BOOST_RING_LIFE;
+    this.ringLife[i] = life;
+    this.ringMaxLife[i] = life;
+    this.ringSize[i] = size;
     this.ringPos[i].copy(pos);
     this.ringDir[i].copy(dir).normalize();
     this.ringColor[i].copy(color);
@@ -243,7 +317,8 @@ export class Effects {
   }
 
   dispose(): void {
-    this.scene.remove(this.soft.buf.points, this.glow.buf.points, this.rings);
+    this.scene.remove(this.soft.buf.points, this.glow.buf.points, this.rings, this.scorch.mesh);
+    this.scorch.dispose();
     this.soft.dispose();
     this.glow.dispose();
     this.rings.dispose();

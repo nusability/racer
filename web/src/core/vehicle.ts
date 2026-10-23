@@ -5,6 +5,7 @@
 
 import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats } from './types.ts';
 import { gustAt } from './hazards.ts';
+import { cornerPull, currentTopSpeed, steerRate } from './handling.ts';
 import type { Ribbon } from './track.ts';
 import {
   ACCEL_TAPER_EXP,
@@ -29,13 +30,9 @@ import {
   CELL_MAX_HEIGHT,
   CELL_RADIUS,
   CELL_VALUE,
-  CORNER_PULL,
-  CORNER_PULL_BRAKE,
-  DAMAGE_TOP_SPEED_LOSS,
   DROP_OVERREACH,
   FRENET_MIN_DENOM,
   GRAVITY,
-  GRIP_REF,
   GUST_DRIFT,
   HANDLING_REF,
   HOVER_SUCTION,
@@ -67,7 +64,6 @@ import {
   SIM_DT,
   SLICK_DAMPING_FLOOR,
   SLOPE_SPEED_FACTOR,
-  STEER_TARGET_RATE,
   TARGET_OVERREACH,
 } from '../data/tuning.ts';
 
@@ -83,28 +79,6 @@ export interface DriveStats {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
-/** How fast full steer moves the lateral target, m/s. */
-export function steerRate(stats: RacerStats): number {
-  return STEER_TARGET_RATE * (stats.handling / HANDLING_REF);
-}
-
-/**
- * Outward drift of the lateral target in a corner, m/s (signed: + = rightward). It grows
- * with speed²·curvature, so a hairpin at full boost carries you wide unless you hold the
- * inside; grip (the glider's and the surface's) and the air brake reduce it.
- */
-export function cornerPull(stats: RacerStats, curvature: number, speed: number, brake: boolean, surfaceGrip: number): number {
-  const pull = -curvature * speed * speed * CORNER_PULL * (GRIP_REF / (stats.grip * surfaceGrip));
-  return brake ? pull * CORNER_PULL_BRAKE : pull;
-}
-
-/** Top speed right now, given damage and whether boost is active. */
-export function currentTopSpeed(stats: RacerStats, state: RacerState, boosting: boolean): number {
-  let top = stats.topSpeed * (1 - DAMAGE_TOP_SPEED_LOSS * state.damage);
-  if (boosting) top *= 1 + stats.boostPower;
-  return top;
-}
 
 export class Vehicle {
   readonly state: RacerState;

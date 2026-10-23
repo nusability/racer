@@ -166,13 +166,23 @@ function ringwing(b: BlueprintBuilder): void {
   const RING_Y = SKID_Y + RING_R * RING_SQUASH;
   const ring = placement(0, RING_Y, 0, 0, 0, 0, 1, RING_SQUASH, 1);
   const segs = b.detail === 'high' ? 32 : 20;
-  // Airfoil section swept round the Z axis: thin leading edge, fat middle, sharp glowing tail.
-  b.hull.lathe([
-    { r: RING_R, z: 0.9, color: p }, { r: RING_R + 0.14, z: 1.25, color: p }, { r: RING_R + 0.1, z: 2.2, color: p },
-    { r: RING_R, z: 2.75, color: s }, { r: RING_R - 0.08, z: 2.75, color: s }, { r: RING_R - 0.12, z: 1.6, color: s },
-    { r: RING_R - 0.04, z: 0.95, color: a }, { r: RING_R, z: 0.9, color: p },
-  ], segs, ring);
-  b.glow.lathe([{ r: RING_R - 0.07, z: 2.6, color: 0xffffff }, { r: RING_R - 0.07, z: 2.77, color: 0xffffff }], segs, ring);
+  // Airfoil section swept round the Z axis: thin leading edge, fat middle, sharp glowing tail,
+  // built as four arcs, each its own breakable part, so the ring snaps into pieces in a wreck.
+  const RING_ARCS = 4;
+  const arcSegs = segs / RING_ARCS;
+  for (let i = 0; i < RING_ARCS; i++) {
+    // Offset by an eighth turn so the breaks fall diagonally, not through the fuselage struts.
+    const start = (i + 0.5) * (Math.PI * 2 / RING_ARCS);
+    const arc = Math.PI * 2 / RING_ARCS;
+    b.ownPart('ring', () => {
+      b.hull.lathe([
+        { r: RING_R, z: 0.9, color: p }, { r: RING_R + 0.14, z: 1.25, color: p }, { r: RING_R + 0.1, z: 2.2, color: p },
+        { r: RING_R, z: 2.75, color: s }, { r: RING_R - 0.08, z: 2.75, color: s }, { r: RING_R - 0.12, z: 1.6, color: s },
+        { r: RING_R - 0.04, z: 0.95, color: a }, { r: RING_R, z: 0.9, color: p },
+      ], arcSegs, ring, start, arc);
+      b.glow.lathe([{ r: RING_R - 0.07, z: 2.6, color: 0xffffff }, { r: RING_R - 0.07, z: 2.77, color: 0xffffff }], arcSegs, ring, start, arc);
+    });
+  }
   b.body({
     z: -5.8, length: 10.0, y: 0.15, radius: 0.58, squash: 0.75, segments: 12,
     shape: [[0, 0, s], [0.4, 0.12, p], [0.85, 0.3, p], [1, 0.5, p], [0.9, 0.78, s], [0.7, 1, DARK]],

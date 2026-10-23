@@ -2,7 +2,7 @@
 // Deterministic: same track, config and input tape give the same race.
 
 import type { Obstacle, PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
-import type { Branch, Ribbon, Track } from './track.ts';
+import { makeFrame, type Branch, type Frame, type Ribbon, type Track } from './track.ts';
 import { AiDriver, driverSeed } from './ai.ts';
 import { Vehicle } from './vehicle.ts';
 import { hazardObstacles } from './hazards.ts';
@@ -10,6 +10,7 @@ import { junctionBounds, type JunctionBounds } from './junction.ts';
 import {
   AUTOPILOT_SKILL,
   BRANCH_JUNCTION_LENGTH,
+  CROSSING_MARGIN,
   CATCHUP_EASE,
   CATCHUP_FULL_GAP,
   CATCHUP_PUSH,
@@ -21,11 +22,14 @@ import {
   GRID_ROW_SPACING,
   GRID_STAGGER,
   RACER_BUMP_SHARE,
+  RACER_CONTACT_COOLDOWN,
   RACER_HALF_WIDTH,
+  RACER_DAMAGE_FREE_SPEED,
   RACER_DAMAGE_PER_SPEED,
   RACER_HEIGHT,
   RACER_HIT_INTENSITY_SPEED,
   RACER_LENGTH,
+  RACER_RADIUS,
   RACER_SHOVE,
   RACER_SHOVE_MIN,
   RACER_SHOVE_TARGET_TIME,
@@ -77,8 +81,8 @@ export class Race {
   private readonly drivers: AiDriver[];
   private readonly playerIndex: number;
   private playerFinishTime: number | null = null;
-  /** Pairs of racers in contact last step, so a 'racer' hit fires once per contact. */
-  private readonly touching = new Set<number>();
+  /** Per pair of racers, the race time they last touched, so one tussle is one hit. */
+  private readonly lastTouch = new Map<number, number>();
   /** Per branch: branch s where its entry junction ends and its exit junction starts. */
   private readonly junctions: JunctionBounds[];
   /** Racer indices in the order they wrecked. */
@@ -152,6 +156,7 @@ export class Race {
       v.state.distance += this.track.delta(from, this.mainS(v.state));
     });
     this.contacts(events);
+    this.crossTraffic(events);
     if (this.phase === 'racing') {
       this.vehicles.forEach((v, i) => this.laps(v, before[i], events));
       this.updatePlaces();
@@ -261,16 +266,12 @@ export class Race {
         const key = i * n + j;
         const a = this.vehicles[i];
         const b = this.vehicles[j];
-        if (!this.inContact(a, b)) {
-          this.touching.delete(key);
-          continue;
-        }
+        if (!this.inContact(a, b)) continue;
         const ds = this.track.ribbon(a.state.branch).delta(a.state.s, b.state.s);
         const dx = b.state.x - a.state.x;
         const overlapX = 2 * RACER_HALF_WIDTH - Math.abs(dx);
         const overlapS = RACER_LENGTH - Math.abs(ds);
-        const fresh = !this.touching.has(key);
-        this.touching.add(key);
+        const fresh = this.touch(key);
         let closing: number;
         if (overlapS < overlapX) {
           const [rear, front] = ds > 0 ? [a.state, b.state] : [b.state, a.state];
@@ -297,8 +298,8 @@ export class Race {
           }
         }
         if (!fresh) continue;
-        a.harm(closing * RACER_DAMAGE_PER_SPEED, events);
-        b.harm(closing * RACER_DAMAGE_PER_SPEED, events);
+        a.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
+        b.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
         const intensity = Math.min(1, closing / RACER_HIT_INTENSITY_SPEED);
         events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity });
         events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity });
@@ -306,6 +307,88 @@ export class Race {
         if (b.state.crashed > 0) this.wrecks.push(j);
       }
     }
+  }
+
+  /**
+   * Flat (road-level) crossings: racers on the two legs share world space, so inside the
+   * junction they are tested by world position and a contact resolves like a side impact
+   * (the impulse projected onto each racer's own forward and lateral axes).
+   */
+  private crossTraffic(events: RaceEvent[]) {
+    const n = this.vehicles.length;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = this.vehicles[i];
+        const b = this.vehicles[j];
+        const key = i * n + j;
+        if (a.state.crashed > 0 || b.state.crashed > 0 || a.state.branch !== b.state.branch || !this.atFlatCrossing(a, b)) continue;
+        const ribbon = this.track.ribbon(a.state.branch);
+        const fa = ribbon.frameAt(a.state.s, frameA);
+        const fb = ribbon.frameAt(b.state.s, frameB);
+        ribbon.toWorld(a.state.s, a.state.x, a.state.y, posA, frameA);
+        ribbon.toWorld(b.state.s, b.state.x, b.state.y, posB, frameB);
+        const dx = posB.x - posA.x;
+        const dz = posB.z - posA.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= 2 * RACER_RADIUS || Math.abs(posB.y - posA.y) >= RACER_HEIGHT || dist === 0) continue;
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const along = (f: Frame, v: Vehicle) => [f.tangent.x * v.state.speed + f.right.x * v.state.vx, f.tangent.z * v.state.speed + f.right.z * v.state.vx];
+        const [vax, vaz] = along(fa, a);
+        const [vbx, vbz] = along(fb, b);
+        const closing = Math.max(0, (vax - vbx) * nx + (vaz - vbz) * nz);
+        const ma = a.stats.armor;
+        const mb = b.stats.armor;
+        const shareA = mb / (ma + mb);
+        const shareB = ma / (ma + mb);
+        const overlap = 2 * RACER_RADIUS - dist;
+        // Push a along -n and b along +n, in each racer's own track axes.
+        const push = (v: Vehicle, f: Frame, sign: number, share: number, amount: number) => {
+          const lateral = sign * (nx * f.right.x + nz * f.right.z);
+          const forward = sign * (nx * f.tangent.x + nz * f.tangent.z);
+          v.state.x += lateral * overlap * share;
+          if (amount <= 0) return;
+          v.state.vx += lateral * amount * share;
+          v.targetX += lateral * amount * share * RACER_SHOVE_TARGET_TIME;
+          v.state.speed = Math.max(0, v.state.speed + forward * amount * share);
+        };
+        const fresh = this.touch(key);
+        const impulse = fresh ? 2 * (RACER_SHOVE_MIN + RACER_SHOVE * closing) : 0;
+        push(a, fa, -1, shareA, impulse);
+        push(b, fb, 1, shareB, impulse);
+        if (!fresh) continue;
+        a.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
+        b.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
+        const intensity = Math.min(1, closing / RACER_HIT_INTENSITY_SPEED);
+        events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity });
+        events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity });
+        if (a.state.crashed > 0) this.wrecks.push(i);
+        if (b.state.crashed > 0) this.wrecks.push(j);
+      }
+    }
+  }
+
+  /** Records a touch of the pair; true when it is a new hit rather than the same tussle. */
+  private touch(key: number): boolean {
+    const last = this.lastTouch.get(key);
+    this.lastTouch.set(key, this.time);
+    return last === undefined || this.time - last > RACER_CONTACT_COOLDOWN;
+  }
+
+  /** Both racers are inside the junction zone of one flat crossing, one on each leg. */
+  private atFlatCrossing(a: Vehicle, b: Vehicle): boolean {
+    const ribbon = this.track.ribbon(a.state.branch);
+    for (const c of ribbon.crossings) {
+      if (c.style !== 'flat') continue;
+      const near = (s: number, leg: number, other: number) =>
+        Math.abs(ribbon.delta(leg, s)) < ribbon.widthAt(other) / 2 + CROSSING_MARGIN;
+      const aOnS = near(a.state.s, c.s, c.other);
+      const aOnO = near(a.state.s, c.other, c.s);
+      const bOnS = near(b.state.s, c.s, c.other);
+      const bOnO = near(b.state.s, c.other, c.s);
+      if ((aOnS && bOnO) || (aOnO && bOnS)) return true;
+    }
+    return false;
   }
 
   private inContact(a: Vehicle, b: Vehicle): boolean {
@@ -319,10 +402,10 @@ export class Race {
     );
   }
 
-  /** Sets each AI's catch-up pace from its distance gap to the player (see CATCHUP_*). */
+  /** Sets each AI's catch-up pace from its distance gap to the player (see CATCHUP_*); off once the player is out. */
   private catchUp() {
     const player = this.playerIndex >= 0 ? this.racers[this.playerIndex] : null;
-    const active = player !== null && player.finishTime === null && this.phase === 'racing';
+    const active = player !== null && player.finishTime === null && player.crashed <= 0 && this.phase === 'racing';
     const ramp = (gap: number) =>
       Math.min(1, Math.max(0, (gap - CATCHUP_START_GAP) / (CATCHUP_FULL_GAP - CATCHUP_START_GAP)));
     this.vehicles.forEach((v, i) => {
@@ -381,4 +464,8 @@ export class Race {
 }
 
 const worldBuf = { x: 0, y: 0, z: 0 };
+const posA = { x: 0, y: 0, z: 0 };
+const posB = { x: 0, y: 0, z: 0 };
+const frameA = makeFrame();
+const frameB = makeFrame();
 const NO_OBSTACLES: readonly Obstacle[] = [];

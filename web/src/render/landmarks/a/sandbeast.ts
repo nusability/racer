@@ -5,7 +5,9 @@
 
 import * as THREE from 'three';
 import type { Landmark, LandmarkOptions } from '../types.ts';
-import { T, box, brush, col, cyl, disposeKit, glowBoost, makeKit, mix, mulberry32, ramp, rock, shade, smooth } from './kit.ts';
+import { beastColours, beastLampCount, beastLamps, buildBeast, setJaws } from './beastBody.ts';
+import { createBoundBeast } from './sandbeastBound.ts';
+import { T, brush, cyl, disposeKit, glowBoost, makeKit, mix, mulberry32, ramp, rock, shade, smooth } from './kit.ts';
 
 /** The breach arc: a circle of radius ARC_R whose centre is ARC_SINK below the sand. */
 const ARC_R = 112;
@@ -26,36 +28,24 @@ const UNDER_A = 0.35;
 const MOUND_FROM = -230;
 const RIPPLES = 3;
 const RIPPLE_MAX = 75;
-const JAW_OPEN = 0.75;
 
 const RADIUS = 260;
 const HEIGHT = 110;
 
-interface Segment {
-  bone: THREE.Bone;
-  r: number;
-}
-
 export function createSandbeast(opts: LandmarkOptions): Landmark {
+  if (opts.hazard) return createBoundBeast(opts);
   const { palette, quality } = opts;
   const hi = quality === 'high';
   const boost = glowBoost(palette);
   const nSeg = hi ? 26 : 16;
   const segLen = hi ? SEG_LEN : (SEG_LEN * 26) / 16;
-  const nGlowSpots = Math.ceil(nSeg / 3);
-  const lampCount = 2 + nGlowSpots;
+  const lampCount = beastLampCount(nSeg);
   const kit = makeKit(lampCount + 30, lampCount, hi ? 420 : 200);
   const { rig, glow, smoke } = kit;
   smoke.wind.set(3, 0, 1);
 
-  const sand = col(palette.sand);
-  const carapace = mix(palette.rock, 0x2e2834, 0.45);
-  const plate = mix(carapace, palette.sand, 0.25);
-  const plateEdge = shade(plate, 1.35);
-  const belly = mix(palette.sand, 0xf4e8d8, 0.3);
-  const lumen = mix(palette.accent, 0x70ffd0, 0.55);
-  const maw = col(0xff6a30);
-  const tooth = col(0xf4ecd8);
+  const c = beastColours(palette);
+  const sand = c.sand;
 
   // --- Craters at the breach and dive points, ripple rings ---
   for (const x of [-HALF_SPAN, HALF_SPAN]) {
@@ -74,45 +64,8 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
   const mound = rig.bone();
   rig.add(rock(1, 1), shade(sand, 0.96), { bone: mound, m: T(0, 0, 0, 0, 0, 0, 30, 9, 18) });
 
-  // --- Head: armoured skull, three splaying jaws with teeth, glowing gullet, feelers ---
-  const head = rig.bone();
-  rig.add(cyl(HEAD_R * 0.7, HEAD_R * 1.05, 16, 6).rotateX(Math.PI / 2).translate(0, 0, -12), carapace, { bone: head });
-  rig.add(box(HEAD_R * 1.4, HEAD_R * 0.5, 14), plate, { bone: head, m: T(0, HEAD_R * 0.75, -6, -0.12) });
-  rig.add(new THREE.CircleGeometry(HEAD_R * 0.6, 8), maw, { bone: head, layer: 'glow', m: T(0, 0, 3.5) });
-  const jaws: THREE.Bone[] = [];
-  for (let k = 0; k < 3; k++) {
-    const pivot = rig.bone(head, 0, 0, 3);
-    pivot.rotation.z = (k / 3) * Math.PI * 2;
-    const jaw = rig.bone(pivot, 0, HEAD_R * 0.45, 0);
-    rig.add(new THREE.ConeGeometry(HEAD_R * 0.55, 18, 3).rotateX(Math.PI / 2).scale(1.3, 0.6, 1), plate, { bone: jaw, m: T(0, 0, 9) });
-    for (let t = 0; t < 4; t++) {
-      rig.add(new THREE.ConeGeometry(0.9, 3.5, 4).rotateX(Math.PI), tooth, { bone: jaw, m: T((t - 1.5) * 1.8, -1.6, 4 + t * 3) });
-    }
-    rig.add(box(0.5, 0.5, 12), lumen, { bone: jaw, layer: 'glow', m: T(0, 1.4, 8) });
-    jaws.push(jaw);
-  }
-  for (const [sx, sy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]] as const) {
-    rig.add(cyl(0.25, 0.6, 16, 4).rotateX(Math.PI / 2 - sy * 0.35).rotateY(sx * 0.6), plateEdge, { bone: head, m: T(sx * HEAD_R * 0.8, sy * HEAD_R * 0.4, -4) });
-  }
-
-  // --- Body: tapering plated segments with a dorsal ridge and luminous flank stripes ---
-  const segs: Segment[] = [];
-  for (let i = 0; i < nSeg; i++) {
-    const u = i / (nSeg - 1);
-    const r = HEAD_R + (TAIL_R - HEAD_R) * Math.pow(u, 1.3);
-    const bone = rig.bone();
-    const L = segLen * 1.18;
-    rig.add(cyl(r, r * 1.04, L, 8).rotateX(Math.PI / 2).translate(0, 0, -L / 2), carapace, { bone });
-    rig.add(box(r * 1.5, r * 0.38, L * 1.04), i % 2 ? plate : plateEdge, { bone, m: T(0, r * 0.9, 0, -0.16) });
-    rig.add(box(r * 1.3, r * 0.3, L * 0.95), belly, { bone, m: T(0, -r * 0.85, 0) });
-    for (const sx of [-1, 1]) {
-      rig.add(box(r * 0.35, r * 1.1, L * 0.95), plate, { bone, m: T(sx * r * 0.92, r * 0.1, 0, 0, 0, sx * 0.25) });
-      rig.add(box(0.5, r * 0.18, L * 0.7), lumen, { bone, layer: 'glow', m: T(sx * r * 1.1, -r * 0.15, 0) });
-    }
-    if (i % 2 === 0 || !hi) rig.add(new THREE.ConeGeometry(r * 0.32, r * 1.1, 4).rotateX(-0.5), plateEdge, { bone, m: T(0, r * 1.35, -L * 0.1) });
-    if (i === nSeg - 1) rig.add(new THREE.ConeGeometry(r, 10, 8).rotateX(-Math.PI / 2), carapace, { bone, m: T(0, 0, -L / 2 - 5) });
-    segs.push({ bone, r });
-  }
+  const beast = buildBeast(rig, c, HEAD_R, nSeg, segLen, (i) => HEAD_R + (TAIL_R - HEAD_R) * Math.pow(i / (nSeg - 1), 1.3), hi);
+  const { head, segs } = beast;
 
   rig.build(kit.group, RADIUS, HEIGHT);
 
@@ -126,7 +79,6 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
   const U = new THREE.Vector3();
   const Rv = new THREE.Vector3();
   const basis = new THREE.Matrix4();
-  const gullet = col(0xfff0c0);
   let prevHeadY = -100;
   let acc = 0;
   const travel = Math.PI + 2 * UNDER_A + (nSeg * segLen) / ARC_R;
@@ -159,8 +111,8 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
     const headY = active ? onArc(head, aHead, 0) : -100;
     head.scale.setScalar(active && headY > -HEAD_R * 2 ? 1 : 0);
     // Jaws gape on the way up and clamp shut over the top before the dive.
-    const open = active ? JAW_OPEN * smooth(ramp(headY, 0, 25)) * smooth(ramp(aHead, 0.4, 1.4)) : 0;
-    for (const j of jaws) j.rotation.x = -open - Math.sin(time * 6) * 0.05 * open;
+    const open = active ? smooth(ramp(headY, 0, 25)) * smooth(ramp(aHead, 0.4, 1.4)) : 0;
+    setJaws(beast, open, time);
     segs.forEach((s, i) => {
       const a = aHead + (i + 1) * dTheta;
       const y = active ? onArc(s.bone, a, Math.sin(time * 1.5 - i * 0.4) * 0.12) : -100;
@@ -183,25 +135,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
     }
     rig.sync();
 
-    // Lamps: the gullet, its spill on the sand, bioluminescent spots along the flank.
-    let li = 0;
-    if (head.scale.x > 0) {
-      rig.local(head, 0, 0, 6, P);
-      glow.lamp(li++, P.x, P.y, P.z, 30 * (0.3 + open), maw, (0.5 + open) * boost);
-      glow.lamp(li++, P.x, P.y, P.z, 14, gullet, boost);
-    } else {
-      glow.lamp(li++, 0, -1000, 0, 0, maw, 0);
-      glow.lamp(li++, 0, -1000, 0, 0, maw, 0);
-    }
-    for (let k = 0; k < nGlowSpots; k++) {
-      const s = segs[Math.min(nSeg - 1, k * 3)];
-      if (s.bone.scale.x === 0) {
-        glow.lamp(li++, 0, -1000, 0, 0, lumen, 0);
-        continue;
-      }
-      rig.local(s.bone, s.r * 1.15, -s.r * 0.15, 0, P);
-      glow.lamp(li++, P.x, P.y, P.z, s.r * 1.2, lumen, (0.45 + 0.35 * Math.sin(time * 3 - k)) * boost);
-    }
+    beastLamps(rig, beast, glow, 0, open, time, boost, c, P);
 
     if (dt > 0) {
       // Bursts as the head breaks the surface and as it dives.

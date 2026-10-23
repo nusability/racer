@@ -64,8 +64,61 @@
 .hb__track { position: relative; flex: 1; height: 8px; border-radius: 4px; background: rgba(20, 8, 2, 0.6); border: 1px solid rgba(248, 227, 192, 0.25); overflow: hidden; transform-origin: 0 50%; }
 .hb__fill { height: 100%; transform-origin: 0 50%; transform: scaleX(0); will-change: transform; }
 .hb__segs { display: none; }
-.hb--hull .hb__fill { background: var(--sand); }
-.hb--hull.is-warn .hb__fill { background: var(--red); }
+/* Hull is life: as big as the tank, ten cells, sand → orange when low → red flashing when critical. */
+.hb--hull .hb__text { color: var(--sand); font-size: 15px; }
+.hb--hull .hb__track { height: 18px; border-radius: 9px; border: 2px solid rgba(248, 227, 192, 0.7); background: rgba(30, 12, 4, 0.7); }
+.hb--hull .hb__fill { background: linear-gradient(180deg, #fff6e4 0%, var(--sand) 40%, #c9a47c 100%); }
+.hb--hull .hb__segs {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(30, 12, 4, 0.85) calc(10% - 2px) 10%);
+  pointer-events: none;
+}
+.hb--hull.is-low .hb__fill { background: linear-gradient(180deg, #ffd2a0 0%, var(--orange) 45%, #c24a00 100%); }
+.hud.is-critical .hb--hull .hb__fill { background: linear-gradient(180deg, #ffb0a0 0%, var(--red) 45%, #8a1400 100%); }
+.hud.is-critical .hb--hull .hb__track { border-color: var(--red); animation: critical 0.5s ease-in-out infinite; }
+.hud.is-critical .hb--hull .hb__text { color: var(--red); }
+.hud__critical {
+  display: none;
+  font-size: 20px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.14em;
+  color: var(--red);
+  animation: blink 0.5s steps(2, jump-none) infinite;
+}
+.hud.is-critical .hud__critical { display: block; }
+@keyframes critical { 50% { box-shadow: 0 0 18px rgba(255, 74, 46, 0.95); transform: scaleY(1.15); } }
+
+/* The race is over: a slammed-in banner, everything else steps back. */
+.hud__wreck {
+  position: absolute;
+  top: 42%;
+  left: 0;
+  right: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10px 16px 14px;
+  background: linear-gradient(180deg, transparent, rgba(60, 4, 0, 0.82) 18%, rgba(60, 4, 0, 0.82) 82%, transparent);
+  transform: translateY(-50%) rotate(-4deg);
+}
+.hud.is-wrecked .hud__wreck { display: flex; }
+.hud.is-wrecked .hud__bottom,
+.hud.is-wrecked .hud__flash,
+.hud.is-wrecked .hud__count { opacity: 0; }
+.hud__wreck-title {
+  font-size: clamp(44px, 10vw, 96px);
+  font-weight: 900;
+  font-style: italic;
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  color: #ff5a3a;
+  text-shadow: 0 6px 0 #4a0800, 0 0 40px rgba(255, 60, 20, 0.85);
+}
+.hud__wreck-sub { font-size: 20px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sand); }
 
 /* The boost tank is the main resource: big, cyan, liquid sheen while boosting, ten cells. */
 .hb--boost .hb__text { color: var(--cyan); font-size: 15px; }

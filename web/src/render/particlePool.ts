@@ -89,6 +89,14 @@ export class ParticlePool {
     b.commit();
   }
 
+  /** Kills every particle at once (a model reassembling for a restart). */
+  clear(): void {
+    this.life.fill(0);
+    this.buf.alpha.fill(0);
+    this.buf.commit();
+    this.live = 0;
+  }
+
   dispose(): void {
     this.buf.dispose();
   }

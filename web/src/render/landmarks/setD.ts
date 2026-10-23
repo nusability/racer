@@ -2,6 +2,8 @@
 
 import * as THREE from 'three';
 import type { Landmark, LandmarkFactory } from './types.ts';
+import { createIcebreaker } from './d/icebreaker.ts';
+import { createAvalancheSlope } from './d/avalancheSlope.ts';
 
 type SetDKind = 'icebreaker' | 'avalancheSlope' | 'glacierWall' | 'mammothHerd' | 'iceStation' | 'skiJump' | 'icePalace' | 'frozenFalls' | 'auroraSky' | 'snowcatConvoy';
 
@@ -18,8 +20,8 @@ function placeholder(color: number): LandmarkFactory {
 }
 
 export const LANDMARKS_D: Record<SetDKind, LandmarkFactory> = {
-  icebreaker: placeholder(0xc03030),
-  avalancheSlope: placeholder(0xf0f4ff),
+  icebreaker: createIcebreaker,
+  avalancheSlope: createAvalancheSlope,
   glacierWall: placeholder(0x7fc8f0),
   mammothHerd: placeholder(0x8a5a3a),
   iceStation: placeholder(0xff8a20),

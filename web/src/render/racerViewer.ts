@@ -1,6 +1,6 @@
 // Dev-only page (racer-viewer.html) for judging the racers and effects in a browser. Not linked
 // from the game. URL parameters:
-//   mode=lineup|chase|showroom|stats   state=idle|race|boost|damaged
+//   mode=lineup|chase|showroom|wreck|stats   state=idle|race|boost|damaged (wreck: see wreckViewer.ts)
 //   view=rear|three|side|front|top     racer=0..5   detail=high|low   ui=0 hides the buttons
 //   ground=sand|water|snow|asphalt (sky, ground and spray colours: the skimmers must fit any world)
 import * as THREE from 'three';
@@ -10,8 +10,9 @@ import { Effects } from './effects.ts';
 import { SpeedLines } from './speedLines.ts';
 import { Showroom } from './showroom.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
+import { wreckMode } from './wreckViewer.ts';
 
-type Mode = 'lineup' | 'chase' | 'showroom' | 'stats';
+type Mode = 'lineup' | 'chase' | 'showroom' | 'wreck' | 'stats';
 type State = 'idle' | 'race' | 'boost' | 'damaged';
 type View = 'rear' | 'three' | 'side' | 'front' | 'top';
 
@@ -78,7 +79,7 @@ function buildBar(): void {
     };
     bar.appendChild(b);
   };
-  for (const m of ['lineup', 'chase', 'showroom'] as const) link(m, 'mode', m, m === mode);
+  for (const m of ['lineup', 'chase', 'showroom', 'wreck'] as const) link(m, 'mode', m, m === mode);
   for (const s of ['idle', 'race', 'boost', 'damaged'] as const) link(s, 'state', s, s === state);
   if (mode === 'lineup') for (const v of ['three', 'rear', 'side', 'front', 'top'] as const) link(v, 'view', v, v === view);
   if (mode !== 'lineup') RACERS.forEach((r, i) => link(r.name, 'racer', String(i), i === racerIndex));
@@ -287,7 +288,8 @@ function stats(): (dt: number, t: number) => void {
 }
 
 buildBar();
-const tick = { lineup, chase, showroom, stats }[mode]();
+const wreck = () => wreckMode(renderer, params, SKY, GROUND);
+const tick: (dt: number, t: number) => void = { lineup, chase, showroom, wreck, stats }[mode]();
 const clock = new THREE.Timer();
 renderer.setAnimationLoop((now) => {
   clock.update(now);

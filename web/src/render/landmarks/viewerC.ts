@@ -3,11 +3,16 @@
 // not depend on the track renderer. Query: kind, quality=high|low, cam=near|far|race|orbit|top,
 // pal=day|dusk|noon (palette), seed, t=seconds (start time), pause=1, ang=radians,
 // dist=metres, h=camera height, look=look-at height, hide=comma-separated draw names.
+// hz=1 binds the kind to a sample course hazard on a causeway road through the sea (cam=hz
+// looks at the hazard; wire=1 draws the collision cylinders; scale= places it scaled).
 
 import * as THREE from 'three';
 import type { TrackPalette } from '../../core/types.ts';
 import { LANDMARKS_C } from './setC.ts';
-import type { Landmark } from './types.ts';
+import type { HazardBinding, Landmark } from './types.ts';
+import type { HazardDef } from '../../core/types.ts';
+import { gustStrength, hazardObstacles, type CourseHazard } from '../../core/hazards.ts';
+import type { Obstacle } from '../../core/types.ts';
 
 type Kind = keyof typeof LANDMARKS_C;
 
@@ -67,6 +72,39 @@ const seed = Number(params.get('seed') ?? 11);
 const startT = Number(params.get('t') ?? 0);
 const paused = params.get('pause') === '1';
 const angle = Number(params.get('ang') ?? 0.6);
+
+const hz = params.get('hz') === '1';
+const wire = params.get('wire') === '1';
+const placeScale = Number(params.get('scale') ?? 1);
+
+/** The sample causeway: track s runs along world +X (s = HZ_S at x = 0), lateral x along +Z. */
+const HZ_S = 1000;
+const CAUSEWAY_Y = 2.5;
+const CAUSEWAY_HALF = 15;
+const CHANNEL = 160;
+/** Where each bound kind sits relative to the road (its centre's world z) and its sample hazard. */
+const HAZARDS: Partial<Record<Kind, { z: number; def: HazardDef }>> = {
+  volcano: { z: 900, def: { type: 'dropper', id: 'lava', from: 0, to: 0, count: 6, radius: 3, period: 8, warn: 2.6, stay: 3, phase: 0 } },
+  harbor: { z: 260, def: { type: 'sweeper', id: 'crane', at: 0, radius: 4, height: 5, xFrom: -40, xTo: 40, cross: 3, hold: 1, period: 10, phase: 0 } },
+  cruiseliner: { z: 0, def: { type: 'blocker', id: 'liner', at: 0, opening: 12, offset: 8, height: 8, warn: 7, up: 6, period: 24, phase: 0 } },
+  whales: { z: 230, def: { type: 'blocker', id: 'leviathan', at: 0, opening: 12, offset: -4, height: 6, warn: 3.5, up: 5, period: 16, phase: 0 } },
+  airshow: { z: 300, def: { type: 'gust', id: 'jetwash', from: 0, to: 0, strength: 30, on: 4, period: 10, phase: 0 } },
+};
+const sample = hz ? HAZARDS[kind] : undefined;
+if (hz && !sample) throw new Error(`no sample hazard for "${kind}"`);
+const DROP_SPAN = 100;
+const course: CourseHazard | undefined = sample && {
+  def: sample.def,
+  s0: HZ_S - (sample.def.type === 'dropper' || sample.def.type === 'gust' ? DROP_SPAN : 0),
+  s1: HZ_S + (sample.def.type === 'dropper' || sample.def.type === 'gust' ? DROP_SPAN : 0),
+  seed: seed,
+  minX: -CAUSEWAY_HALF,
+  maxX: CAUSEWAY_HALF,
+};
+/** Track space to world on the sample causeway. */
+function trackToWorld(s: number, x: number, y: number, out: THREE.Vector3): THREE.Vector3 {
+  return out.set(s - HZ_S, CAUSEWAY_Y + y, x);
+}
 
 const factory = LANDMARKS_C[kind];
 if (!factory) throw new Error(`Unknown set-C landmark "${kind}"`);
@@ -138,12 +176,22 @@ scene.add(sun, sun.target);
 scene.add(new THREE.HemisphereLight(new THREE.Color(palette.sky).lerp(new THREE.Color(0xffffff), 0.55), new THREE.Color(palette.sand).multiplyScalar(0.7), lerp(HEMI_INTENSITY)));
 
 const t0 = performance.now();
-const lm: Landmark = factory({ seed, palette, quality });
+// The landmark's placement is known before it is built, so the binding can map into it.
+const groupPos = new THREE.Vector3(0, 0, sample ? sample.z : 0);
+const binding: HazardBinding | undefined = course && {
+  hazard: course,
+  toLocal(s, x, y, out) {
+    return trackToWorld(s, x, y, out).sub(groupPos).divideScalar(placeScale);
+  },
+};
+const lm: Landmark = factory({ seed, palette, quality, hazard: binding });
 const buildMs = performance.now() - t0;
 // The road runs along X at z = 0; the landmark faces −Z toward it from the +Z side.
 const R = lm.radius;
-const centreZ = R + RACE_GAP;
-lm.group.position.set(0, 0, centreZ);
+const centreZ = sample ? sample.z : R + RACE_GAP;
+groupPos.z = centreZ;
+lm.group.position.copy(groupPos);
+lm.group.scale.setScalar(placeScale);
 scene.add(lm.group);
 const hidden = new Set((params.get('hide') ?? '').split(',').filter(Boolean));
 lm.group.traverse((o) => {
@@ -154,11 +202,55 @@ lm.group.traverse((o) => {
 const seaColor = new THREE.Color(SEA_DEEP).lerp(horizon, SEA_SHALLOW_MIX);
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: seaColor, emissive: seaColor.clone().multiplyScalar(SEA_GLOW), polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
 scene.add(sea);
-const shoreZ = centreZ + SHORE[kind] * R;
+// On the causeway everything is sea except the embankment carrying the road.
+const shoreZ = hz ? -BEACH_BACK + 1 : centreZ + SHORE[kind] * R;
 const beachDepth = shoreZ + BEACH_BACK;
 const beach = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, beachDepth).rotateX(-Math.PI / 2).translate(0, BEACH_Y, shoreZ - beachDepth / 2), new THREE.MeshLambertMaterial({ color: palette.sand }));
 scene.add(beach);
-scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, ROAD_WIDTH).rotateX(-Math.PI / 2).translate(0, ROAD_Y, 0), new THREE.MeshLambertMaterial({ color: palette.road })));
+if (hz) {
+  // The causeway: an embankment with a channel cut through it at the hazard, bridged by the road.
+  const bank = new THREE.MeshLambertMaterial({ color: palette.sand });
+  const half = (GROUND_SIZE - CHANNEL) / 4;
+  for (const sx of [-1, 1]) scene.add(new THREE.Mesh(new THREE.BoxGeometry(GROUND_SIZE / 2 - CHANNEL / 2, CAUSEWAY_Y + 3, CAUSEWAY_HALF * 2 + 10).translate(sx * (half + CHANNEL / 2), (CAUSEWAY_Y + 3) / 2 - 3, 0), bank));
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, CAUSEWAY_HALF * 2).rotateX(-Math.PI / 2).translate(0, CAUSEWAY_Y + 0.05, 0), new THREE.MeshLambertMaterial({ color: palette.road, side: THREE.DoubleSide })));
+} else {
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, ROAD_WIDTH).rotateX(-Math.PI / 2).translate(0, ROAD_Y, 0), new THREE.MeshLambertMaterial({ color: palette.road })));
+}
+
+// Collision view: a wireframe cylinder per live hazard obstacle, a box over an active gust.
+const WIRE_POOL = 48;
+const wires: THREE.Mesh[] = [];
+const obstacles: Obstacle[] = [];
+const gustBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x40ffff, wireframe: true }));
+if (wire && course) {
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0xff2060, wireframe: true, depthTest: false });
+  for (let i = 0; i < WIRE_POOL; i++) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12, 1, true).translate(0, 0.5, 0), wireMat);
+    w.renderOrder = 10;
+    scene.add(w);
+    wires.push(w);
+  }
+  scene.add(gustBox);
+}
+const wireAt = new THREE.Vector3();
+function showCollisions(time: number): void {
+  if (!course || !wire) return;
+  hazardObstacles([course], time, obstacles);
+  wires.forEach((w, i) => {
+    const o = obstacles[i];
+    w.visible = o !== undefined;
+    if (!o) return;
+    trackToWorld(o.s, o.x, 0, wireAt);
+    w.position.copy(wireAt);
+    w.scale.set(o.radius, o.height, o.radius);
+  });
+  const d = course.def;
+  gustBox.visible = d.type === 'gust' && gustStrength(d, time) !== 0;
+  if (d.type === 'gust') {
+    gustBox.position.set((course.s0 + course.s1) / 2 - HZ_S, CAUSEWAY_Y + 4, 0);
+    gustBox.scale.set(course.s1 - course.s0, 8 * Math.abs(gustStrength(d, time)) / Math.abs(d.strength), CAUSEWAY_HALF * 2);
+  }
+}
 
 /** Budget as built (independent of what the camera happens to see). */
 function budget(root: THREE.Object3D): { calls: number; tris: number; points: number; parts: string } {
@@ -196,6 +288,12 @@ function placeCamera(t: number): void {
     camera.lookAt(x + 100, RACE_HEIGHT - 1 + Number(params.get('look') ?? 0), 22);
     return;
   }
+  if (cam === 'hz') {
+    const d = Number(params.get('dist') ?? 110);
+    camera.position.set(Math.sin(angle) * d, Number(params.get('h') ?? 25), -Math.cos(angle) * d);
+    camera.lookAt(0, Number(params.get('look') ?? 6), 0);
+    return;
+  }
   if (cam === 'far') {
     const d = Number(params.get('dist') ?? FAR_DISTANCE);
     camera.position.set(c.x + Math.sin(angle) * d, FAR_HEIGHT, c.z - Math.cos(angle) * d);
@@ -226,6 +324,7 @@ function frame(now: number): void {
   time += dt;
   const u0 = performance.now();
   lm.update(time, dt);
+  showCollisions(time);
   updateMs = updateMs * 0.9 + (performance.now() - u0) * 0.1;
   placeCamera(time);
   renderer.render(scene, camera);
@@ -233,8 +332,9 @@ function frame(now: number): void {
   hud.textContent =
     `${kind} · ${quality} · ${cam} · t=${time.toFixed(1)} · r=${R.toFixed(0)} m · fog ${FOG_FAR[quality]} m\n` +
     `landmark: ${cost.calls} draws · ${Math.round(cost.tris)} tris · ${cost.points} pts (frame: ${seen.calls} / ${seen.triangles})\n` +
-    `build ${buildMs.toFixed(0)} ms · update ${updateMs.toFixed(3)} ms\n${cost.parts}`;
-  (window as unknown as { __cost: typeof cost }).__cost = cost;
+    `build ${buildMs.toFixed(0)} ms · update ${updateMs.toFixed(3)} ms${course ? ` · ${course.def.type}: ${obstacles.length} obstacles` : ''}\n${cost.parts}`;
+  (window as unknown as { __cost: typeof cost; __lm: Landmark }).__cost = cost;
+  (window as unknown as { __lm: Landmark }).__lm = lm;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

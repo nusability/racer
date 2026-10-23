@@ -2,16 +2,31 @@
 // animates (fans, flaps, wingtips, the air cushion). Styles (racerStyles.ts) fill it with the
 // helpers below; everything is deterministic so a racer looks identical every time.
 //
+// Breakable parts: every primitive belongs to one part (a skin bone) so a wreck can fling the
+// craft apart along its real seams. Ducts, fins, canopies and ring arcs are their own parts;
+// everything else falls into a region part (nose, tail, and front/back wing on each side).
+//
 // Craft space: forward −Z, up +Y, origin at the craft centre at ride height; the ground is at
 // y = −SKIMMER_RIDE_HEIGHT.
 import * as THREE from 'three';
 import type { RacerVisual } from '../core/types.ts';
-import { PartBuilder, placement, type ProfilePoint } from './racerParts.ts';
+import { PartBuilder, placement, type PartAssigner, type ProfilePoint } from './racerParts.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
 
 export type Detail = 'high' | 'low';
 
+export type PartKind = 'body' | 'wing' | 'fin' | 'fan' | 'canopy' | 'ring';
+
+export interface PartSpec {
+  kind: PartKind;
+  /** Pivot: the centre of the part's bounds, craft space. */
+  centre: THREE.Vector3;
+  /** Rough radius (m), for spin, smoke and ground contact. */
+  size: number;
+}
+
 export interface FanSpec {
+  part: number;
   /** Fan disc centre. */
   pos: THREE.Vector3;
   /** Duct exit, where the jet starts. */
@@ -22,6 +37,7 @@ export interface FanSpec {
 }
 
 export interface FlapSpec {
+  part: number;
   /** Hinge placement (translation + rotation, no scale) in craft space. */
   base: THREE.Matrix4;
   size: THREE.Vector3;
@@ -50,6 +66,7 @@ export interface Blueprint {
   /** Small marker lights (glow halos). */
   lights: THREE.Vector3[];
   cushion: CushionSpec;
+  parts: PartSpec[];
 }
 
 /** Shared hull colours beyond the racer's own palette. */
@@ -65,6 +82,10 @@ export const ALONG = -Math.PI / 2;
 /** The lowest hull point (skids, endplates) clears the ground by this much. */
 export const SKID_CLEARANCE = 0.12;
 export const SKID_Y = -SKIMMER_RIDE_HEIGHT + SKID_CLEARANCE;
+/** Region parts: outboard of this |x| is wing, the rest is fuselage; z = 0 splits front/back. */
+const REGION_WING_X = 1.15;
+/** Skinning budget: three.js packs bones in a texture, but keep wrecks to a readable handful. */
+const MAX_PARTS = 24;
 
 export interface Palette {
   p: number;
@@ -100,10 +121,14 @@ export interface DuctOpts {
   vanes: number;
 }
 
-export class BlueprintBuilder {
-  readonly hull = new PartBuilder();
-  readonly glow = new PartBuilder();
-  readonly canopy = new PartBuilder();
+export class BlueprintBuilder implements PartAssigner {
+  readonly hull = new PartBuilder(this);
+  readonly glow = new PartBuilder(this);
+  readonly canopy = new PartBuilder(this);
+  private readonly kinds: PartKind[] = [];
+  private readonly regions = new Map<string, number>();
+  /** While set, every primitive goes to this part instead of its region. */
+  private forced: number | null = null;
   readonly fans: FanSpec[] = [];
   readonly flaps: FlapSpec[] = [];
   readonly tips: THREE.Vector3[] = [];
@@ -113,6 +138,34 @@ export class BlueprintBuilder {
 
   constructor(visual: RacerVisual, readonly detail: Detail) {
     this.c = { p: visual.primary, s: visual.secondary, a: visual.accent };
+  }
+
+  assign(centre: THREE.Vector3): number {
+    if (this.forced !== null) return this.forced;
+    const wing = Math.abs(centre.x) > REGION_WING_X;
+    const key = `${wing ? (centre.x < 0 ? 'L' : 'R') : 'C'}${centre.z < 0 ? 'f' : 'b'}`;
+    let part = this.regions.get(key);
+    if (part === undefined) {
+      part = this.newPart(wing ? 'wing' : 'body');
+      this.regions.set(key, part);
+    }
+    return part;
+  }
+
+  newPart(kind: PartKind): number {
+    if (this.kinds.length >= MAX_PARTS) throw new Error(`Skimmer has more than ${MAX_PARTS} breakable parts`);
+    this.kinds.push(kind);
+    return this.kinds.length - 1;
+  }
+
+  /** Runs `build` with every primitive going to one new part; returns that part. */
+  ownPart(kind: PartKind, build: () => void): number {
+    const prev = this.forced;
+    const part = this.newPart(kind);
+    this.forced = part;
+    build();
+    this.forced = prev;
+    return part;
   }
 
   /** Low detail drops roughly a third of the radial segments; coarse shapes keep theirs. */
@@ -130,7 +183,9 @@ export class BlueprintBuilder {
     const clen = (o.canopy.to - o.canopy.from) * o.length;
     const dome = new THREE.SphereGeometry(1, this.seg(10), this.detail === 'high' ? 5 : 3, 0, Math.PI * 2, 0, Math.PI / 2);
     const top = o.y + this.bodyHalfHeight(o, cz) * 0.75;
-    this.canopy.add(dome, 0xffffff, placement(0, top, cz, 0, 0, 0, o.canopy.width / 2, o.canopy.height, clen / 2));
+    this.ownPart('canopy', () => {
+      this.canopy.add(dome, 0xffffff, placement(0, top, cz, 0, 0, 0, o.canopy.width / 2, o.canopy.height, clen / 2));
+    });
   }
 
   /** Squashed fuselage half-height at craft z (for seating canopies and fins on it). */
@@ -147,8 +202,13 @@ export class BlueprintBuilder {
     throw new Error(`bodyHalfHeight: z ${z} outside the fuselage`);
   }
 
-  /** Ducted fan centred at (x, y, z): ring, spinner, stator vanes and a glowing inner band. */
-  duct(x: number, y: number, z: number, o: DuctOpts): void {
+  /** Ducted fan centred at (x, y, z): ring, spinner, stator vanes and a glowing inner band. It is
+   * its own breakable part, returned so add-ons (fairings) can ride with it. */
+  duct(x: number, y: number, z: number, o: DuctOpts): number {
+    return this.ownPart('fan', () => this.ductParts(x, y, z, o));
+  }
+
+  private ductParts(x: number, y: number, z: number, o: DuctOpts): void {
     const r = o.radius;
     const h = o.length / 2;
     const seg = this.seg(o.segments);
@@ -175,6 +235,7 @@ export class BlueprintBuilder {
     this.glow.lathe([{ r: r * 1.0, z: h - 0.14, color: GLOW_WHITE }, { r: r * 1.0, z: h - 0.02, color: GLOW_WHITE }], seg, frame);
     this.glow.lathe([{ r: r + wall * 0.72, z: h + 0.005, color: GLOW_WHITE }, { r: r + wall * 0.3, z: h + 0.005, color: GLOW_WHITE }], seg, frame);
     this.fans.push({
+      part: this.forced as number,
       pos: new THREE.Vector3(x, y, z - 0.02),
       exit: new THREE.Vector3(x, y, z + h),
       dir: new THREE.Vector3(0, 0, 1),
@@ -184,7 +245,15 @@ export class BlueprintBuilder {
 
   /** Vertical plate along the craft from a (z, y) outline, standing at lateral position x. */
   plate(x: number, outline: [number, number][], thickness: number, color: number, cant = 0): void {
-    this.hull.fin(outline, thickness, color, placement(x, 0, 0, 0, ALONG, cant));
+    this.ownPart('fin', () => this.hull.fin(outline, thickness, color, placement(x, 0, 0, 0, ALONG, cant)));
+  }
+
+  /** Adds primitives to an existing part (e.g. a fairing that should stay on its fan). */
+  onPart(part: number, build: () => void): void {
+    const prev = this.forced;
+    this.forced = part;
+    build();
+    this.forced = prev;
   }
 
   /** Thin glowing strip between two points (trailing-edge lights). */
@@ -202,6 +271,7 @@ export class BlueprintBuilder {
 
   flap(local: THREE.Matrix4, size: [number, number, number], axis: 'x' | 'y', gain: number, color: number): void {
     this.flaps.push({
+      part: this.assign(new THREE.Vector3().setFromMatrixPosition(local)),
       base: local,
       size: new THREE.Vector3(...size),
       axis: axis === 'x' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0),
@@ -210,15 +280,34 @@ export class BlueprintBuilder {
     });
   }
 
+  /** Pivot and size of every part, from the bounds of its vertices across all hull meshes. */
+  private partSpecs(geos: THREE.BufferGeometry[]): PartSpec[] {
+    const boxes = this.kinds.map(() => new THREE.Box3());
+    const v = new THREE.Vector3();
+    for (const g of geos) {
+      const pos = g.getAttribute('position');
+      const skin = g.getAttribute('skinIndex');
+      for (let i = 0; i < pos.count; i++) boxes[skin.getX(i)].expandByPoint(v.fromBufferAttribute(pos, i));
+    }
+    return boxes.map((box, i) => {
+      if (box.isEmpty()) throw new Error(`Breakable part ${i} (${this.kinds[i]}) has no geometry`);
+      return { kind: this.kinds[i], centre: box.getCenter(new THREE.Vector3()), size: box.getSize(v).length() / 2 };
+    });
+  }
+
   tip(x: number, y: number, z: number): void {
     this.tips.push(new THREE.Vector3(x, y, z));
   }
 
   build(): Blueprint {
+    const hull = this.hull.build();
+    const glow = this.glow.build();
+    const canopy = this.canopy.build();
     return {
-      hull: this.hull.build(),
-      glow: this.glow.build(),
-      canopy: this.canopy.build(),
+      hull,
+      glow,
+      canopy,
+      parts: this.partSpecs([hull, glow, canopy]),
       fans: this.fans,
       flaps: this.flaps,
       tips: this.tips,

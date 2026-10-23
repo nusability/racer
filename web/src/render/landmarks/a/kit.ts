@@ -12,7 +12,7 @@ import type { TrackPalette } from '../../../core/types.ts';
 import { Particles } from './particles.ts';
 
 export { mulberry32, type Rng } from '../../../core/rng.ts';
-export { brush } from './particles.ts';
+export { brush, type Particles } from './particles.ts';
 
 // --- Colour ---
 

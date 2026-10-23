@@ -3,11 +3,14 @@ import type { TrackPalette } from '../../core/types.ts';
 import { applyEnvironment } from '../track/environment.ts';
 import { FOG_FAR } from '../track/config.ts';
 import { LANDMARKS_A } from './setA.ts';
-import type { Landmark } from './types.ts';
+import type { Landmark, LandmarkOptions } from './types.ts';
+import { HazardOverlay, ROAD_HALF, viewerBinding, viewerHazard, type ViewerHazardType } from './a/viewerHazards.ts';
 
 // Developer-only viewer for the set-A landmarks (landmark-viewer.html, never linked from the
 // game). Query: ?kind=spaceport&quality=high|low&cam=near|far|race|orbit&t=seconds&pause=1
 // &palette=noon|amber|dusk|storm&seed=n&ang=radians&dist=metres&look=metres&rx=metres&bench=1
+// &hazard=sweeper|blocker|dropper|gust (bind to a hazard on the fake road; 1 = the kind's own)
+// &wire=0 (hide the collision wireframes; key W toggles) &scale=n (placement scale)
 
 type Kind = keyof typeof LANDMARKS_A;
 
@@ -31,6 +34,9 @@ const FAR_HEIGHT = 12;
 const WARMUP = 15;
 const WARMUP_STEP = 1 / 30;
 const GROUND_SIZE = 12000;
+/** Each bindable kind's own hazard type, and how far from the road centre its origin stands. */
+const OWN_HAZARD: Partial<Record<Kind, ViewerHazardType>> = { sandbeast: 'sweeper', invasion: 'sweeper', mine: 'dropper', spaceport: 'gust' };
+const BOUND_PLACE: Partial<Record<Kind, number>> = { sandbeast: 140, invasion: 330, mine: 330, spaceport: 300 };
 
 const params = new URLSearchParams(location.search);
 const kind = (params.get('kind') ?? 'spaceport') as Kind;
@@ -47,6 +53,9 @@ const lookParam = params.get('look');
 /** Race camera: where along the road it is at t (else it loops past on its own clock). */
 const raceX = params.get('rx');
 if (!factory) throw new Error(`unknown landmark kind "${kind}"`);
+const hazardParam = params.get('hazard');
+const hazardType: ViewerHazardType | null = hazardParam === null ? null : hazardParam === '1' ? (OWN_HAZARD[kind] ?? null) : (hazardParam as ViewerHazardType);
+const placeScale = Number(params.get('scale') ?? 1);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -64,7 +73,7 @@ const ground = new THREE.Mesh(
 );
 scene.add(ground);
 const road = new THREE.Mesh(
-  new THREE.PlaneGeometry(GROUND_SIZE, 24).rotateX(-Math.PI / 2),
+  new THREE.PlaneGeometry(GROUND_SIZE, ROAD_HALF * 2).rotateX(-Math.PI / 2),
   new THREE.MeshLambertMaterial({ color: palette.road }),
 );
 scene.add(road);
@@ -77,15 +86,27 @@ const baseCalls = renderer.info.render.calls;
 const baseTris = renderer.info.render.triangles;
 
 const t0 = performance.now();
-const lm: Landmark = factory({ seed, palette, quality });
+const hazard = hazardType ? viewerHazard(hazardType) : null;
+const placeZ = hazard ? (BOUND_PLACE[kind] ?? 300) : 0;
+const lmOpts: LandmarkOptions = { seed, palette, quality };
+if (hazard) lmOpts.hazard = viewerBinding(hazard, placeZ, placeScale);
+const lm: Landmark = factory(lmOpts);
 const buildMs = performance.now() - t0;
 scene.add(lm.group);
 // The road runs along X; the landmark faces −Z toward it, so it sits on the +Z side.
-const R = lm.radius;
+const R = hazard ? 200 : lm.radius;
 /** Height the near/far cameras aim at; sky landmarks want ?look=250 or so. */
 const lookY = lookParam === null ? R * 0.18 : Number(lookParam);
-lm.group.position.set(0, 0, R + RACE_GAP);
-road.position.z = 0;
+lm.group.position.set(0, 0, hazard ? placeZ : R + RACE_GAP);
+lm.group.scale.setScalar(hazard ? placeScale : 1);
+const overlay = hazard ? new HazardOverlay(hazard) : null;
+if (overlay) {
+  overlay.group.visible = params.get('wire') !== '0';
+  scene.add(overlay.group);
+  addEventListener('keydown', (e) => {
+    if (e.key === 'w' || e.key === 'W') overlay.group.visible = !overlay.group.visible;
+  });
+}
 
 let time = Math.max(0, startT - WARMUP);
 while (time < startT) {
@@ -107,14 +128,18 @@ hud.style.cssText =
   'position:fixed;left:6px;top:6px;color:#fff;font:11px/1.3 monospace;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre';
 document.body.appendChild(hud);
 
+/** What the near/far cameras circle: the hazard's spot on the road when bound. */
+const focus = hazard ? new THREE.Vector3((hazard.s0 + hazard.s1) / 2, 0, 0) : lm.group.position;
+
 function placeCamera(t: number): void {
-  const c = lm.group.position;
+  const c = focus;
   if (cam === 'race') {
     // Fly along the road (z = 0) at racing speed, sweeping past the landmark.
     const span = R * 2 + 1200;
     const x = raceX === null ? ((t * RACE_SPEED) % span) - span / 2 : Number(raceX) + (t - startT) * RACE_SPEED;
+    // Bound: drive straight down the road through the hazard; else glance at the roadside.
     camera.position.set(x, RACE_HEIGHT, 0);
-    camera.lookAt(x + 100, RACE_HEIGHT - 0.6, 18);
+    camera.lookAt(x + 100, RACE_HEIGHT - 0.6, hazard ? 0 : 18);
     return;
   }
   if (cam === 'far') {
@@ -140,11 +165,12 @@ function frame(now: number): void {
   lm.update(time, paused ? 0 : dt);
   updMs = updMs * 0.9 + (performance.now() - u0) * 0.1;
   placeCamera(time);
+  const hazardText = overlay ? ` · ${overlay.update(time)}` : '';
   renderer.info.reset();
   renderer.render(scene, camera);
   const info = renderer.info.render;
   hud.textContent =
-    `${kind} · ${quality} · ${cam} · t=${time.toFixed(1)}s · r=${R.toFixed(0)}m · fog ${FOG_FAR[quality]}m\n` +
+    `${kind} · ${quality} · ${cam} · t=${time.toFixed(1)}s · r=${R.toFixed(0)}m · fog ${FOG_FAR[quality]}m${hazardText}\n` +
     `landmark ≈ ${info.calls - baseCalls} draws · ${info.triangles - baseTris} tris · ${info.points} pts\n` +
     `build ${buildMs.toFixed(0)} ms · update ${updMs.toFixed(3)} ms` + (Number.isNaN(benchMs) ? '' : ` · bench ${benchMs.toFixed(3)} ms`);
   frames++;

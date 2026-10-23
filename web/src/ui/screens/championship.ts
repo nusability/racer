@@ -8,7 +8,7 @@ import { WORLDS, worldById } from '../../data/worlds.ts';
 import { cupStates } from '../../game/career.ts';
 import { racePayout } from '../../game/economy.ts';
 import { button, difficultyDots, formatCredits, h, header, panel } from '../kit.ts';
-import { trackThumb } from '../trackArt.ts';
+import { trackIfBuilt, trackThumb } from '../trackArt.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 /** Cup tier as the player reads it. */
@@ -110,16 +110,19 @@ export function cupScreen(ctx: AppCtx, cupId: string): Screen {
   const run = career.save.cup;
   const live = run?.cupId === cup.id ? run : null;
 
+  // A cup can't start until every one of its tracks is built (a new world arrives in stages).
+  const built = cup.trackIds.map(trackIfBuilt);
+  const allBuilt = built.every((t) => t !== null);
   const races = cup.trackIds.map((id, i) => {
-    const t = trackById(id);
+    const t = built[i];
     const state = !live ? 'todo' : i < live.raceIndex ? 'done' : i === live.raceIndex ? 'next' : 'todo';
     return h(
       'li',
       `racelist__row is-${state}`,
       trackThumb(id, 'racelist__img'),
       h('span', 'racelist__n', state === 'done' ? '✓' : String(i + 1)),
-      h('span', 'racelist__name', t.name),
-      difficultyDots(t.difficulty),
+      h('span', 'racelist__name', t ? t.name : 'Coming soon'),
+      t ? difficultyDots(t.difficulty) : h('span', 'note', '—'),
     );
   });
 
@@ -174,10 +177,11 @@ export function cupScreen(ctx: AppCtx, cupId: string): Screen {
       button({
         id: 'cup_start_button',
         label: 'START CUP',
-        sub: `Race 1 · ${trackById(cup.trackIds[0]).name}`,
+        sub: allBuilt ? `Race 1 · ${trackById(cup.trackIds[0]).name}` : 'Tracks coming soon',
         aria: `Start the ${cup.name}`,
         variant: 'primary',
         big: true,
+        disabled: !allBuilt,
         onTap: () => {
           career.startCup(cup.id);
           ctx.race(career.nextChampionshipRequest(), { screen: 'cup', cupId: cup.id });

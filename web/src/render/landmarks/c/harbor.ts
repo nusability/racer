@@ -7,6 +7,8 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { T, beam, box, mix, prism, shade, vary } from '../b/shapes.ts';
+import { bindingOf, withBound } from './hazard.ts';
+import { roadCrane } from './roadCrane.ts';
 import { DARK, FOAM, GLASS, GREEN_LIGHT, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, hull, smoke, splash } from './kit.ts';
 
 const SALT = 0x4a7b07;
@@ -202,6 +204,7 @@ function breakwater(kit: Kit): void {
 }
 
 export function createHarbor(opts: LandmarkOptions): Landmark {
+  const bound = bindingOf(opts, 'harbor', ['sweeper'] as const);
   const kit = new Kit(opts, SALT);
   quay(kit);
   ship(kit);
@@ -210,5 +213,8 @@ export function createHarbor(opts: LandmarkOptions): Landmark {
   stackers(kit);
   tugs(kit);
   breakwater(kit);
-  return finishCoast(kit, RADIUS);
+  // Bound to a sweeper: a gantry over the road swings a container across it on the schedule.
+  const drive = bound && roadCrane(kit, bound);
+  const lm = finishCoast(kit, RADIUS);
+  return drive ? withBound(lm, drive) : lm;
 }

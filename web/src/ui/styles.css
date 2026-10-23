@@ -368,6 +368,10 @@
 .quick__worlds { flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .quick__worlds .btn { font-size: 16px; white-space: nowrap; }
 .trackcard:disabled { opacity: 0.55; }
+.thumb--pending { display: block; }
+.trackcard .thumb--pending { position: absolute; inset: 0; z-index: 0; }
+/* Not built yet, rather than locked: keep the world's colours readable. */
+.trackcard.is-soon:disabled { opacity: 0.9; filter: saturate(0.85); }
 
 /* --- Quick race --------------------------------------------------------------------------- */
 .trackcards { flex: 1; display: flex; gap: var(--gap); min-height: 0; padding-bottom: 2px; }
@@ -493,6 +497,19 @@
 }
 .results__place.p1 { color: var(--gold); text-shadow: 0 5px 0 #7a4a00, 0 0 30px rgba(255, 207, 74, 0.5); }
 .results__place.p2, .results__place.p3 { color: var(--orange-hi); }
+.results__wreck { display: flex; flex-direction: column; gap: 2px; transform: rotate(-3deg); transform-origin: left center; }
+.results__wreck-title {
+  font-size: 54px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 0.95;
+  color: #ff5a3a;
+  text-shadow: 0 4px 0 #4a0800, 0 0 24px rgba(255, 60, 20, 0.6);
+}
+.results__wreck-sub { font-size: 15px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sand); }
+.table tr.is-dnf td { color: rgba(248, 227, 192, 0.55); }
+.table td.dnf { color: #ff5a3a; font-weight: 800; letter-spacing: 0.06em; }
+.table tr.is-player.is-dnf td { background: rgba(255, 74, 46, 0.22); color: #ffd8cc; }
 .results__earned { display: flex; flex-direction: column; gap: 2px; }
 .results__plus { font-size: 30px; font-weight: 900; color: var(--gold); }
 .results__bonus { font-size: 17px; font-weight: 800; color: var(--cyan); }

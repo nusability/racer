@@ -3,7 +3,10 @@
 // the ground; everything here is in craft space (forward −Z, up +Y).
 //
 // Draw calls per racer: hull, glow, canopy, flaps, fan discs, jets, cushion, vortices, halos,
-// particles = 10.
+// particles = 10. While wrecked: hull, glow, canopy, flaps, fan discs, fire, smoke, particles.
+//
+// The hull, glow and canopy are skinned with one bone per breakable part (racerBlueprint.ts), so
+// shatter() flings the real parts apart without extra meshes; see racerWreck.ts.
 import * as THREE from 'three';
 import type { RacerVisual } from '../core/types.ts';
 import { buildBlueprint } from './racerStyles.ts';
@@ -12,6 +15,7 @@ import { CushionSheet, VortexTrails, createFanDiscGeometry, createJetGeometry } 
 import { SoftPointBuffer } from './softPoints.ts';
 import { ParticlePool } from './particlePool.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
+import { WreckSim, type WreckKind } from './racerWreck.ts';
 
 export interface RacerViewState {
   speed: number;
@@ -27,9 +31,23 @@ export interface RacerViewState {
   groundColor?: number;
 }
 
+export interface ShatterOptions {
+  kind: WreckKind;
+  /** World height of the ground under the wreck; defaults to SKIMMER_RIDE_HEIGHT below the root.
+   * Ignored for 'fall' (there is no ground). */
+  groundY?: number;
+}
+
 export interface RacerModel {
   root: THREE.Group;
+  /** True from shatter() until reset(). */
+  readonly wrecked: boolean;
   update(dt: number, time: number, v: RacerViewState): void;
+  /** Breaks the craft apart. `impulse`: its world velocity at the crash (m/s). Leave `root` where
+   * it is afterwards (keep it visible, stop posing it) and keep calling update(). */
+  shatter(impulse: THREE.Vector3, opts: ShatterOptions): void;
+  /** Reassembles the craft, intact and clean. */
+  reset(): void;
   dispose(): void;
 }
 
@@ -109,6 +127,10 @@ const SPRAY_LIGHTEN = 0.25;
 const SPRAY_DRIFT = 0.6;
 const SPRAY_GRAVITY = 9.8;
 const PARTICLE_POOL = { high: 140, low: 60 } as const;
+/** Wreck: the hull chars over this long (s); glow parts cool to embers. */
+const WRECK_CHAR_TIME = 1.2;
+const EMBER_COLOR = new THREE.Color(0xff4a10);
+const EMBER_FLOOR = 0.12;
 
 const UNIT_Z = new THREE.Vector3(0, 0, 1);
 const WHITE = new THREE.Color(0xffffff);
@@ -121,6 +143,9 @@ const tmpColor = new THREE.Color();
 const tmpCore = new THREE.Color();
 const tmpJet = new THREE.Color();
 const tmpGround = new THREE.Color();
+const tmpPose = new THREE.Matrix4();
+const tmpWorldQuat = new THREE.Quaternion();
+const tmpWorldPos = new THREE.Vector3();
 
 function clamp01(x: number): number {
   return x < 0 ? 0 : x > 1 ? 1 : x;
@@ -150,7 +175,12 @@ function scorchable<T extends THREE.MeshStandardMaterial | THREE.MeshLambertMate
 
 class SkimmerModel implements RacerModel {
   readonly root = new THREE.Group();
+  /** World-aligned while wrecked (cancels the root's rotation), identity otherwise. */
+  private readonly wreckFrame = new THREE.Group();
   private readonly craft = new THREE.Group();
+  private readonly bones: THREE.Bone[];
+  private readonly skeleton: THREE.Skeleton;
+  private readonly wreck: WreckSim;
   private readonly bp: Blueprint;
   private readonly detail: 'high' | 'low';
   private readonly scorch = { value: 0 };
@@ -198,10 +228,27 @@ class SkimmerModel implements RacerModel {
     this.vortexMat = additive();
     this.additiveMats = [discMat, jetMat, this.vortexMat];
 
-    this.root.add(this.craft);
-    this.craft.add(new THREE.Mesh(this.bp.hull, this.hullMat));
-    this.craft.add(new THREE.Mesh(this.bp.glow, this.glowMat));
-    this.craft.add(new THREE.Mesh(this.bp.canopy, this.canopyMat));
+    this.root.add(this.wreckFrame);
+    this.wreckFrame.add(this.craft);
+    // One bone per breakable part, resting at the part's centre; the inverse bind matrix moves the
+    // part's vertices to that pivot so the bone spins it about its own middle.
+    this.bones = this.bp.parts.map((p) => {
+      const bone = new THREE.Bone();
+      bone.position.copy(p.centre);
+      return bone;
+    });
+    this.craft.add(...this.bones);
+    this.skeleton = new THREE.Skeleton(this.bones, this.bp.parts.map((p) => new THREE.Matrix4().makeTranslation(-p.centre.x, -p.centre.y, -p.centre.z)));
+    ([[this.bp.hull, this.hullMat], [this.bp.glow, this.glowMat], [this.bp.canopy, this.canopyMat]] as const).forEach(([geo, mat]) => {
+      const mesh = new THREE.SkinnedMesh(geo, mat);
+      mesh.bind(this.skeleton, new THREE.Matrix4());
+      // Debris flies far outside the rest bounds.
+      mesh.frustumCulled = false;
+      this.craft.add(mesh);
+    });
+    this.wreck = new WreckSim(this.bp.parts, this.bones, detail);
+    this.wreck.reset();
+    this.craft.add(this.wreck.smoke.buf.points, this.wreck.fire.buf.points);
 
     // Flaps: a unit box hinged at its leading edge, one instance each, sharing the hull look.
     this.flapGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -238,7 +285,15 @@ class SkimmerModel implements RacerModel {
     this.craft.add(this.halos.points, this.particles.buf.points);
   }
 
+  get wrecked(): boolean {
+    return this.wreck.active;
+  }
+
   update(dt: number, time: number, v: RacerViewState): void {
+    if (this.wreck.active) {
+      this.updateWreck(dt);
+      return;
+    }
     const speedFrac = v.topSpeed > 0 ? Math.max(0, v.speed / v.topSpeed) : 0;
     this.boost += ((v.boosting && !v.crashed ? 1 : 0) - this.boost) * clamp01(dt * BOOST_RESPONSE);
     this.steer += (v.steer - this.steer) * clamp01(dt * STEER_RESPONSE);
@@ -272,7 +327,7 @@ class SkimmerModel implements RacerModel {
     for (let i = 0; i < flaps.length; i++) {
       const f = flaps[i];
       tmpRot.makeRotationAxis(f.axis, f.gain * this.steer);
-      tmpMat.multiplyMatrices(f.base, tmpRot).scale(f.size);
+      tmpMat.multiplyMatrices(this.wreck.partMatrix[f.part], f.base).multiply(tmpRot).scale(f.size);
       this.flaps.setMatrixAt(i, tmpMat);
     }
     this.flaps.instanceMatrix.needsUpdate = true;
@@ -371,8 +426,58 @@ class SkimmerModel implements RacerModel {
     }
   }
 
+  shatter(impulse: THREE.Vector3, opts: ShatterOptions): void {
+    // Re-express everything in a world-aligned frame at the root, so debris falls along world −Y.
+    this.root.updateWorldMatrix(true, false);
+    this.root.getWorldQuaternion(tmpWorldQuat);
+    this.root.getWorldPosition(tmpWorldPos);
+    this.wreckFrame.quaternion.copy(tmpWorldQuat).invert();
+    this.craft.updateMatrix();
+    tmpPose.makeRotationFromQuaternion(tmpWorldQuat).multiply(this.craft.matrix);
+    this.craft.position.set(0, 0, 0);
+    this.craft.rotation.set(0, 0, 0);
+    const groundY = opts.kind === 'fall' ? null : opts.groundY !== undefined ? opts.groundY - tmpWorldPos.y : -SKIMMER_RIDE_HEIGHT;
+    this.wreck.start(opts.kind, impulse, tmpPose, groundY);
+    this.steer = 0;
+    for (const m of [this.jets, this.cushion.mesh, this.vortices.mesh, this.halos.points]) m.visible = false;
+  }
+
+  reset(): void {
+    this.wreck.reset();
+    this.wreckFrame.quaternion.identity();
+    this.particles.clear();
+    this.scorch.value = 0;
+    this.boost = 0;
+    this.steer = 0;
+    this.grounded = 1;
+    for (const m of [this.jets, this.cushion.mesh, this.vortices.mesh, this.halos.points]) m.visible = true;
+  }
+
+  private updateWreck(dt: number): void {
+    const w = this.wreck;
+    w.update(dt);
+    this.scorch.value = clamp01(w.age / WRECK_CHAR_TIME);
+    const glow = w.glowLevel;
+    this.glowMat.color.copy(this.glowColor).lerp(EMBER_COLOR, 1 - glow).multiplyScalar(Math.max(EMBER_FLOOR, glow));
+    this.updateFlaps();
+    const fans = this.bp.fans;
+    for (let i = 0; i < fans.length; i++) {
+      const f = fans[i];
+      tmpQuat.setFromAxisAngle(UNIT_Z, w.fanSpin + i * 0.9);
+      tmpScale.setScalar(f.radius * 0.97);
+      tmpMat.compose(f.pos, tmpQuat, tmpScale).premultiply(w.partMatrix[f.part]);
+      this.discs.setMatrixAt(i, tmpMat);
+      this.discs.setColorAt(i, tmpColor.copy(this.glowMat.color).multiplyScalar(FAN_DISC_GAIN * glow));
+    }
+    this.discs.instanceMatrix.needsUpdate = true;
+    if (this.discs.instanceColor) this.discs.instanceColor.needsUpdate = true;
+    this.particles.update(dt);
+  }
+
   dispose(): void {
     this.root.removeFromParent();
+    this.wreck.dispose();
+    this.skeleton.dispose();
     for (const g of [this.bp.hull, this.bp.glow, this.bp.canopy, this.flapGeo, this.discGeo, this.jetGeo]) g.dispose();
     for (const m of [this.hullMat, this.canopyMat, this.glowMat, ...this.additiveMats]) m.dispose();
     this.flaps.dispose();

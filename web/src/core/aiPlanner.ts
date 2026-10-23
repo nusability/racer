@@ -47,6 +47,10 @@ export interface PlanRequest {
   stretch: number;
   /** Return the path's x this many metres after the lag. */
   lead: number;
+  /** Distance kept from an open (drop) edge, metres: falling off is a wreck. */
+  dropMargin: number;
+  /** Steepest swerve the racer can follow, metres of x per metre of s. */
+  maxSlope: number;
 }
 
 export class PathPlanner {
@@ -86,8 +90,8 @@ export class PathPlanner {
     // Cell costs: blocked past the boundaries or by blockers, dearer on sand, else off-line.
     for (let k = 0; k < rows; k++) {
       const sk = s + k * AI_PLAN_STEP;
-      const rowLo = ribbon.minXAt(sk) + RACER_HALF_WIDTH;
-      const rowHi = ribbon.maxXAt(sk) - RACER_HALF_WIDTH;
+      const rowLo = ribbon.minXAt(sk) + RACER_HALF_WIDTH + (ribbon.dropAt(sk, -1) ? q.dropMargin : 0);
+      const rowHi = ribbon.maxXAt(sk) - RACER_HALF_WIDTH - (ribbon.dropAt(sk, 1) ? q.dropMargin : 0);
       const road = ribbon.widthAt(sk) / 2;
       for (let j = 0; j < cols; j++) {
         const xj = xAt(j);
@@ -111,7 +115,7 @@ export class PathPlanner {
     }
 
     // Backward pass: cheapest cost-to-go from every cell.
-    const span = Math.max(1, Math.floor((AI_PLAN_STEP * AI_PLAN_MAX_SLOPE) / AI_PLAN_LATERAL));
+    const span = Math.max(1, Math.floor((AI_PLAN_STEP * Math.min(AI_PLAN_MAX_SLOPE, q.maxSlope)) / AI_PLAN_LATERAL));
     const swerve = AI_PLAN_LATERAL * AI_PLAN_SWERVE_COST;
     const last = (rows - 1) * cols;
     for (let j = 0; j < cols; j++) cost[last + j] = node[last + j];

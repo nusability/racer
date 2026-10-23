@@ -13,7 +13,7 @@ import { Race } from '../src/core/race.ts';
 import { minJumpSpeed } from '../src/core/jumps.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
-import { simTestTrack } from './sim-test-track.ts';
+import { simFigure8, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
 
 // The project has no Node typings (the web build must not see them); this is all we use.
@@ -107,7 +107,7 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       prevBranch[i] = r.branch;
     });
     if (++steps > maxSteps) {
-      const stuck = race.racers.filter((r) => r.finishTime === null).map((r) => `${r.id}@lap${r.lap} s=${r.s.toFixed(0)} b=${r.branch}`);
+      const stuck = race.racers.filter((r) => r.finishTime === null && r.crashed <= 0).map((r) => `${r.id}@lap${r.lap} s=${r.s.toFixed(0)} b=${r.branch}`);
       fail(`${track.def.id}: timeout after ${(steps * SIM_DT).toFixed(0)}s; unfinished ${stuck.join(', ')}`);
       break;
     }
@@ -126,14 +126,14 @@ function report(track: Track, res: RunResult) {
   for (const { e, i, st, v } of rows) {
     const c = v.drive.crashes;
     const avg = (st.distance / Math.max(race.time, SIM_DT)) * 3.6;
-    const crashText = [c.destroyed && `destroyed ${c.destroyed}`, c.fell && `fell ${c.fell}`, c.obstacle && `obstacle ${c.obstacle}`].filter(Boolean).join(', ') || '-';
+    const crashText = (Object.keys(c) as (keyof typeof c)[]).filter((k) => c[k] > 0).map((k) => `wreck: ${k}`).join(', ') || '-';
     console.log(
       `  ${e.name.padEnd(12)} ${e.skill.toFixed(2).padStart(5)} ${String(st.place).padStart(5)} ` +
         `${st.finishTime === null ? '    DNF' : st.finishTime.toFixed(1).padStart(7)} ${st.bestLap === null ? '     -' : st.bestLap.toFixed(1).padStart(6)} ` +
         `${avg.toFixed(0).padStart(8)} ${v.drive.scrapeTime.toFixed(1).padStart(8)} ${v.drive.offroadTime.toFixed(1).padStart(7)} ` +
         `${res.boostTime[i].toFixed(0).padStart(7)} ${(res.cells[i] / laps).toFixed(1).padStart(9)}  ${crashText}`,
     );
-    if (st.finishTime === null) fail(`${track.def.id}: ${e.name} never finished`);
+    if (st.finishTime === null && st.crashed <= 0) fail(`${track.def.id}: ${e.name} neither finished nor wrecked`);
   }
   for (const b of track.branches) {
     const on = res.viaBranch.filter((t) => t.branch === b.index).map((t) => t.seconds);
@@ -146,7 +146,7 @@ function report(track: Track, res: RunResult) {
   console.log(`  events: ${ev}`);
 }
 
-const defs: TrackDef[] = [simTestTrack, ...TRACKS];
+const defs: TrackDef[] = [simTestTrack, simFigure8, ...TRACKS];
 for (const def of defs) {
   if (only.length > 0 && !only.includes(def.id)) continue;
   const track = new Track(def);

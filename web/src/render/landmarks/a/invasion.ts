@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import type { Landmark, LandmarkOptions } from '../types.ts';
 import { buildHauler, craftColours } from './craft.ts';
 import { HIP_Y, buildStrider, type Strider } from './strider.ts';
+import { BoundStrider } from './striderBound.ts';
+import { boundHazard, boundReach, RoadFrame } from './bound.ts';
 import {
   T,
   addBeam,
@@ -55,6 +57,10 @@ const POD_FALL = 2.4;
 /** Trail puffs per second behind a falling pod. */
 const POD_TRAIL_RATE = 12;
 
+/** The far-side battery: how far beyond the road edge it fires from, and how often, seconds. */
+const BATTERY_FAR = 160;
+const BATTERY_EVERY = 0.6;
+
 const WIND_X = 6;
 const WIND_Z = 1.5;
 /** Share of scene fog the smoke columns take, so they still mark the battle from afar. */
@@ -85,6 +91,7 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
   const { palette, quality } = opts;
   const hi = quality === 'high';
   const rng = mulberry32(opts.seed ^ 0x1a5e2);
+  const bound = boundHazard(opts, 'invasion', ['sweeper'] as const);
   const boost = glowBoost(palette);
   const nStriders = hi ? 3 : 2;
   const nTanks = hi ? 8 : 4;
@@ -181,6 +188,10 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
     }));
   }
 
+  // Bound: the first strider stands astride the road and drags its drill across it.
+  const boundStrider = bound ? new BoundStrider(rig, striders[0], bound.binding, bound.hazard, { dark, glow: boltRed }) : null;
+  const cullRadius = bound ? Math.max(RADIUS, boundReach(new RoadFrame(bound.binding, bound.hazard.s0, 0), BATTERY_FAR + 100)) : RADIUS;
+
   // --- Hover tanks ---
   const tanks: Tank[] = [];
   for (let i = 0; i < nTanks; i++) {
@@ -216,7 +227,7 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
     bolts.push({ bone, from: new THREE.Vector3(), to: new THREE.Vector3(), t0: 0, dur: 1, live: false, colour });
   }
 
-  rig.build(kit.group, RADIUS, HEIGHT);
+  rig.build(kit.group, cullRadius, HEIGHT);
 
   // --- Particles ---
   const fire = brush({ life: 1.3, size0: 10, size1: 30, c0: col(0xfff0b0), c1: col(0xc02810), alpha: boost, keep: 0.25, lift: 8 });
@@ -234,6 +245,10 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
   const shooters = new Float32Array(nStriders + nTanks + nTurrets);
   for (let i = 0; i < shooters.length; i++) shooters[i] = evt() * FIRE_EVERY * 4;
   let nextShell = 1;
+  let batteryT = 0;
+  const shieldAim = new THREE.Vector3(0, 20, SHIELD_Z);
+  /** The battery fires from across the road from the battle, so its bolts cross the course. */
+  const batterySide = bound ? -new RoadFrame(bound.binding, bound.hazard.s0, 0).originSide() : 1;
   let smokeAcc = 0;
   const smokeStep = hi ? SMOKE_STEP : SMOKE_STEP * 2;
   let boltNext = 0;
@@ -283,6 +298,11 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
     lampI = 0;
     // Striders: walk their loops, legs in a diagonal gait locked to distance travelled.
     striders.forEach((s, i) => {
+      if (i === 0 && boundStrider) {
+        boundStrider.pose(time, shieldAim);
+        striderPos[0].copy(boundStrider.body);
+        return;
+      }
       const w = (STRIDER_SPEED / Math.hypot(s.ax, s.az)) * s.dir;
       const a = time * w + s.phase;
       const x = s.cx + Math.sin(a) * s.ax;
@@ -377,6 +397,20 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
         }
         glow.emit(spark, V.x, V.y, V.z, 0, 0, 0);
       }
+      if (boundStrider && bound) {
+        // Crossfire over the road: a battery out in the desert beyond the far edge hammers the
+        // strider, and its drill grinds sparks off the road.
+        batteryT -= dt;
+        if (batteryT <= 0) {
+          batteryT = BATTERY_EVERY * (0.5 + evt());
+          const h = bound.hazard;
+          bound.binding.toLocal(h.s0 + (evt() - 0.5) * 120, (batterySide > 0 ? h.maxX : h.minX) + batterySide * BATTERY_FAR, 6 + evt() * 30, V);
+          D.set((evt() - 0.5) * 20, (evt() - 0.5) * 20, (evt() - 0.5) * 20).add(boundStrider.body);
+          fire1(V, D, false, time);
+        }
+        const t = boundStrider.tip;
+        glow.emit(spark, t.x, t.y + 1, t.z, (evt() - 0.5) * 40, 10 + evt() * 20, (evt() - 0.5) * 40);
+      }
       nextShell -= dt;
       if (nextShell <= 0) {
         nextShell = SHELL_EVERY * (0.5 + evt());
@@ -453,7 +487,7 @@ export function createInvasion(opts: LandmarkOptions): Landmark {
     smoke.update(dt);
   }
 
-  return { group: kit.group, radius: RADIUS, update, dispose: () => disposeKit(kit) };
+  return { group: kit.group, radius: cullRadius, update, dispose: () => disposeKit(kit) };
 }
 
 /** Wreck smoke emission tick, seconds (low quality emits half as often). */

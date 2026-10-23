@@ -1,18 +1,22 @@
 // The race HUD. update() runs every frame, so it only writes when a shown value changes, and
 // bars move by transform (no layout). Escape/P also pause, since the HUD owns the pause action.
 import './race.css';
-import type { Hud, HudView } from '../game/types.ts';
+import type { Hud, HudView, WreckInfo } from '../game/types.ts';
 import { formatTime, h } from './kit.ts';
+import { wreckCopy } from './wreckCopy.ts';
 
 /** Tank at or above this reads as full (pulses); at or below the empty mark it dims. */
 const BOOST_FULL = 0.995;
 const BOOST_EMPTY = 0.01;
 const PICKUP_PULSE_MS = 260;
-/** Hull damage above this turns the bar red. */
-const DAMAGE_WARN = 0.65;
+/** Hull left below this reads as damaged (orange), and below the critical mark it flashes red. */
+const HULL_LOW = 0.5;
+const HULL_CRITICAL = 0.25;
+const REPAIR_PULSE_MS = 420;
 /** How long "GO!" lingers after the countdown ends, ms. */
 const GO_LINGER_MS = 700;
 const FLASH_MS = 1400;
+const WRECK_SLAM_MS = 520;
 const COUNT_POP_MS = 350;
 
 const PAUSE_KEYS = new Set(['Escape', 'KeyP']);
@@ -62,6 +66,8 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const speedEl = h('span', 'hud__speed-n');
   const tank = bar('BOOST', 'hb--boost');
   const hull = bar('HULL', 'hb--hull');
+  const critical = h('div', 'hud__critical', 'HULL CRITICAL');
+  const wreck = h('div', 'hud__wreck');
   const countEl = h('div', 'hud__count');
   const flashEl = h('div', 'hud__flash');
 
@@ -89,7 +95,8 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
     pause,
     countEl,
     flashEl,
-    h('div', 'hud__bottom', h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', tank.el, hull.el)),
+    wreck,
+    h('div', 'hud__bottom', critical, h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', tank.el, hull.el)),
   );
   root.append(el);
 
@@ -104,7 +111,8 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const tankFull = classSlot(tank.el, 'is-full');
   const tankEmpty = classSlot(tank.el, 'is-empty');
   const boosting = classSlot(el, 'is-boosting');
-  const hullWarn = classSlot(hull.el, 'is-warn');
+  const hullLow = classSlot(hull.el, 'is-low');
+  const hullCritical = classSlot(el, 'is-critical');
   const finished = classSlot(el, 'is-finished');
   const setCount = textSlot(countEl);
   const countOn = classSlot(countEl, 'is-on');
@@ -123,8 +131,10 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
       setTank(v.boost);
       tankFull(v.boost >= BOOST_FULL);
       tankEmpty(v.boost <= BOOST_EMPTY);
-      setHull(1 - v.damage);
-      hullWarn(v.damage >= DAMAGE_WARN);
+      const hullLeft = 1 - v.damage;
+      setHull(hullLeft);
+      hullLow(hullLeft < HULL_LOW);
+      hullCritical(hullLeft < HULL_CRITICAL && hullLeft > 0);
       boosting(v.boosting);
       finished(v.finished);
 
@@ -162,6 +172,29 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
           { transform: 'scale(1, 1)', filter: 'brightness(1)' },
         ],
         { duration: PICKUP_PULSE_MS, easing: 'ease-out' },
+      );
+    },
+    pulseRepair(): void {
+      hull.track.animate(
+        [
+          { transform: 'scale(1, 1)', filter: 'brightness(1)', boxShadow: '0 0 0 rgba(120, 255, 140, 0)' },
+          { transform: 'scale(1.06, 1.6)', filter: 'brightness(1.8) hue-rotate(60deg)', boxShadow: '0 0 22px rgba(120, 255, 140, 0.95)', offset: 0.3 },
+          { transform: 'scale(1, 1)', filter: 'brightness(1)', boxShadow: '0 0 0 rgba(120, 255, 140, 0)' },
+        ],
+        { duration: REPAIR_PULSE_MS, easing: 'ease-out' },
+      );
+    },
+    wrecked(w: WreckInfo): void {
+      const copy = wreckCopy(w);
+      wreck.replaceChildren(h('div', 'hud__wreck-title', copy.title), h('div', 'hud__wreck-sub', copy.sub));
+      el.classList.add('is-wrecked');
+      wreck.animate(
+        [
+          { opacity: 0, transform: 'translateY(-50%) scale(2.2) rotate(-4deg)' },
+          { opacity: 1, transform: 'translateY(-50%) scale(0.94) rotate(-4deg)', offset: 0.55 },
+          { opacity: 1, transform: 'translateY(-50%) scale(1) rotate(-4deg)' },
+        ],
+        { duration: WRECK_SLAM_MS, easing: 'cubic-bezier(.2,1.2,.4,1)', fill: 'forwards' },
       );
     },
     dispose(): void {

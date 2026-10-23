@@ -8,6 +8,15 @@ export const HIP_Y = 30;
 const THIGH_X = 15;
 const THIGH_Y = 12;
 const SHIN_X = 11;
+const SHIN_Y = -(HIP_Y - 2 + THIGH_Y);
+
+/** Leg bone lengths and rest angles (in the hip's vertical plane), for IK. */
+export const LEG = {
+  a: Math.hypot(THIGH_X, THIGH_Y),
+  b: Math.hypot(SHIN_X, SHIN_Y),
+  alpha0: Math.atan2(THIGH_Y, THIGH_X),
+  beta0: Math.atan2(SHIN_Y, SHIN_X),
+} as const;
 
 export interface Strider {
   holder: THREE.Bone;
@@ -60,7 +69,7 @@ export function buildStrider(
     rig.add(strut(), c.invader, { bone: hip, m: between(thighA, knee, 3.4) });
     rig.add(box(5, 3, 3), c.invaderLight, { bone: hip, m: T(THIGH_X * 0.5, THIGH_Y * 0.5 + 1.5, 0, 0, 0, Math.atan2(THIGH_Y, THIGH_X)) });
     const shin = rig.bone(hip, THIGH_X, THIGH_Y, 0);
-    const foot = new THREE.Vector3(SHIN_X, -(HIP_Y - 2 + THIGH_Y), 0);
+    const foot = new THREE.Vector3(SHIN_X, SHIN_Y, 0);
     rig.add(strut(), c.dark, { bone: shin, m: between(new THREE.Vector3(), foot, 2.8) });
     rig.add(cyl(3, 1.8, 2.5, 5), c.invader, { bone: shin, m: T(foot.x, foot.y, 0) });
     rig.add(rock(2.4), c.invaderLight, { bone: shin });

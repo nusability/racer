@@ -35,6 +35,14 @@ const FAKE_TANK_S = 4;
 const FAKE_CELL_EVERY_S = 2.5;
 const FAKE_CELL_FILL = 0.25;
 let tankFill = 0.5;
+// Fake hull: wears down steadily, a repair cell arrives every few seconds, and with ?wreck=1
+// the player is wrecked once the hull runs out.
+const FAKE_WEAR_PER_S = 0.09;
+const FAKE_REPAIR_EVERY_S = 5;
+const FAKE_REPAIR = 0.2;
+const wreckWhenEmpty = params.get('wreck') === '1';
+let hullDamage = 0;
+let wrecked = false;
 let nudgeTotal = 0;
 const readout = h('pre');
 readout.style.cssText = 'position:absolute;left:50%;top:8px;transform:translateX(-50%);margin:0;padding:4px 8px;background:rgba(0,0,0,.5);color:#fff;font:12px monospace;z-index:30;pointer-events:none';
@@ -75,6 +83,15 @@ function frame(now: number): void {
     tankFill = Math.min(1, tankFill + FAKE_CELL_FILL);
     hud.pulseBoost();
   }
+  if (racing && !wrecked) hullDamage = Math.min(1, hullDamage + FAKE_WEAR_PER_S * dt);
+  if (racing && !wreckWhenEmpty && Math.floor(t / FAKE_REPAIR_EVERY_S) !== Math.floor((t - dt) / FAKE_REPAIR_EVERY_S)) {
+    hullDamage = Math.max(0, hullDamage - FAKE_REPAIR);
+    hud.pulseRepair();
+  }
+  if (wreckWhenEmpty && hullDamage >= 1 && !wrecked) {
+    wrecked = true;
+    hud.wrecked({ reason: 'obstacle', cause: 'a boulder' });
+  }
   const view: HudView = {
     speedKmh: racing ? 420 + Math.sin(t * 0.8) * 180 + (inp.boost ? 120 : 0) : 0,
     place: 1 + (Math.floor(t / 3) % 6),
@@ -84,7 +101,7 @@ function frame(now: number): void {
     time: t,
     bestLap: lap > 1 ? 19.37 : null,
     boost: tankFill,
-    damage: racing ? (t * 0.05) % 1 : 0,
+    damage: hullDamage,
     boosting: inp.boost && tankFill > 0,
     countdown: racing ? null : Math.max(0, Math.ceil(countdownLeft - 1)),
     finished: false,
