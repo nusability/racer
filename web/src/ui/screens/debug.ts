@@ -147,11 +147,14 @@ export function debugScreen(ctx: AppCtx): Screen {
   }
 
   function render(): void {
+    // Every action re-renders; keep the list where the player was.
+    const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
       h('div', 'debug__body list-scroll', flagsPanel(), progressPanel(), glidersPanel(), logsPanel()),
       toast,
     );
+    root.querySelector('.debug__body')?.scrollTo(0, scroll);
   }
 
   render();

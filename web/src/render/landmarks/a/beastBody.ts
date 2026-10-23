@@ -12,6 +12,8 @@ const JAW_OPEN_MAX = 1.05;
 /** Jaw petals, and how far they lean in over the gullet when shut. */
 const JAWS = 5;
 const JAW_REST = 0.42;
+/** Rings of gullet teeth: radius (of the head's), count, length (model units). */
+const TOOTH_RINGS = [[0.92, 14, 4.5], [0.6, 10, 3.2]] as const;
 
 export interface BeastColours {
   sand: THREE.Color;
@@ -77,7 +79,7 @@ export function buildBeast(
   }
   // The gullet: a glowing funnel ringed with rows of glowing teeth.
   rig.add(new THREE.ConeGeometry(headR * 0.95, 12 * q, 9, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -5 * q), c.maw, { bone: head, layer: 'glow' });
-  for (const [ring, n, len] of [[0.92, 14, 4.5], [0.6, 10, 3.2]] as const) {
+  for (const [ring, n, len] of hi ? TOOTH_RINGS : TOOTH_RINGS.slice(0, 1)) {
     for (let t = 0; t < n; t++) {
       const a = (t / n) * Math.PI * 2 + ring;
       // Raked inward and forward, like a lamprey's.
@@ -110,7 +112,7 @@ export function buildBeast(
     const L = segLen * 1.5;
     rig.add(cyl(r * 0.9, r * 1.12, L, 7).rotateX(Math.PI / 2).translate(0, 0, -0.7 * L), c.carapace, { bone });
     rig.add(box(r * 1.35, r * 0.24, L * 0.9), i % 3 === 1 ? c.plateEdge : c.plate, { bone, m: T(0, r * 0.98, -0.4 * L, -0.07) });
-    rig.add(box(r * 0.14, r * 0.3, L * 0.85), c.carapace, { bone, m: T(0, r * 1.18, -0.4 * L) });
+    if (hi) rig.add(box(r * 0.14, r * 0.3, L * 0.85), c.carapace, { bone, m: T(0, r * 1.18, -0.4 * L) });
     rig.add(box(r * 1.4, r * 0.3, L * 0.85), c.belly, { bone, m: T(0, -r * 0.9, -0.4 * L) });
     for (const sx of [-1, 1]) {
       rig.add(box(r * 0.3, r * 1.15, L * 0.9), c.plate, { bone, m: T(sx * r * 0.98, r * 0.05, -0.4 * L, 0, 0, sx * 0.3) });

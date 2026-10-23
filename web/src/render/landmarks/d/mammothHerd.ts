@@ -144,12 +144,12 @@ interface Coat {
 
 /** Long hair hanging from (x, y, z): a narrow cone point-down, swept back a little. */
 function shag(emit: Emit, part: Part, color: THREE.ColorRepresentation, x: number, y: number, z: number, len: number, r: number, lean: number): void {
-  emit(new THREE.ConeGeometry(r, len, 4).rotateX(Math.PI).translate(0, -len / 2, 0), color, part, T(x, y, z, Math.random === undefined ? 0 : 0, lean, -0.15));
+  emit(new THREE.ConeGeometry(r, len, 4).rotateX(Math.PI).translate(0, -len / 2, 0), color, part, T(x, y, z, 0, lean, -0.15));
 }
 
 /**
  * An ice-age giant facing +X, feet on y = 0, in its own metres. Legs hang from their hips; the
- * head is authored about its neck. `tusk` scales the tusks (the old bull's are longest).
+ * head is authored about its neck. The lead is the old bull: pale mane, longest tusks.
  */
 function mammoth(emit: Emit, c: Coat, rng: Rng, shags: number, lead: boolean): void {
   const fur = (k: number) => vary(rng, shade(c.fur, k), 0.04);
@@ -243,49 +243,46 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
   const { rng, rig } = ik;
   const kit = ik.b;
   const bound = bindHazard('mammothHerd', opts, ['sweeper'] as const, {
-    def: { type: 'sweeper', id: 'free', at: 0, radius: 6, height: 9, xFrom: -70, xTo: 60, cross: 14, hold: 4, period: 40, phase: 0 },
+    def: { type: 'sweeper', id: 'free', at: 0, radius: 6, height: 11, xFrom: -70, xTo: 60, cross: 16, hold: 4, period: 44, phase: 0 },
     roadZ: -10,
     lateral: -1,
     minX: -12,
     maxX: 12,
   });
   const def = bound.def;
-  const boost = glowBoost(opts.palette);
-  const colours = (k: number): Colours => ({
-    fur: vary(rng, mix(0x5a3e2c, opts.palette.rock, 0.3), 0.1).multiplyScalar(k),
-    frost: ik.snow,
-    spine: mix(ICE, 0xffffff, 0.3),
-    lamp: col(mix(WARM_LIGHT, opts.palette.accent, 0.25)),
-  });
+  // Muted, natural coats: dark umber guard hair over warmer brown, frost on the back.
+  const coat = (k: number): Coat => {
+    const fur = vary(rng, mix(0x5a4030, opts.palette.rock, 0.15), 0.06).multiplyScalar(k);
+    return { fur, shag: shade(mix(fur, 0x2a1e16, 0.5), 0.9), frost: mix(ik.snow, fur, 0.25), mane: mix(fur, 0xd8cfc0, 0.45) };
+  };
+  const nShag = ik.q(SHAGS.high, SHAGS.low);
 
   // --- The moving herd: one rig, a bone per body part ---
   const beasts: Beast[] = [];
-  const lantern = new THREE.Vector3();
   const nFollow = ik.q(FOLLOWERS.high, FOLLOWERS.low);
   for (let i = 0; i <= nFollow; i++) {
     const body = rig.bone();
     const head = rig.bone(body, HEAD_AT[0], HEAD_AT[1], 0);
     const tail = rig.bone(body, TAIL_AT[0], TAIL_AT[1], 0);
     const legs = LEGS.map(([x, z]) => rig.bone(body, x, HIP_Y, z));
-    const bones: Record<string, THREE.Bone> = { body, head, tail, glow: head, lamp: body };
-    lantern.copy(frostback((geo, color, part, m) => rig.add(geo, color, { bone: typeof part === 'number' ? legs[part] : bones[part], layer: part === 'glow' || part === 'lamp' ? 'glow' : 'solid', m }), colours(i === 0 ? 1.05 : 0.85 + rng() * 0.3), rng, i === 0, opts.palette.accent));
-    beasts.push({ body, head, tail, legs, scale: i === 0 ? 1 : 0.72 + rng() * 0.2, lag: i * LAG, off: i === 0 ? 0 : (i % 2 ? 1 : -1) * (4 + rng() * SPREAD), phase: rng() * 6 });
+    const bones: Record<string, THREE.Bone> = { body, head, tail };
+    mammoth((geo, color, part, m) => rig.add(geo, color, { bone: typeof part === 'number' ? legs[part] : bones[part], m }), coat(i === 0 ? 1 : 0.85 + rng() * 0.25), rng, nShag, i === 0);
+    beasts.push({ body, head, tail, legs, scale: i === 0 ? 1 : 0.7 + rng() * 0.2, lag: i * LAG, off: i === 0 ? 0 : (i % 2 ? 1 : -1) * (4 + rng() * SPREAD), phase: rng() * 6 });
   }
 
-  // --- Grazers far back: static bodies from the same pattern, heads nodding on the GPU ---
+  // --- Grazers far back: static bodies from the same pattern, heads lowered and swaying ---
   for (let i = 0; i < ik.q(GRAZERS.high, GRAZERS.low); i++) {
-    const f = new Frame((rng() - 0.5) * RADIUS * 1.3, 0, RADIUS * (0.35 + rng() * 0.5), rng() * Math.PI * 2, 0.8 + rng() * 0.3);
-    const head = f.p(HEAD_AT[0], HEAD_AT[1], 0);
-    const nod = { pivot: head, axisB: f.dir(0, 0, 1), swingB: 0.25, freq: 0.6 + rng() * 0.4, phase: rng() * 6 };
-    frostback((geo, color, part, m) => {
-      if (part === 'head' || part === 'glow') {
-        // Grazing: the head hangs low and nods.
-        (part === 'glow' ? kit.lights : kit.moving).add(geo, color, f.m(HEAD_AT[0], HEAD_AT[1], 0, 0, 0, -0.5).multiply(m), nod);
+    const f = new Frame((rng() - 0.5) * RADIUS * 1.3, 0, RADIUS * (0.35 + rng() * 0.5), rng() * Math.PI * 2, 0.75 + rng() * 0.25);
+    const neck = f.p(HEAD_AT[0], HEAD_AT[1], 0);
+    const sway = { pivot: neck, axisB: f.dir(0, 0, 1), swingB: 0.08, freq: 0.35 + rng() * 0.2, phase: rng() * 6 };
+    mammoth((geo, color, part, m) => {
+      if (part === 'head') {
+        kit.moving.add(geo, color, f.m(HEAD_AT[0], HEAD_AT[1], 0, 0, 0, -0.35).multiply(m), sway);
         return;
       }
-      const legM = typeof part === 'number' ? f.m(LEGS[part][0], HIP_Y, LEGS[part][1]) : part === 'tail' ? f.m(TAIL_AT[0], TAIL_AT[1], 0) : f.base;
-      (part === 'lamp' ? kit.lights : kit.solid).add(geo, color, legM.clone().multiply(m));
-    }, colours(0.9), rng, false, opts.palette.accent);
+      const at = typeof part === 'number' ? f.m(LEGS[part][0], HIP_Y, LEGS[part][1]) : part === 'tail' ? f.m(TAIL_AT[0], TAIL_AT[1], 0) : f.base;
+      kit.solid.add(geo, color, at.clone().multiply(m));
+    }, coat(0.9), rng, Math.ceil(nShag / 2), false);
   }
   // The Old One: the half-buried skeleton of a frostback a hundred times their size, its ribs
   // and tusks arching over the snow. The herd's waymark, and the landmark's silhouette from afar.
@@ -317,16 +314,12 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
     rig.add(prism(0.15, 0.15, 3.2, 4), DARK, { bone: b });
     rig.add(new THREE.CircleGeometry(1.6, 3).rotateZ(Math.PI / 2), 0xffd020, { bone: b, m: T(0, 4, 0.05) });
     rig.add(ball(0.5, 5, 3), DARK, { bone: b, m: T(0, 3.8, 0.06, 0, 0, 0, [1.1, 0.6, 0.1]) });
-    rig.add(new THREE.OctahedronGeometry(0.3), 0xff9020, { bone: b, layer: 'glow', m: T(0, 5.9, 0) });
   }
 
-  const LAMPS = (nFollow + 1) * 2 + 1;
-  const glow = ik.cloud(LAMPS + ik.q(40, 20), LAMPS, true, 1.8);
   const snowCloud = ik.cloud(ik.q(300, 150), 0, false, 0.75);
-  const kick = brush({ life: 1.6, size0: 2, size1: 9, c0: ik.snow, c1: mix(ik.snow, opts.palette.horizon, 0.4), alpha: 0.7, keep: 0.5, lift: -2 });
-  const breath = brush({ life: 2.2, size0: 1, size1: 5, c0: col(0xffffff), c1: mix(0xffffff, opts.palette.horizon, 0.5), alpha: 0.5, keep: 0.6, lift: 1 });
-  const lampC = col(mix(WARM_LIGHT, opts.palette.accent, 0.25));
-  const leadC = col(WARM_LIGHT);
+  // Heavy footfalls throw low, slow clouds of powder; breath smokes and drifts up.
+  const kick = brush({ life: 2.2, size0: 2.5, size1: 11, c0: ik.snow, c1: mix(ik.snow, opts.palette.horizon, 0.4), alpha: 0.6, keep: 0.4, lift: -0.6 });
+  const breath = brush({ life: 3, size0: 1.2, size1: 6, c0: col(0xffffff), c1: mix(0xffffff, opts.palette.horizon, 0.5), alpha: 0.4, keep: 0.5, lift: 0.8 });
 
   const h = bound.hazard;
   const road = new RoadFrame(bound.binding);
@@ -347,18 +340,19 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
       const x = sweeperX(def, t);
       const s = (i === 0 ? leadScale : leadScale * b.scale) * k;
       road.point(x, 0, b.body.position).addScaledVector(road.along, b.off * k);
-      const stepPhase = (x / STRIDE) * Math.PI * 2 + b.phase;
       const turn = facing(def, t);
-      // Turning in place still shuffles the feet.
-      const gait = stepPhase + turn * 2;
-      b.body.position.y += Math.abs(Math.sin(gait)) * 0.35 * s;
-      b.body.rotation.set(0, yaw0 + turn, Math.sin(gait * 2) * 0.02);
+      // Gait from distance walked (turning on the spot still shuffles the feet).
+      const gait = (x / STRIDE + turn * 0.4) * Math.PI * 2 + b.phase;
+      // Weight settles onto each footfall: the body sinks twice a stride and rolls gently.
+      b.body.position.y -= SINK * s * (1 - Math.abs(Math.cos(gait)));
+      b.body.rotation.order = 'YXZ';
+      b.body.rotation.set(Math.sin(gait) * SWAY, yaw0 + turn, Math.sin(gait * 2) * SWAY * 0.4);
       b.body.scale.setScalar(s);
       b.legs.forEach((leg, j) => {
-        leg.rotation.z = Math.sin(gait + (TRIPOD.includes(j) ? 0 : Math.PI)) * LEG_SWING;
+        leg.rotation.z = Math.sin(gait + LEG_PHASE[j] * Math.PI * 2) * LEG_SWING;
       });
-      b.head.rotation.z = -0.15 + Math.sin(time * 0.8 + b.phase) * 0.12;
-      b.tail.rotation.x = Math.sin(time * 2.1 + b.phase) * 0.4;
+      b.head.rotation.set(0, Math.sin(gait) * 0.05, -0.08 + Math.sin(gait * 2 + 0.6) * 0.035);
+      b.tail.rotation.x = Math.sin(time * 0.9 + b.phase) * 0.25;
     });
     // Trail from each road edge out along the crossing; signs at the edges, facing the traffic.
     for (let j = 0; j < 2; j++) {
@@ -374,26 +368,18 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
     }
     rig.sync();
 
-    let li = 0;
+    if (!emitNow) return;
     beasts.forEach((b, i) => {
-      for (const side of [-1, 1]) {
-        rig.local(b.head, lantern.x, lantern.y, side * lantern.z, P);
-        glow.lamp(li++, P.x, P.y, P.z, i === 0 ? 4.5 : 3, i === 0 ? leadC : lampC, (0.3 + 0.5 * opts.palette.dusk + 0.15 * Math.sin(time * 3 + i + side)) * boost);
-      }
-      if (!emitNow) return;
       const moving = Math.abs(sweeperX(def, time - b.lag) - sweeperX(def, time - b.lag - DUST_RATE)) > 0.01;
       if (moving) {
-        rig.local(b.legs[(i + Math.floor(time * 4)) % LEGS.length], 0, -LEG_LEN, 0, P);
-        snowCloud.emit(kick, P.x, P.y + 0.5, P.z, (rng() - 0.5) * 4, 2 + rng() * 2, (rng() - 0.5) * 4);
+        rig.local(b.legs[(i + Math.floor(time * 2.5)) % LEGS.length], 0, -LEG_LEN, 0, P);
+        snowCloud.emit(kick, P.x, P.y + 0.4, P.z, (rng() - 0.5) * 3, 1 + rng() * 1.5, (rng() - 0.5) * 3);
       }
-      if ((time * 0.7 + b.phase) % 2 < DUST_RATE * 1.4) {
-        rig.local(b.head, 4.5, -2.2, 0, P);
-        for (let q = 0; q < 3; q++) snowCloud.emit(breath, P.x, P.y, P.z, (rng() - 0.5) * 1.5, 0.5, (rng() - 0.5) * 1.5);
+      if ((time + b.phase) % BREATH_EVERY < DUST_RATE) {
+        rig.local(b.head, MOUTH[0], MOUTH[1], MOUTH[2], P);
+        for (let q = 0; q < 4; q++) snowCloud.emit(breath, P.x, P.y, P.z, 1 + (rng() - 0.5) * 1.5, 0.3, (rng() - 0.5) * 1.5);
       }
     });
-    // The lead's howdah lamp, brightest of all: it marks the one to avoid.
-    rig.local(beasts[0].body, -0.6, HIP_Y + 7.4, 0, P);
-    glow.lamp(li, P.x, P.y, P.z, 9, leadC, (0.45 + 0.45 * opts.palette.dusk) * boost);
   }
 
   return ik.finish(RADIUS, RADIUS * 1.5, 30, update);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Track } from '../core/track.ts';
 import { sceneryById } from '../data/tracks/index.ts';
 import { FlatBuilder, SmoothBuilder } from './track/builder.ts';
-import { BOOST_SCROLL, CULL_MARGIN, FOG_FAR, ROCK_TILE, SAND_TILE, type Quality } from './track/config.ts';
+import { BOOST_SCROLL, CULL_MARGIN, FOG_FAR, ROCK_TILE, SAND_TILE, SEA_LEVEL, type Quality } from './track/config.ts';
 import { Corridor, type Scatter } from './track/corridor.ts';
 import { buildCells, type CellItem } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
@@ -35,8 +35,17 @@ export interface TrackScene {
    * road grit, run-off sand, or white spray over water.
    */
   groundColorAt(branch: number, s: number, x: number): number;
+  /**
+   * Dev check: spots where the rendered terrain stands more than `maxRise` metres above the
+   * drivable surface (road and run-off up to the hard boundary), where a craft would fly
+   * through solid-looking ground. Empty when the course is clean.
+   */
+  auditGround(maxRise: number): { branch: number; s: number; x: number; rise: number }[];
   dispose(): void;
 }
+
+/** The audit samples the drivable width every this many metres across and along. */
+const AUDIT_STEP = 2;
 
 /** Boost pads float this far above the road (plus polygon offset). */
 const PAD_LIFT = 0.05;
@@ -168,6 +177,30 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       if (Math.abs(x) <= r.widthAt(s) / 2) return kit.spray.road;
       const wet = branch < 0 && views[0].shape.water[Math.round(track.wrap(s) / track.step) % track.samples.length] === 1;
       return wet ? kit.spray.water : kit.spray.runoff;
+    },
+    auditGround(maxRise) {
+      const found: { branch: number; s: number; x: number; rise: number }[] = [];
+      views.forEach((v, vi) => {
+        const r = v.ribbon;
+        const sh = v.shape;
+        const every = Math.max(1, Math.round(AUDIT_STEP / r.step));
+        for (let k = 0; k < r.samples.length; k += every) {
+          const smp = r.samples[k];
+          // Chasms, tunnels and decks have no ground under them to fly through.
+          if (smp.gap || sh.tunnel[k] || sh.deck[k]) continue;
+          for (let x = -smp.edgeL; x <= smp.edgeR; x += AUDIT_STEP) {
+            const side = x < 0 ? 0 : 1;
+            if (sh.open[side][k] && Math.abs(x) > smp.width / 2) continue;
+            const p = r.toWorld(smp.s, x, 0);
+            const onRoad = Math.abs(x) <= smp.width / 2;
+            // Over lagoon run-off the surface a craft skims is the sea.
+            const surface = !onRoad && sh.water[k] ? SEA_LEVEL : p.y;
+            const rise = ground.meshHeight(p.x, p.z) - surface;
+            if (rise > maxRise) found.push({ branch: vi - 1, s: smp.s, x, rise });
+          }
+        }
+      });
+      return found;
     },
     dispose() {
       dressing.dispose();

@@ -7,6 +7,9 @@ import type { RaceReport } from '../../game/career.ts';
 import type { RaceRequest } from '../../game/types.ts';
 import { button, formatCredits, formatTime, h, ordinal, panel } from '../kit.ts';
 import { wreckCopy } from '../wreckCopy.ts';
+import { copyText } from '../clipboard.ts';
+import { loadDebugFlags } from '../debugFlags.ts';
+import { loadTelemetry, telemetryToText } from '../../game/telemetry.ts';
 import type { AppCtx, Nav, Screen } from './context.ts';
 
 interface NextStep {
@@ -136,6 +139,19 @@ export function resultsScreen(ctx: AppCtx, report: RaceReport): Screen {
   const actions = h(
     'div',
     'actions',
+    loadDebugFlags(ctx.store).enabled
+      ? button({
+          id: 'results_copylog_button',
+          label: 'COPY RACE LOG',
+          aria: 'Copy this race log',
+          variant: 'ghost',
+          onTap: () => {
+            const log = loadTelemetry()[0];
+            if (!log) throw new Error('Results: debug copy with no race log recorded');
+            void copyText(telemetryToText(log), document.body);
+          },
+        })
+      : null,
     button({ id: 'results_menu_button', label: 'MENU', aria: 'Back to menu', variant: 'ghost', onTap: () => ctx.go({ screen: 'menu' }) }),
     button({ id: 'results_next_button', label: next.label, aria: next.aria, variant: 'primary', big: true, onTap: () => ctx.race(next.build(), next.back) }),
   );

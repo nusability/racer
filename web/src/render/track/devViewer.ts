@@ -207,6 +207,7 @@ Object.assign(window, {
     },
     collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => ts.collectCell(item, branch, cell),
     resetCells: () => ts.resetCells(),
+    auditGround: (maxRise = 0.5) => ts.auditGround(maxRise),
     landmarks: () =>
       ts.group.children
         .filter((o) => o.name.startsWith('landmark:'))

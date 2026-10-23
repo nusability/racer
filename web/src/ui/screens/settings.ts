@@ -14,7 +14,28 @@ const STEERING_HELP: Record<SteeringMode, string> = {
   buttons: 'Left and right buttons, bottom-left.',
 };
 
+/** Taps on the build label that open the hidden debug menu. */
+const DEBUG_TAPS = 7;
+/** Taps further apart than this start the count again. */
+const DEBUG_TAP_GAP_MS = 1500;
+
 export function settingsScreen(ctx: AppCtx): Screen {
+  function buildLabel(): HTMLElement {
+    const b = h('button', 'settings__build', `Build ${__BUILD__}`);
+    b.type = 'button';
+    b.id = 'settings_build_button';
+    b.setAttribute('aria-label', `Build ${__BUILD__}`);
+    let taps = 0;
+    let last = 0;
+    b.addEventListener('click', () => {
+      const now = performance.now();
+      taps = now - last > DEBUG_TAP_GAP_MS ? 1 : taps + 1;
+      last = now;
+      if (taps >= DEBUG_TAPS) ctx.go({ screen: 'debug' });
+    });
+    return b;
+  }
+
   const career = ctx.career;
   const s: Settings = { ...career.save.settings };
   const save = () => career.setSettings(s);
@@ -97,7 +118,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
       'div',
       'settings__body list-scroll',
       panel('CONTROLS', row('STEERING', steering), help, sensitivity),
-      panel('GAME', row('SOUND', sound), row('GRAPHICS', quality)),
+      panel('GAME', row('SOUND', sound), row('GRAPHICS', quality), buildLabel()),
     ),
   );
   return { el, backdrop: 'sunset' };
