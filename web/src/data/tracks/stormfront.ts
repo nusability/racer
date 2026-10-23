@@ -61,25 +61,31 @@ export const stormfront: TrackDef = {
     { x: 66, z: 180, y: 0.0 },
   ],
   features: [
+    // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
+    // string across the road; none sits on the racing line.
+    { kind: 'boostCells', at: 8.75, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 9.85, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 12.73, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 13.85, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 22.73, lateral: -16, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 26.73, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 27.85, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 37.75, lateral: -35, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 38.87, lateral: -35, count: 4, spacing: 26 },
     { kind: 'crossing', at: 4.02, other: 33.54, style: 'bridge' },
     { kind: 'crossing', at: 5.02, other: 17.98, style: 'flat' },
     { kind: 'crossing', at: 18.98, other: 32.46, style: 'bridge' },
     // Bridge decks get a narrow shoulder instead of sand.
     { kind: 'runoff', from: 3.4, to: 4.6, amount: 6 },
     { kind: 'runoff', from: 18.4, to: 19.6, amount: 6 },
-    { kind: 'boostCells', at: 0.3, lateral: 0, count: 4, spacing: 30 },
     { kind: 'boostPad', at: 2.0, lateral: 0 },
     { kind: 'boostPad', at: 6.0, lateral: -8 },
     { kind: 'boostPad', at: 6.04, lateral: -8 },
-    { kind: 'boostCells', at: 11.2, lateral: 0, count: 5, spacing: 30 },
-    { kind: 'boostCells', at: 16.5, lateral: -10, count: 5, spacing: 32 },
     { kind: 'boostPad', at: 20.4, lateral: 0 },
     { kind: 'canyon', from: 22.3, to: 24.8, wallHeight: 55 },
-    { kind: 'boostCells', at: 22.5, lateral: 0, count: 6, spacing: 30 },
     { kind: 'pillar', at: 24.0, lateral: -7, radius: 3 },
     { kind: 'pillar', at: 24.3, lateral: 7, radius: 3 },
     { kind: 'boostPad', at: 25.5, lateral: 0 },
-    { kind: 'boostCells', at: 29.3, lateral: 0, count: 4, spacing: 30 },
     {
       kind: 'hazard',
       hazard: { type: 'sweeper', id: 'strider', at: 30.5, radius: 6, height: 22, xFrom: -75, xTo: 75, cross: 3, hold: 1, period: 12, phase: 0 },
@@ -87,7 +93,6 @@ export const stormfront: TrackDef = {
     { kind: 'repairCells', at: 35.4, lateral: 12, count: 3, spacing: 30 },
     { kind: 'boostPad', at: 36.2, lateral: 0 },
     { kind: 'tunnel', from: 41.2, to: 42.8, ceiling: 14 },
-    { kind: 'boostCells', at: 41.4, lateral: 0, count: 6, spacing: 30 },
   ],
   branches: [
     {
@@ -108,7 +113,7 @@ export const stormfront: TrackDef = {
         { x: 572, z: -1325, y: 1 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.2, lateral: 0, count: 4, spacing: 28 },
+        { kind: 'boostCells', at: 4.40, lateral: 0, count: 4, spacing: 28 },
         { kind: 'drop', from: 3.0, to: 6.5 },
         { kind: 'boostPad', at: 6.9, lateral: 0 },
       ],

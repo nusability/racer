@@ -61,18 +61,30 @@ export const avalanche: TrackDef = {
     { x: 0, z: 300, y: 10.0 },
   ],
   features: [
-    { kind: 'boostCells', at: 0.4, lateral: 0, count: 4, spacing: 30 },
+    // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
+    // string across the road; none sits on the racing line.
+    { kind: 'boostCells', at: 3.60, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 4.85, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 10.74, lateral: 34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 15.67, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 17.46, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 18.83, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 30.82, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 35.78, lateral: -12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 35.98, lateral: 12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 36.18, lateral: -12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 36.37, lateral: 12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 36.57, lateral: -12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 40.67, lateral: -34, count: 4, spacing: 26 },
     { kind: 'boostPad', at: 1.6, lateral: 0 },
     { kind: 'drop', from: 6.3, to: 9.7, side: -1 },
     { kind: 'walls', from: 6.3, to: 9.7, side: 1 },
-    { kind: 'boostCells', at: 6.6, lateral: -8, count: 5, spacing: 30 },
     {
       kind: 'hazard',
       hazard: { type: 'gust', id: 'rotorwash', from: 8.0, to: 8.6, strength: -6, on: 4, period: 14, phase: 0 },
     },
     { kind: 'drop', from: 12.2, to: 15.0, side: -1 },
     { kind: 'repairCells', at: 12.6, lateral: 12, count: 3, spacing: 28 },
-    { kind: 'boostCells', at: 17.0, lateral: 0, count: 5, spacing: 30 },
     {
       kind: 'hazard',
       hazard: { type: 'dropper', id: 'avalanche', from: 21.8, to: 22.8, count: 5, radius: 3, period: 9, warn: 2, stay: 4, phase: 0 },
@@ -83,13 +95,10 @@ export const avalanche: TrackDef = {
     { kind: 'corkscrew', from: 24.0, to: 25.2, turns: 1 },
     { kind: 'narrow', from: 25.9, to: 28.7, width: 30, blend: 70 },
     { kind: 'drop', from: 26.1, to: 28.5 },
-    { kind: 'boostCells', at: 26.4, lateral: 0, count: 6, spacing: 30 },
     { kind: 'boostPad', at: 32.4, lateral: 0 },
     { kind: 'boostPad', at: 32.44, lateral: 0 },
     { kind: 'jump', at: 33.4, rampLength: 70, rampHeight: 5, gapLength: 55 },
-    { kind: 'boostCells', at: 36.2, lateral: 10, count: 5, spacing: 30 },
     { kind: 'kicker', at: 38.0, length: 40, height: 2.5 },
-    { kind: 'boostCells', at: 41.0, lateral: 0, count: 4, spacing: 30 },
   ],
   branches: [
     {
@@ -109,8 +118,8 @@ export const avalanche: TrackDef = {
         { x: 2375, z: -1570, y: 57 },
       ],
       features: [
+        { kind: 'boostCells', at: 3.22, lateral: 0, count: 4, spacing: 28 },
         { kind: 'drop', from: 2.2, to: 7.0 },
-        { kind: 'boostCells', at: 3.0, lateral: 0, count: 4, spacing: 26 },
         { kind: 'boostPad', at: 2.3, lateral: 0 },
         { kind: 'boostPad', at: 6.6, lateral: 0 },
       ],

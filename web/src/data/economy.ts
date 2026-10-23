@@ -8,7 +8,8 @@
 // - A full upgrade set on the starter costs about a whole world's winnings.
 
 /** Championship payout at tier 1 in the first world, by finishing place (1st..6th). */
-export const PLACE_PAYOUT: number[] = [1000, 750, 550, 400, 250, 150];
+// Raised 40% once rival parity made upgrades a feel choice rather than a way to win cups.
+export const PLACE_PAYOUT: number[] = [1400, 1050, 770, 560, 350, 210];
 
 /** Payout multiplier per cup tier (index = tier - 1): harder cups pay more, without dwarfing. */
 export const TIER_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];

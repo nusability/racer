@@ -421,7 +421,10 @@ export class RaceSession {
         return;
       case 'falseStart':
       case 'perfectStart':
-        if (ev.id === pid) audio.oneShot(ev.type);
+        if (ev.id === pid) {
+          audio.oneShot(ev.type);
+          this.hud.flash(ev.type === 'falseStart' ? 'FALSE START!' : 'PERFECT START!');
+        }
         return;
       case 'offroad':
         this.views[this.indexOf(ev.id)].offroad = ev.on;
