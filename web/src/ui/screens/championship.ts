@@ -7,6 +7,7 @@ import { trackById } from '../../data/tracks/index.ts';
 import { cupStates } from '../../game/career.ts';
 import { racePayout } from '../../game/economy.ts';
 import { button, difficultyDots, formatCredits, h, header, panel } from '../kit.ts';
+import { trackThumb } from '../trackArt.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 function prizeLine(cup: CupDef): string {
@@ -64,6 +65,7 @@ export function cupScreen(ctx: AppCtx, cupId: string): Screen {
     return h(
       'li',
       `racelist__row is-${state}`,
+      trackThumb(id, 'racelist__img'),
       h('span', 'racelist__n', state === 'done' ? '✓' : String(i + 1)),
       h('span', 'racelist__name', t.name),
       difficultyDots(t.difficulty),

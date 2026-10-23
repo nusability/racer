@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import type { Landmark, LandmarkFactory, LandmarkOptions } from './types.ts';
 import { createLighthouse } from './c/lighthouse.ts';
+import { createVolcano } from './c/volcano.ts';
+import { createHarbor } from './c/harbor.ts';
 import { createResort } from './c/resort.ts';
 import { createRegatta } from './c/regatta.ts';
 import { createCruiseliner } from './c/cruiseliner.ts';
@@ -26,8 +28,8 @@ export const LANDMARKS_C: Record<SetCKind, LandmarkFactory> = {
   cruiseliner: createCruiseliner,
   regatta: createRegatta,
   resort: createResort,
-  harbor: box(300, 70, 200),
-  volcano: box(900, 350, 900),
+  harbor: createHarbor,
+  volcano: createVolcano,
   whales: box(250, 30, 250),
   beachParty: box(200, 30, 150),
   airshow: box(400, 200, 400),

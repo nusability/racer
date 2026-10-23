@@ -48,8 +48,8 @@ const SHOTS = {
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-/** The viewer's own overlay (stats, minimap, picker) must not appear in the thumbs. */
-const HIDE_OVERLAY = 'body > :not(canvas) { display: none !important; }';
+/** The viewer's overlay (stats, minimap canvas, picker) is added after its WebGL canvas; hide it all. */
+const HIDE_OVERLAY = 'body > canvas ~ * { display: none !important; }';
 
 function build(outDir) {
   const r = spawnSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'warn'], { cwd: WEB, stdio: 'inherit' });

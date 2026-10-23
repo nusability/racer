@@ -2,7 +2,9 @@
 // corner radii, widths, jump clear speeds, flight paths that hit something, whether every
 // obstacle leaves an open way round, shortcut sanity and saving, and parts of the course that
 // crowd each other. Exit code 1 when any check warns.
-import { TRACKS } from '../src/data/tracks/index.ts';
+import { TRACKS, sceneryById } from '../src/data/tracks/index.ts';
+import { worldOfTrack } from '../src/data/worlds.ts';
+import { SEA_LEVEL } from '../src/render/track/config.ts';
 import { Ribbon, Track } from '../src/core/track.ts';
 import type { TrackDef, TrackFeature } from '../src/core/types.ts';
 import { BRANCH_JUNCTION_LENGTH, GRAVITY } from '../src/data/tuning.ts';
@@ -24,6 +26,8 @@ const BRAKING_RADIUS = 150;
 const CORNER_EXIT = 1.3;
 /** A jump landing run-out should be at least this gentle. */
 const RUNOUT_MIN_RADIUS = 300;
+/** A beach road must sit this far above the sea so the swell never washes over it. */
+const SEA_CLEARANCE = 0.6;
 /** Narrowest walled main road (canyon, tunnel, squeeze) and narrowest shortcut. */
 const MIN_WIDTH = 18;
 /** Walled main-road sections narrower than this must be short squeezes. */
@@ -317,6 +321,26 @@ function clearance(a: Edged, b: Edged): number {
   return d - facing(a, dx, dz) - facing(b, -dx, -dz);
 }
 
+// The renderer picks a track's biome kit from its world, and the scenery must be written for
+// that kit; the sea sits at SEA_LEVEL, so a coast road below it would be drawn underwater.
+function checkWorld(t: Track, def: TrackDef, warn: string[]) {
+  let biome: string;
+  try {
+    biome = worldOfTrack(def.id).biome;
+  } catch (e) {
+    warn.push(`world: ${(e as Error).message}`);
+    return;
+  }
+  const scenery = sceneryById(def.id);
+  if (scenery.biome !== biome) warn.push(`world: scenery is ${scenery.biome} but the track's world is ${biome}`);
+  if (scenery.biome !== 'beach') return;
+  const ribbons: Ribbon[] = [t, ...t.branches.map((b) => b.ribbon)];
+  for (const r of ribbons) {
+    const low = r.samples.reduce((m, p) => (p.gap ? m : Math.min(m, p.pos.y)), Infinity);
+    if (low < SEA_LEVEL + SEA_CLEARANCE) warn.push(`world: road dips to ${low.toFixed(1)}m, under ${SEA_CLEARANCE}m above the sea`);
+  }
+}
+
 function check(def: TrackDef): string[] {
   const warn: string[] = [];
   const t = new Track(def);
@@ -335,6 +359,7 @@ function check(def: TrackDef): string[] {
   console.log(`  pickups: ${allLines} cell lines, ${allCells} cells, ${pads} boost pads (all ribbons)`);
   if (t.length < LAP_MIN || t.length > LAP_MAX) warn.push(`lap length ${fmt(t.length)} outside ${LAP_MIN}..${LAP_MAX}`);
   if (startR < RUNOUT_MIN_RADIUS) warn.push(`start line not on a straight (radius ${fmt(startR)}m)`);
+  checkWorld(t, def, warn);
 
   const J = BRANCH_JUNCTION_LENGTH;
   for (const b of t.branches) {

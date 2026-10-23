@@ -3,6 +3,7 @@ import { TRACKS, trackById } from '../../data/tracks/index.ts';
 import { MAX_QUICK_LAPS, MIN_QUICK_LAPS } from '../../game/career.ts';
 import { racePayout } from '../../game/economy.ts';
 import { button, difficultyDots, formatCredits, formatTime, h, header, stepper } from '../kit.ts';
+import { trackOutline, trackThumb } from '../trackArt.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 export function quickRaceScreen(ctx: AppCtx, initialTrack?: string, initialLaps?: number): Screen {
@@ -23,14 +24,15 @@ export function quickRaceScreen(ctx: AppCtx, initialTrack?: string, initialLaps?
     });
     card.classList.add('trackcard');
     card.dataset.track = t.id;
-    const swatch = h('span', 'trackcard__sky');
-    const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
-    swatch.style.background = `linear-gradient(180deg, ${hex(t.palette.sky)} 0%, ${hex(t.palette.horizon)} 55%, ${hex(t.palette.sand)} 56%, ${hex(t.palette.road)} 100%)`;
-    card.prepend(swatch);
+    card.prepend(trackThumb(t.id, 'trackcard__img'), trackOutline(t.id, 'trackcard__map'));
     card.append(
-      difficultyDots(t.difficulty),
+      h(
+        'span',
+        'trackcard__meta',
+        difficultyDots(t.difficulty),
+        h('span', 'trackcard__best', rec?.bestLap ? `Best ${formatTime(rec.bestLap)}` : 'No lap yet'),
+      ),
       h('span', 'trackcard__blurb', t.blurb),
-      h('span', 'trackcard__best', `Best lap ${formatTime(rec?.bestLap ?? null)}`),
     );
     return card;
   });

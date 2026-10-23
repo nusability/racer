@@ -309,7 +309,7 @@
 .racelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .racelist__row {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: auto 32px 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
@@ -327,6 +327,7 @@
   background: rgba(248, 227, 192, 0.14);
   font-size: 15px;
 }
+.racelist__img { width: 58px; height: 33px; border-radius: 6px; object-fit: cover; display: block; }
 .racelist__row.is-done { opacity: 0.6; }
 .racelist__row.is-done .racelist__n { background: var(--cyan); color: var(--ink); }
 .racelist__row.is-next { background: rgba(255, 122, 26, 0.25); box-shadow: inset 3px 0 0 var(--orange); }
@@ -335,21 +336,61 @@
 /* --- Quick race --------------------------------------------------------------------------- */
 .trackcards { flex: 1; display: flex; gap: var(--gap); min-height: 0; padding-bottom: 2px; }
 .trackcard {
-  flex: 0 0 210px;
+  position: relative;
+  flex: 0 0 250px;
+  overflow: hidden;
   align-items: flex-start;
-  justify-content: flex-start;
+  justify-content: flex-end;
   text-align: left;
-  gap: 6px;
-  padding: 10px;
+  gap: 4px;
+  padding: 10px 12px;
   border-radius: 16px;
-  background: var(--panel);
-  font-size: 19px;
+  background: var(--ink-2);
+  font-size: 21px;
   font-style: italic;
   font-weight: 900;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 }
-.trackcard__sky { align-self: stretch; height: 56px; border-radius: 10px; flex: none; }
-.trackcard__blurb { font-size: 14px; font-weight: 500; font-style: normal; letter-spacing: 0.01em; line-height: 1.2; }
-.trackcard__best { margin-top: auto; font-size: 13px; font-style: normal; color: var(--sand-dim); letter-spacing: 0.04em; }
+/* The preview fills the card; text sits on a bottom gradient so it reads over any scene. */
+.trackcard__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.trackcard::after {
+  content: '';
+  position: absolute;
+  inset: 35% 0 0 0;
+  background: linear-gradient(180deg, transparent, rgba(20, 8, 2, 0.75) 45%, rgba(20, 8, 2, 0.95));
+  z-index: 0;
+}
+.trackcard > :not(.trackcard__img) { position: relative; z-index: 1; }
+.trackcard .trackcard__map {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 52px;
+  height: 52px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(20, 8, 2, 0.45);
+  fill: none;
+  stroke: #fff;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.trackcard__map .is-branch { stroke-dasharray: 6 5; stroke-width: 4; stroke: rgba(255, 255, 255, 0.8); }
+.trackcard__meta { display: flex; align-items: center; gap: 10px; }
+.trackcard__best { font-size: 13px; font-style: normal; color: var(--sand); letter-spacing: 0.04em; }
+.trackcard__blurb {
+  font-size: 13px;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: var(--sand-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .trackcard.is-on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange), 0 8px 24px rgba(255, 122, 26, 0.35); }
 .quick__opts { display: flex; align-items: center; gap: 18px; margin-right: auto; flex-wrap: wrap; }
 .quick__pays { font-size: 17px; font-weight: 700; color: var(--gold); }
@@ -464,8 +505,7 @@
   .settings__body > *,
   .results__body > * { flex: none; }
   .trackcards { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
-  .trackcard { flex: none; display: grid; grid-template-columns: 90px 1fr; grid-template-rows: auto auto auto auto; column-gap: 12px; }
-  .trackcard__sky { grid-row: 1 / span 4; height: auto; }
+  .trackcard { flex: none; min-height: 150px; }
   .actions { justify-content: stretch; }
   .actions .btn--big { flex: 1; min-width: 0; }
   .quick__opts { width: 100%; justify-content: space-between; margin: 0; }

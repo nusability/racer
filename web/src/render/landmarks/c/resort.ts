@@ -18,9 +18,9 @@ const ARC = { z: -150, r: 200 } as const;
 const FLOOR_H = 3.4;
 const DEPTH = 15;
 const TOWERS: readonly { a0: number; a1: number; floors: number; segs: number }[] = [
-  { a0: 1.98, a1: 2.42, floors: 13, segs: 6 },
-  { a0: 1.4, a1: 1.74, floors: 19, segs: 5 },
-  { a0: 0.72, a1: 1.16, floors: 15, segs: 6 },
+  { a0: 1.98, a1: 2.42, floors: 15, segs: 6 },
+  { a0: 1.4, a1: 1.74, floors: 23, segs: 5 },
+  { a0: 0.72, a1: 1.16, floors: 18, segs: 6 },
 ];
 const TERRACE = { y: 2.2, z0: -62, z1: 8, x: 118 } as const;
 const POOLS: readonly { x: number; z: number; w: number; d: number }[] = [
@@ -48,23 +48,26 @@ function towers(kit: Kit): { roof: V3 } {
     const h = t.floors * FLOOR_H;
     const wall = vary(rng, mix(WHITE, kit.palette.sand, 0.2), 0.04);
     const rail = pastel[ti % pastel.length];
-    const segLen = ((t.a1 - t.a0) * ARC.r) / t.segs + 0.6;
-    for (let s = 0; s < t.segs; s++) {
-      const a = t.a0 + ((s + 0.5) / t.segs) * (t.a1 - t.a0);
+    // Holiday glass mirrors the sky rather than reading as office tint.
+    const glass = mix(GLASS, kit.palette.sky, 0.45);
+    const segs = kit.q(t.segs, Math.ceil(t.segs / 2));
+    const segLen = ((t.a1 - t.a0) * ARC.r) / segs + 0.6;
+    for (let s = 0; s < segs; s++) {
+      const a = t.a0 + ((s + 0.5) / segs) * (t.a1 - t.a0);
       const c = arcPoint(a, ARC.r + DEPTH / 2);
       // Frame: local −Z faces the crescent's centre (the track), +X runs along the arc.
       const f = new Frame(c[0], 0, c[2], Math.PI / 2 - a);
-      const stepped = s === 0 || s === t.segs - 1 ? FLOOR_H * 2 : 0;
+      const stepped = s === 0 || s === segs - 1 ? FLOOR_H * 2 : 0;
       kit.solid.add(box(segLen, h - stepped, DEPTH), wall, f.m());
-      kit.solid.add(box(segLen - 0.4, h - stepped - 2, 0.3), GLASS, f.m(0, 1.5, -DEPTH / 2 - 0.05));
       for (let k = 1; k < t.floors - stepped / FLOOR_H; k++) {
         const y = k * FLOOR_H;
-        kit.solid.add(box(segLen - 0.2, 0.35, 2.2), shade(WHITE, 0.92), f.m(0, y - 0.35, -DEPTH / 2 - 1.1));
-        kit.solid.add(box(segLen - 0.2, 1.0, 0.12), k % 2 ? rail : shade(rail, 0.85), f.m(0, y, -DEPTH / 2 - 2.15));
-        if (rng() < LIT_WINDOW) kit.lamp(box(segLen * (0.3 + rng() * 0.4), 1.6, 0.1), f.p((rng() - 0.5) * segLen * 0.5, y + 1.2, -DEPTH / 2 - 0.2), mix(WARM_LIGHT, 0xffffff, rng() * 0.5), 0, undefined, { depth: 0.15, freq: 0.3, phase: k });
+        // Each floor: a recessed glass band, a white slab and a pastel balcony rail.
+        kit.solid.add(box(segLen - 0.4, FLOOR_H - 1.5, 0.3), glass, f.m(0, y - FLOOR_H + 1.1, -DEPTH / 2 - 0.05));
+        kit.solid.add(box(segLen + 0.3, 0.7, 2.4), shade(WHITE, 0.96), f.m(0, y - 0.5, -DEPTH / 2 - 1.2));
+        kit.solid.add(box(segLen + 0.3, 1.0, 0.14), k % 2 ? rail : shade(rail, 0.88), f.m(0, y, -DEPTH / 2 - 2.3));
+        if (rng() < LIT_WINDOW) kit.lamp(box(segLen * (0.3 + rng() * 0.4), 1.6, 0.1), f.p((rng() - 0.5) * segLen * 0.5, y + 1.2, -DEPTH / 2 - 0.25), mix(WARM_LIGHT, 0xffffff, rng() * 0.5), 0, undefined, { depth: 0.15, freq: 0.3, phase: k });
+        if (k % 3 === 0) kit.solid.add(box(segLen - 0.6, 1.5, 0.3), glass, f.m(0, y + 0.6, DEPTH / 2 + 0.05));
       }
-      // Seaward face: plain with window rows.
-      kit.solid.add(box(segLen - 0.4, h - stepped - 4, 0.3), shade(GLASS, 1.2), f.m(0, 2, DEPTH / 2 + 0.05));
     }
     // Rooftop crown: a fin of the tower's rail colour, a beacon on top.
     const mid = (t.a0 + t.a1) / 2;

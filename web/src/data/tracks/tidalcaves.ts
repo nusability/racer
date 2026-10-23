@@ -67,9 +67,10 @@ export const tidalcaves: TrackDef = {
       points: [
         { x: 64, z: -1062, y: 5 },
         { x: 203, z: -1367, y: 9 },
-        { x: 427, z: -1686, y: 13 },
-        { x: 595, z: -1934, y: 15 },
-        { x: 714, z: -1984, y: 16 },
+        { x: 400, z: -1700, y: 13 },
+        { x: 500, z: -1890, y: 15 },
+        { x: 610, z: -1960, y: 16 },
+        { x: 700, z: -1960, y: 17 },
       ],
       features: [
         { kind: 'tunnel', from: 2.6, to: 4.4, ceiling: 11 },
