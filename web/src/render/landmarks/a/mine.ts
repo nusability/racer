@@ -281,6 +281,10 @@ export function createMine(opts: LandmarkOptions): Landmark {
   const steam = brush({ life: 7, size0: 8, size1: 40, c0: col(0xffffff), c1: mix(0xffffff, palette.horizon, 0.6), alpha: 0.6, keep: 0.6, lift: 3 });
   const roadDust = brush({ life: 3, size0: 5, size1: 20, c0: mix(palette.road, palette.sand, 0.5), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.4, keep: 0.5, lift: 0.4 });
 
+  const kLocal = digger ? digger.frame.k : 1;
+  const impact = brush({ life: 3, size0: 6 * kLocal, size1: 26 * kLocal, c0: mix(palette.rock, palette.sand, 0.5), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.75, keep: 0.4, lift: 1 });
+  // Grit pouring off the wheel while it dumps: falls fast, so it streaks down to the road.
+  const spill = brush({ life: 3.2, size0: 4 * kLocal, size1: 14 * kLocal, c0: mix(palette.rock, palette.sand, 0.4), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.7, keep: 0.9, lift: -25 * kLocal });
   const evt = mulberry32(opts.seed ^ 0x7e);
   const V = new THREE.Vector3();
   const W = new THREE.Vector3();
@@ -345,15 +349,25 @@ export function createMine(opts: LandmarkOptions): Landmark {
     rig.local(slew, 0, 48, -6, V);
     lamp(V.x, V.y, V.z, 6, red, fract(time * 0.9) < 0.4 ? boost : 0.2);
     rig.local(wheel, 0, 0, 0, W);
-    lamp(W.x, W.y + 4, W.z - 6, 10, warm, 0.6 * boost);
+    lamp(W.x, W.y, W.z, 10, warm, 0.6 * boost);
     while (lampI < glow.fixed) lamp(0, -1000, 0, 0, warm, 0);
+    if (digger) {
+      rig.local(wheel, 0, -WHEEL_R, 0, V);
+      digger.updateRocks(time, V, (at) => {
+        // Impact: a burst of grit and dust where each rock lands.
+        for (let k = 0; k < 8; k++) smoke.emit(impact, at.x, at.y + 1, at.z, (evt() - 0.5) * 30 * kLocal, (4 + evt() * 10) * kLocal, (evt() - 0.5) * 30 * kLocal);
+      });
+    }
 
     if (dt > 0) {
       acc += dt;
       while (acc > EMIT_STEP) {
         acc -= EMIT_STEP;
         // Spill from the buckets biting the face, steam off the sorting towers, road dust.
-        smoke.emit(dust, W.x + (evt() - 0.5) * 24, W.y - WHEEL_R * BWE_SCALE + evt() * 8, W.z + 10, (evt() - 0.5) * 6, -1, 3 + evt() * 4);
+        if (!digger || dumping) {
+          rig.local(wheel, (evt() - 0.5) * 10, -WHEEL_R + evt() * 6, (evt() - 0.5) * 10, V);
+          smoke.emit(digger ? spill : dust, V.x, V.y, V.z, (evt() - 0.5) * 6, -1, (evt() - 0.5) * 6);
+        }
         const i = Math.floor(evt() * towers.length);
         const p = towers[i];
         smoke.emit(steam, p.x + 5, towerH[i] + 18, p.z + 4, 0, 6 + evt() * 3, 0);
@@ -373,5 +387,8 @@ export function createMine(opts: LandmarkOptions): Landmark {
 
 /** Particle emission tick, seconds. */
 const EMIT_STEP = 0.12;
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const TIP = new THREE.Vector3();
 /** Where on the loop (radians) trucks tip their load. */
 const DUMP_ANGLE = 1.2;
