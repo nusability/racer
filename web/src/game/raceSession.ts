@@ -367,7 +367,7 @@ export class RaceSession {
         heat: r.boosting ? SESSION_BOOST_NOZZLE_HEAT : SESSION_IDLE_NOZZLE_HEAT,
         damage: r.damage,
         steer: r.steer,
-        groundColor: this.track.def.palette.sand,
+        groundColor: this.trackScene.groundColorAt(r.branch, r.s, r.x),
         airborne: r.airborne,
         crashed: r.crashed > 0,
       });
@@ -380,7 +380,7 @@ export class RaceSession {
         // Dust inherits the racer's velocity so it streams past the chase camera.
         this.tmpVel.set(0, 0, -1).applyQuaternion(v.model.root.quaternion).multiplyScalar(r.speed);
         const amount = Math.min(1, r.speed / stats.topSpeed) * (v.offroad ? SESSION_OFFROAD_DUST : 1);
-        this.effects.dust(v.model.root.position, this.tmpVel, amount, this.track.def.palette.sand);
+        this.effects.dust(v.model.root.position, this.tmpVel, amount, this.trackScene.groundColorAt(r.branch, r.s, r.x));
       }
     });
 
