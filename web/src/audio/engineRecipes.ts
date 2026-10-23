@@ -57,7 +57,7 @@ export interface EngineRecipe {
     /** Extra body cutoff, Hz. */
     cutoffHz: number;
   };
-  /** Overall trim so the six voices sit at the same loudness. */
+  /** Overall trim so the six voices sit at about the same loudness (measured offline, see screens/audio). */
   level: number;
 }
 
@@ -80,7 +80,7 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     pulse: { wave: 'sine', hz: [7, 19], depth: 0.28 },
     jet: { hz: 420, q: 0.7, gain: [0.04, 0.1] },
     boost: { pitch: 1.1, gain: 0.36, hzMul: 2.2, cutoffHz: 1100 },
-    level: 1,
+    level: 0.75,
   },
   // Sirocco: a needle with a jet. A thin, piercing scream high above everything, odd
   // harmonics only (hollow), with a hissing exhaust always on.
@@ -90,7 +90,7 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     pulse: { wave: 'sine', hz: [0.5, 0.5], depth: 0 },
     jet: { hz: 2600, q: 1.1, gain: [0.05, 0.16] },
     boost: { pitch: 1.14, gain: 0.3, hzMul: 1.5, cutoffHz: 2400 },
-    level: 0.95,
+    level: 1.1,
   },
   // Quadra Vex: four fans tuned to a major chord (harmonics 4:5:6:8), steady as a choir.
   quadfan: {
@@ -99,7 +99,7 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     pulse: { wave: 'triangle', hz: [3, 6], depth: 0.08 },
     jet: { hz: 1200, q: 0.8, gain: [0.03, 0.08] },
     boost: { pitch: 1.12, gain: 0.3, hzMul: 1.7, cutoffHz: 1600 },
-    level: 1,
+    level: 1.12,
   },
   // Twin Viper: aggressive and bright, pulsing like a wah pedal held down, faster with speed.
   swept: {
@@ -108,7 +108,7 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     pulse: { wave: 'sine', hz: [6, 15], depth: 0.55 },
     jet: { hz: 1500, q: 1, gain: [0.03, 0.09] },
     boost: { pitch: 1.13, gain: 0.32, hzMul: 1.8, cutoffHz: 2000 },
-    level: 0.95,
+    level: 1.1,
   },
   // Halo Comet: the ring drive. A smooth hum with a stack of soft harmonics that shimmer
   // between the ears (tiny detune, slow vibrato): sci-fi, never rough.
@@ -118,7 +118,7 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     pulse: { wave: 'sine', hz: [0.6, 1.4], depth: 0.1 },
     jet: { hz: 3200, q: 0.6, gain: [0.02, 0.06] },
     boost: { pitch: 1.1, gain: 0.28, hzMul: 1.4, cutoffHz: 1200 },
-    level: 1.05,
+    level: 0.85,
   },
 };
 

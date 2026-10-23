@@ -57,7 +57,8 @@ export const BIOME_BEDS: Record<Biome, BiomeBed> = {
       noise: { filter: 'bandpass', hz: 700, q: 7, gain: 1.2 },
       tone: { wave: 'triangle', hz: 110, gain: 0.03 },
       lfo: { wave: 'sine', hz: 0.09, amp: 0.5, filterHz: 420 },
-      gain: 0.3,
+      // The narrow band carries little energy: this sits it level with the other beds.
+      gain: 0.65,
       wet: 0.7,
     },
     cues: ['creak', 'tick', 'creak'],

@@ -100,8 +100,8 @@ export function playSfx(a: LiveAudio, name: OneShotName, intensity: number, st: 
       break;
     case 'crash':
       // Heavy: a sub boom, a long crunch closing down, and the hull ringing.
-      p.tone(dry, { wave: 'sine', f0: 90, f1: 24, dur: 1.2, gain: 1 }, k);
-      p.noise(dry, { filter: 'lowpass', f0: 3000, f1: 140, dur: 1.6, gain: 1 }, k);
+      p.tone(dry, { wave: 'sine', f0: 90, f1: 24, dur: 1.2, gain: 0.7 }, k);
+      p.noise(dry, { filter: 'lowpass', f0: 3000, f1: 140, dur: 1.6, gain: 0.65 }, k);
       p.noise(dry, { filter: 'bandpass', f0: 3000, f1: 800, dur: 0.6, gain: 0.35, delay: 0.1 }, k);
       for (const m of HULL_MODES) p.tone(wet, { wave: 'sine', f0: 230 * m, f1: 220 * m, dur: 0.9, gain: 0.12 / m }, k);
       break;
@@ -166,10 +166,10 @@ export function playSfx(a: LiveAudio, name: OneShotName, intensity: number, st: 
       break;
     case 'wreck':
       // Impact crunch, then the explosion's body and boom, the hull ringing, debris raining down.
-      p.noise(dry, { filter: 'bandpass', f0: 2400, f1: 260, dur: 0.35, gain: 1 }, k);
+      p.noise(dry, { filter: 'bandpass', f0: 2400, f1: 260, dur: 0.35, gain: 0.8 }, k);
       p.tone(dry, { wave: 'sawtooth', f0: 180, f1: 40, dur: 0.5, gain: 0.5, filter: 'lowpass', filterHz: 700 }, k);
-      p.noise(dry, { filter: 'lowpass', f0: 3200, f1: 90, dur: 1.9, gain: 1, delay: 0.04 }, k);
-      p.tone(dry, { wave: 'sine', f0: 78, f1: 22, dur: 1.4, gain: 1, delay: 0.03 }, k);
+      p.noise(dry, { filter: 'lowpass', f0: 3200, f1: 90, dur: 1.9, gain: 0.65, delay: 0.04 }, k);
+      p.tone(dry, { wave: 'sine', f0: 78, f1: 22, dur: 1.4, gain: 0.7, delay: 0.03 }, k);
       for (const m of HULL_MODES) p.tone(wet, { wave: 'sine', f0: 180 * m, f1: 170 * m, dur: 1.2, gain: 0.1 / m }, k);
       for (let n = 0; n < WRECK_DEBRIS; n++) {
         const at = 0.3 + Math.random() * WRECK_DEBRIS_SPREAD_S;

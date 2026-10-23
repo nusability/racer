@@ -28,6 +28,8 @@ export interface LiveAudio {
   /** Menu sounds: never slowed. */
   menu: AudioNode;
   shots: ShotPlayer;
+  /** Decorrelated stereo noise for wide ambience loops. */
+  stereoNoise: AudioBuffer;
   /** Pitch (and inverse stretch) of race sounds at the current slow-mo time scale. */
   pitch: number;
 }
@@ -90,8 +92,8 @@ export class ShotPlayer {
     const dur = s.dur / k;
     const t = ctx.currentTime + (s.delay ?? 0) / k;
     const o = ctx.createOscillator();
-    if (typeof s.wave === 'string') o.type = s.wave;
-    else o.setPeriodicWave(s.wave);
+    if (s.wave instanceof PeriodicWave) o.setPeriodicWave(s.wave);
+    else o.type = s.wave;
     o.frequency.setValueAtTime(s.f0 * k, t);
     if (s.f1 !== undefined && s.f1 !== s.f0) o.frequency.exponentialRampToValueAtTime(s.f1 * k, t + dur);
     let head: AudioNode = o;

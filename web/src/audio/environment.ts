@@ -4,7 +4,7 @@
 // fly-bys with a Doppler drop. Called once per frame; cheap: a few dozen distance checks
 // and parameter retargets, no per-frame nodes.
 
-import type { Ribbon, Track } from '../core/track.ts';
+import { makeFrame, type Ribbon, type Track } from '../core/track.ts';
 import type { RacerStyle, Vec3 } from '../core/types.ts';
 import { blockerStage, dropperItems, gustStrength, sweeperX, type CourseHazard, type DropItem, type DropStage } from '../core/hazards.ts';
 import type { TrackScenery } from '../data/tracks/scenery.ts';
@@ -106,6 +106,9 @@ export class AudioEnvironment {
   private readonly chosen: Source[] = [];
   private readonly scratchItems: DropItem[] = [];
   private readonly right = { x: 0, y: 0, z: 0 };
+  private readonly frameScratch = makeFrame();
+  /** The frame being processed, for cue placement. */
+  private currentFrame: EnvFrame | null = null;
 
   constructor(live: () => LiveAudio | null) {
     this.live = live;
@@ -179,6 +182,7 @@ export class AudioEnvironment {
     if (!this.bed) this.build(a);
     const bed = this.bed;
     if (!bed) return;
+    this.currentFrame = f;
     this.right.x = -f.forward.z;
     this.right.z = f.forward.x;
     const rl = Math.hypot(this.right.x, this.right.z) || 1;
@@ -217,7 +221,7 @@ export class AudioEnvironment {
   private build(a: LiveAudio): void {
     const scenery = this.scenery;
     if (!scenery) return;
-    const noise = stereoNoise(a);
+    const noise = a.stereoNoise;
     this.bed = new LoopSlot(a.ctx, a.race, a.send, noise);
     this.bed.assign('bed', BIOME_BEDS[scenery.biome].loop);
     this.slots = Array.from({ length: ENV_SLOTS }, () => new LoopSlot(a.ctx, a.race, a.send, noise));
@@ -266,7 +270,7 @@ export class AudioEnvironment {
       const free = this.slots.find((slot) => slot.ready());
       free?.assign(s.key, s.loop);
     }
-    const frame = this.frame;
+    const frame = this.currentFrame;
     for (const slot of this.slots) {
       const s = slot.fading ? undefined : chosen.find((c) => c.key === slot.key);
       if (!s || !frame) continue;
@@ -275,14 +279,7 @@ export class AudioEnvironment {
     }
   }
 
-  /** The frame being processed, for assignSlots' placement (set by update). */
-  private get frame(): EnvFrame | null {
-    return this.currentFrame;
-  }
-  private currentFrame: EnvFrame | null = null;
-
   private updateHazard(a: LiveAudio, s: Source, f: EnvFrame, resync: boolean): void {
-    this.currentFrame = f;
     const hz = s.hazard;
     if (!hz) return;
     const d = hz.h.def;
@@ -299,7 +296,7 @@ export class AudioEnvironment {
         else if (ct < d.cross + d.hold) stage = 'warn';
         else if (lead > 0) stage = 'lead';
         activity = stage === 'active' ? 1 : stage === 'warn' ? 0.6 : Math.max(snd.idle, lead * 0.8);
-        hz.ribbon.toWorld(hz.h.s0, sweeperX(d, time), 0, s.pos);
+        hz.ribbon.toWorld(hz.h.s0, sweeperX(d, time), 0, s.pos, this.frameScratch);
         break;
       }
       case 'blocker': {
@@ -425,15 +422,4 @@ function branchRibbon(track: Track, id: string): Ribbon {
   const b = track.branches.find((x) => x.def.id === id);
   if (!b) throw new Error(`Track ${track.def.id}: no branch "${id}" for a landmark sound`);
   return b.ribbon;
-}
-
-/** One stereo noise buffer per context, shared by every loop slot. */
-const stereoNoiseCache = new WeakMap<BaseAudioContext, AudioBuffer>();
-function stereoNoise(a: LiveAudio): AudioBuffer {
-  let b = stereoNoiseCache.get(a.ctx);
-  if (!b) {
-    b = a.stereoNoise;
-    stereoNoiseCache.set(a.ctx, b);
-  }
-  return b;
 }

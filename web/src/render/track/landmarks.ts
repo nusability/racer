@@ -61,6 +61,8 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     const foot = ribbon.toWorld(s, p.side * edge, 0);
     const y = p.afloat ? SEA_LEVEL : p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
     // A sky piece (the aurora) hangs round the viewer: it stands on no ground.
+    // A bound landmark's radius reaches its moving parts out over the course: only its base
+    // is levelled, and it claims no footprint (that would bare the ground under the road).
     if (!SKY.has(p.kind)) {
       ground.addPad(x, z, radius * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
       ground.addFootprint(x, z, radius);

@@ -4,12 +4,12 @@
 import * as THREE from 'three';
 import { Race } from '../core/race.ts';
 import { Track } from '../core/track.ts';
-import type { PlayerInput, RaceEvent, RacerState } from '../core/types.ts';
+import type { PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
-import { trackById } from '../data/tracks/index.ts';
+import { sceneryById, trackById } from '../data/tracks/index.ts';
 import { SIM_DT } from '../data/tuning.ts';
-import type { GameAudio } from '../audio/audio.ts';
+import type { AudioRival, GameAudio } from '../audio/audio.ts';
 import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
 import { ChaseCamera } from '../render/chaseCamera.ts';
 import { Effects } from '../render/effects.ts';
@@ -128,6 +128,9 @@ export class RaceSession {
   private readonly tmpPos = new THREE.Vector3();
   private readonly tmpVel = new THREE.Vector3();
   private readonly tmpDir = new THREE.Vector3();
+  /** Every entrant as the audio hears it (live positions); the player's entry stays inactive. */
+  private readonly audioRivals: AudioRival[];
+  private readonly playerStyle: RacerStyle;
   private readonly frameRight = new THREE.Vector3();
   private telemetry: TelemetryRecorder;
   /** On-screen fps / draw-call readout, when the debug flag asks for it. */
@@ -172,6 +175,9 @@ export class RaceSession {
       });
     }
     this.syncSnapshots(true);
+    this.audioRivals = request.entrants.map((e, i) => ({ position: this.views[i].model.root.position, speed: 0, style: racerById(e.racerId).visual.style, active: false }));
+    this.playerStyle = racerById(request.entrants[this.playerIndex()].racerId).visual.style;
+    ctx.audio.environment.start(this.track, sceneryById(request.trackId));
 
     const size = ctx.renderer.getSize(new THREE.Vector2());
     this.cam = new ChaseCamera(size.x / size.y);
@@ -411,6 +417,11 @@ export class RaceSession {
         }
         return;
       case 'launch':
+        if (ev.id === pid) audio.oneShot('launch');
+        return;
+      case 'falseStart':
+      case 'perfectStart':
+        if (ev.id === pid) audio.oneShot(ev.type);
         return;
       case 'offroad':
         this.views[this.indexOf(ev.id)].offroad = ev.on;
@@ -476,6 +487,8 @@ export class RaceSession {
         if (i === pi) this.ctx.audio.oneShot('boostStart');
       }
       v.wasBoosting = r.boosting;
+      this.audioRivals[i].speed = r.speed;
+      this.audioRivals[i].active = i !== pi && !v.wrecked;
       if (r.crashed <= 0 && !r.airborne && this.nearCamera(i)) {
         // Dust inherits the racer's velocity so it streams past the chase camera.
         this.tmpVel.set(0, 0, -1).applyQuaternion(v.model.root.quaternion).multiplyScalar(r.speed);
@@ -502,10 +515,16 @@ export class RaceSession {
     this.trackScene.update(this.race.time, this.cam.camera.position);
 
     if (!this.paused && !this.playerWreck) {
-      this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne });
+      const surface = this.ctx.audio.environment.surfaceAt(p.branch, p.s, p.x);
+      this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne, style: this.playerStyle, surface });
       this.ctx.audio.wind(Math.min(1, speedFrac));
       this.ctx.audio.scrapeLoop(this.scrapeLevel);
       this.scrapeLevel = 0;
+    }
+    // The world keeps sounding through the wreck cinematic; hazards run on race time.
+    if (!this.paused) {
+      this.cam.camera.getWorldDirection(this.tmpDir);
+      this.ctx.audio.environment.update({ time: this.race.time, listener: this.cam.camera.position, forward: this.tmpDir, rivals: this.audioRivals });
     }
     this.hud.update({
       speedKmh: Math.round(p.speed * MS_TO_KMH),

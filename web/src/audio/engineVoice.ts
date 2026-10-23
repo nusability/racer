@@ -26,6 +26,8 @@ const MAX_RATIO = 1.4;
 const AIR_PITCH = 1.08;
 const AIR_BODY = 0.55;
 const AIR_CUTOFF = 0.55;
+/** How far apart the two fans sit in the stereo field. */
+const FAN_PAN = 0.7;
 /** Smoothing time constant for continuous parameters, seconds. */
 const SMOOTH_S = 0.06;
 /** The cushion swells this much, for this long, when the ground under it changes. */
@@ -103,8 +105,8 @@ export class EngineVoice {
     };
     const osc = (type: OscillatorType | PeriodicWave, hz: number) => {
       const o = ctx.createOscillator();
-      if (typeof type === 'string') o.type = type;
-      else o.setPeriodicWave(type);
+      if (type instanceof PeriodicWave) o.setPeriodicWave(type);
+      else o.type = type;
       o.frequency.value = hz;
       this.sources.push(o);
       return o;
@@ -137,7 +139,7 @@ export class EngineVoice {
     this.whineR.detune.value = r.whine.spreadCents / 2;
     for (const [o, side] of [[this.whineL, -1], [this.whineR, 1]] as const) {
       const p = ctx.createStereoPanner();
-      p.pan.value = side * 0.45;
+      p.pan.value = side * FAN_PAN;
       o.connect(p).connect(this.whineGain);
     }
     const vib = osc('sine', r.whine.vibratoHz);
