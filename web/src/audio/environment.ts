@@ -62,8 +62,7 @@ interface HazardSource {
   ribbon: Ribbon;
   sound: HazardSound;
   stage: Stage;
-  /** Dropper items and their stages last frame, to hear each one land. */
-  items: DropItem[];
+  /** Dropper items' stages last frame, to hear each one land. */
   itemStages: DropStage[];
 }
 
@@ -143,7 +142,7 @@ export class AudioEnvironment {
         const bound = ribbon === track ? boundTo.get(h.def.id) : undefined;
         const sound = hazardSound(h.def.type, bound);
         const src = source(`hz:${ribbon.id}:${h.def.id}`, ribbon.toWorld((h.s0 + h.s1) / 2, 0, 0), sound.loop, HAZARD_NEAR, HAZARD_FAR, sound.idle, false);
-        src.hazard = { h, ribbon, sound, stage: 'idle', items: [], itemStages: [] };
+        src.hazard = { h, ribbon, sound, stage: 'idle', itemStages: [] };
         sources.push(src);
       }
     }

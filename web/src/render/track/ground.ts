@@ -52,8 +52,12 @@ export class Ground {
   /** Seeded noise and a prevailing wind direction, for the biome's ground shapes. */
   readonly noise: Noise2;
   readonly windDir: { x: number; z: number };
-  /** Field cell → packed (view << 20 | k) of the nearest stamped sample, or -1. */
-  private readonly field: Int32Array;
+  /**
+   * One field per ribbon view: cell → the nearest stamped sample of that ribbon, or -1. Kept
+   * per ribbon so a point by a junction is measured against every ribbon near it, not just the
+   * one closest to the cell's centre.
+   */
+  private readonly fields: Int32Array[];
   private readonly fx0: number;
   private readonly fz0: number;
   private readonly fw: number;
@@ -91,10 +95,10 @@ export class Ground {
     this.fz0 = minZ - FIELD_REACH;
     this.fw = Math.ceil((maxX - minX + 2 * FIELD_REACH) / FIELD_CELL) + 1;
     this.fh = Math.ceil((maxZ - minZ + 2 * FIELD_REACH) / FIELD_CELL) + 1;
-    this.field = new Int32Array(this.fw * this.fh).fill(-1);
-    const dist = new Float32Array(this.fw * this.fh).fill(Infinity);
     const r = Math.ceil(FIELD_REACH / FIELD_CELL);
-    views.forEach((view, vi) => {
+    this.fields = views.map((view) => {
+      const field = new Int32Array(this.fw * this.fh).fill(-1);
+      const dist = new Float32Array(this.fw * this.fh).fill(Infinity);
       const sh = view.shape;
       for (let k = 0; k < sh.gx.length; k += FIELD_STRIDE) {
         // A bridge deck is in the air: the ground under it follows the road below.
@@ -110,11 +114,12 @@ export class Ground {
             const c = j * this.fw + i;
             if (d2 < dist[c]) {
               dist[c] = d2;
-              this.field[c] = (vi << 20) | k;
+              field[c] = k;
             }
           }
         }
       }
+      return field;
     });
   }
 
@@ -137,29 +142,35 @@ export class Ground {
     const i = Math.round((x - this.fx0) / FIELD_CELL);
     const j = Math.round((z - this.fz0) / FIELD_CELL);
     if (i < 0 || j < 0 || i >= this.fw || j >= this.fh) return null;
-    const packed = this.field[j * this.fw + i];
-    if (packed < 0) return null;
-    const v = packed >> 20;
-    const view = this.views[v];
-    const { gx, gz } = view.shape;
-    const n = gx.length;
-    const closed = view.ribbon.closed;
-    const d2 = (k: number) => (gx[k] - x) ** 2 + (gz[k] - z) ** 2;
-    // Walk downhill along the ribbon from the stamped sample to the exact local minimum.
-    let k = packed & 0xfffff;
-    let best = d2(k);
-    for (const dir of [1, -1]) {
-      for (;;) {
-        const q = closed ? (k + dir + n) % n : k + dir;
-        if (q < 0 || q >= n || view.shape.bridge[q]) break;
-        const dq = d2(q);
-        if (dq >= best) break;
-        best = dq;
-        k = q;
+    let found: Nearest | null = null;
+    let foundD2 = Infinity;
+    this.fields.forEach((field, v) => {
+      const start = field[j * this.fw + i];
+      if (start < 0) return;
+      const view = this.views[v];
+      const { gx, gz } = view.shape;
+      const n = gx.length;
+      const closed = view.ribbon.closed;
+      const d2 = (k: number) => (gx[k] - x) ** 2 + (gz[k] - z) ** 2;
+      // Walk downhill along the ribbon from the stamped sample to the exact local minimum.
+      let k = start;
+      let best = d2(k);
+      for (const dir of [1, -1]) {
+        for (;;) {
+          const q = closed ? (k + dir + n) % n : k + dir;
+          if (q < 0 || q >= n || view.shape.bridge[q]) break;
+          const dq = d2(q);
+          if (dq >= best) break;
+          best = dq;
+          k = q;
+        }
       }
-    }
-    const d = (x - gx[k]) * view.shape.rx[k] + (z - gz[k]) * view.shape.rz[k];
-    return { v, k, d };
+      if (best < foundD2) {
+        foundD2 = best;
+        found = { v, k, d: (x - gx[k]) * view.shape.rx[k] + (z - gz[k]) * view.shape.rz[k] };
+      }
+    });
+    return found;
   }
 
   /**
@@ -177,29 +188,48 @@ export class Ground {
     return smp.pos.y + smp.right.y * x;
   }
 
-  /** The visible ground surface: road level by the corridor, easing out to the dunes. */
+  /**
+   * Height of the drivable surface under a ground point: the banked road plane, which the
+   * run-off continues, held at its hard-boundary height beyond it. On a banked corner the
+   * inside run-off sits well below the road's centre, and the ground must follow it down.
+   */
+  surfaceY(near: Nearest): number {
+    const smp = this.views[near.v].ribbon.samples[near.k];
+    const edge = near.d < 0 ? smp.edgeL : smp.edgeR;
+    return this.roadY(near.v, near.k, Math.sign(near.d) * Math.min(Math.abs(near.d), edge));
+  }
+
+  /**
+   * The visible ground surface: road level by the corridor, easing out to the dunes. Nothing
+   * rises inside the drivable width (road and run-off up to the hard boundary): the ease only
+   * starts past the boundary, after landmark pads, so no dune, sand bar or pad edge ever
+   * stands where a craft can fly.
+   */
   height(x: number, z: number, near: Nearest | null = this.nearest(x, z)): number {
     let h = this.natural(x, z, near);
+    for (const p of this.pads) {
+      const t = smoothstep((Math.hypot(x - p.x, z - p.z) - p.r) / PAD_FADE);
+      h = p.y + (h - p.y) * t;
+    }
     if (near) {
       const smp = this.views[near.v].ribbon.samples[near.k];
       const half = smp.width / 2;
       const out = Math.max(0, Math.abs(near.d) - half);
       const sh = this.views[near.v].shape;
+      const side = sideIndex(near.d);
+      const falls = sh.drop[side][near.k] || (sh.magnet[near.k] && !sh.loop[near.k]);
       // Beside a lagoon the ground drops to a shallow sea bed: the run-off is water. Past a
       // drop, and under a corkscrew, it falls far away; under a loop it is the loop's baseline.
       const roadSide = sh.water[near.k]
         ? SEA_LEVEL - LAGOON_DEPTH
-        : sh.drop[sideIndex(near.d)][near.k] || (sh.magnet[near.k] && !sh.loop[near.k])
+        : falls
           ? sh.gy[near.k] - DROP_FALL
           : sh.loop[near.k]
             ? sh.gy[near.k] - SHOULDER_DROP
-            : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
+            : this.surfaceY(near) - SHOULDER_DROP;
+      const flat = falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
-      h = roadSide + (h - roadSide) * smoothstep((out - SHOULDER_FLAT) / blend);
-    }
-    for (const p of this.pads) {
-      const t = smoothstep((Math.hypot(x - p.x, z - p.z) - p.r) / PAD_FADE);
-      h = p.y + (h - p.y) * t;
+      h = roadSide + (h - roadSide) * smoothstep((out - flat) / blend);
     }
     return h;
   }
@@ -219,8 +249,8 @@ export class Ground {
     if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
     // Lagoon run-off is open water over a shallow bed: nothing covers it, so don't sink it.
     if (view.shape.water[near.k] && Math.abs(near.d) > smp.width / 2 + 1) return h;
-    const tilt = view.shape.loop[near.k] ? 0 : Math.abs(smp.right.y) * smp.width * 0.5;
-    return Math.min(h, view.shape.gy[near.k] - tilt) - TERRAIN_SINK;
+    const under = view.shape.loop[near.k] ? view.shape.gy[near.k] : this.surfaceY(near);
+    return Math.min(h, under) - TERRAIN_SINK;
   }
 
   /** True when (x, z) is at least `margin` past the corridor geometry of every ribbon. */

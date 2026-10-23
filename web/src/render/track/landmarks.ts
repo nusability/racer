@@ -28,6 +28,8 @@ const CLOSE = 60;
 const FLUSH_DROP = 0.35;
 /** Sea bed under a floating landmark, so hulls and island skirts always stand in open water. */
 const AFLOAT_BED = 6;
+/** Ground levelled under a bound landmark's base, metres of radius at most. */
+const BOUND_BASE = 120;
 /** Landmarks drawn in the sky round the camera: no pad, no footprint, never culled. */
 const SKY = new Set<LandmarkKind>(['auroraSky']);
 
@@ -64,8 +66,9 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     // A bound landmark's radius reaches its moving parts out over the course: only its base
     // is levelled, and it claims no footprint (that would bare the ground under the road).
     if (!SKY.has(p.kind)) {
-      ground.addPad(x, z, radius * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
-      ground.addFootprint(x, z, radius);
+      const base = hazard ? Math.min(radius, BOUND_BASE) : radius;
+      ground.addPad(x, z, base * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
+      if (!hazard) ground.addFootprint(x, z, radius);
     }
     // Local -Z faces the course: toward it is -side along the right vector.
     const tx = -rx * p.side;

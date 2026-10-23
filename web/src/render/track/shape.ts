@@ -192,7 +192,7 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
 /** Samples of the other stretch searched either side of a crossing, metres of s. */
 const CROSS_WINDOW = 420;
 /** The bridge deck runs on this far past the lower corridor's reach. */
-const BRIDGE_MARGIN = 25;
+const BRIDGE_MARGIN = 90;
 /** A flat X opens the boundary dressing this far past the other road's hard boundary. */
 const JUNCTION_MARGIN = 30;
 /** The lower road of a flat X sits this far down, under the other road's surface. */

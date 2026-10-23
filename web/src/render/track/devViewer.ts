@@ -27,9 +27,17 @@ const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerH
 const t0 = performance.now();
 const track = new Track(def);
 applyEnvironment(scene, def.palette, quality);
+/** Terrain more than this above the road or run-off counts as a sand bank you fly through. */
+const GROUND_RISE_MAX = 0.5;
 const ts = buildTrackScene(track, quality);
 scene.add(ts.group);
 const buildMs = performance.now() - t0;
+// Ground audit: terrain must never stand in the drivable width (a craft would fly through it).
+const groundHits = ts.auditGround(GROUND_RISE_MAX);
+if (groundHits.length > 0) {
+  const h = groundHits[0];
+  console.error(`ground audit: ${groundHits.length} spots stand over ${GROUND_RISE_MAX}m above the drivable surface, first at branch ${h.branch} s=${h.s.toFixed(0)} x=${h.x} (+${h.rise.toFixed(1)}m)`);
+}
 
 let s = Number(params.get('s') ?? 0);
 let speed = Number(params.get('speed') ?? 150);
