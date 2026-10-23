@@ -21,6 +21,8 @@ const SHOULDER_DROP = 0.35;
 /** Small dunes fade out between these distances from the course, metres. */
 const DUNE_FADE_START = 260;
 const DUNE_FADE_LENGTH = 260;
+/** Past an open drop the ground lies this far below the road: a fall, not a step. */
+export const DROP_FALL = 70;
 /** Stamp every n-th sample into the nearest-sample field (refined exactly per query). */
 const FIELD_STRIDE = 3;
 /** A levelled landmark pad eases back into the dunes over this distance. */
@@ -93,9 +95,9 @@ export class Ground {
     const dist = new Float32Array(this.fw * this.fh).fill(Infinity);
     const r = Math.ceil(FIELD_REACH / FIELD_CELL);
     views.forEach((view, vi) => {
-      const s = view.ribbon.samples;
-      for (let k = 0; k < s.length; k += FIELD_STRIDE) {
-        const p = s[k].pos;
+      const sh = view.shape;
+      for (let k = 0; k < sh.gx.length; k += FIELD_STRIDE) {
+        const p = { x: sh.gx[k], z: sh.gz[k] };
         const cx = Math.round((p.x - this.fx0) / FIELD_CELL);
         const cz = Math.round((p.z - this.fz0) / FIELD_CELL);
         for (let j = Math.max(0, cz - r); j <= Math.min(this.fh - 1, cz + r); j++) {
@@ -137,10 +139,10 @@ export class Ground {
     if (packed < 0) return null;
     const v = packed >> 20;
     const view = this.views[v];
-    const s = view.ribbon.samples;
-    const n = s.length;
+    const { gx, gz } = view.shape;
+    const n = gx.length;
     const closed = view.ribbon.closed;
-    const d2 = (k: number) => (s[k].pos.x - x) ** 2 + (s[k].pos.z - z) ** 2;
+    const d2 = (k: number) => (gx[k] - x) ** 2 + (gz[k] - z) ** 2;
     // Walk downhill along the ribbon from the stamped sample to the exact local minimum.
     let k = packed & 0xfffff;
     let best = d2(k);
@@ -154,7 +156,7 @@ export class Ground {
         k = q;
       }
     }
-    const d = (x - s[k].pos.x) * view.shape.rx[k] + (z - s[k].pos.z) * view.shape.rz[k];
+    const d = (x - gx[k]) * view.shape.rx[k] + (z - gz[k]) * view.shape.rz[k];
     return { v, k, d };
   }
 
@@ -180,10 +182,16 @@ export class Ground {
       const smp = this.views[near.v].ribbon.samples[near.k];
       const half = smp.width / 2;
       const out = Math.max(0, Math.abs(near.d) - half);
-      // Beside a lagoon the ground drops to a shallow sea bed: the run-off is water.
-      const roadSide = this.views[near.v].shape.water[near.k]
+      const sh = this.views[near.v].shape;
+      // Beside a lagoon the ground drops to a shallow sea bed: the run-off is water. Past a
+      // drop, and under a corkscrew, it falls far away; under a loop it is the loop's baseline.
+      const roadSide = sh.water[near.k]
         ? SEA_LEVEL - LAGOON_DEPTH
-        : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
+        : sh.drop[sideIndex(near.d)][near.k] || (sh.magnet[near.k] && !sh.loop[near.k])
+          ? sh.gy[near.k] - DROP_FALL
+          : sh.loop[near.k]
+            ? sh.gy[near.k] - SHOULDER_DROP
+            : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
       h = roadSide + (h - roadSide) * smoothstep((out - SHOULDER_FLAT) / blend);
     }
@@ -209,7 +217,8 @@ export class Ground {
     if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
     // Lagoon run-off is open water over a shallow bed: nothing covers it, so don't sink it.
     if (view.shape.water[near.k] && Math.abs(near.d) > smp.width / 2 + 1) return h;
-    return Math.min(h, smp.pos.y - Math.abs(smp.right.y) * smp.width * 0.5) - TERRAIN_SINK;
+    const tilt = view.shape.loop[near.k] ? 0 : Math.abs(smp.right.y) * smp.width * 0.5;
+    return Math.min(h, view.shape.gy[near.k] - tilt) - TERRAIN_SINK;
   }
 
   /** True when (x, z) is at least `margin` past the corridor geometry of every ribbon. */

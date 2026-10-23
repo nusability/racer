@@ -84,6 +84,14 @@ export type TrackFeature =
   | { kind: 'slick'; from: TrackParam; to: TrackParam; grip: number }
   /** The road rolls through `turns` full barrel rolls between from and to; racers are held to it. */
   | { kind: 'corkscrew'; from: TrackParam; to: TrackParam; turns: number }
+  /**
+   * The course crosses itself here (figure-8s and knots): the stretch at `at` passes the
+   * stretch at `other`. 'bridge': one passes over the other (the author gives them at least
+   * CROSSING_BRIDGE_CLEARANCE of height difference; the renderer builds the bridge and cuts
+   * the walls below). 'flat': an X junction at road level — cross-traffic is real and racers
+   * on the two stretches can collide. Declaring it is what lets the checks accept the overlap.
+   */
+  | { kind: 'crossing'; at: TrackParam; other: TrackParam; style: 'bridge' | 'flat' }
   /** A scheduled, moving danger tied to the course (see HazardDef). */
   | { kind: 'hazard'; hazard: HazardDef };
 
@@ -393,8 +401,6 @@ export interface RacerState {
   bestLap: number | null;
   /** Steer rate command applied this step (-1..1), for presentation. */
   steer: number;
-  /** Seconds left of post-respawn invulnerability (obstacles and racers pass through). */
-  invulnerable: number;
 }
 
 export type RaceEvent =

@@ -76,6 +76,8 @@ export class Ribbon {
   readonly cells: BoostCell[] = [];
   /** Repair cells; indices are their own (separate from boost cells). */
   readonly repairCells: BoostCell[] = [];
+  /** Declared self-crossings, as s pairs on this ribbon. */
+  readonly crossings: { s: number; other: number; style: 'bridge' | 'flat' }[] = [];
   /** Scheduled hazards on this ribbon (see core/hazards.ts). */
   readonly hazards: CourseHazard[];
   readonly jumps: Jump[] = [];
@@ -266,6 +268,9 @@ export class Ribbon {
     // 6. Things standing on the road.
     for (const f of spec.features) this.applyObjects(f, rng);
     this.hazards = compileHazards(this, spec.features, spec.seed);
+    for (const f of spec.features) {
+      if (f.kind === 'crossing') this.crossings.push({ s: this.paramToS(f.at), other: this.paramToS(f.other), style: f.style });
+    }
     this.obstacles.sort((a, b) => a.s - b.s);
     this.buckets = Array.from({ length: Math.ceil(this.length / OBSTACLE_BUCKET) }, () => []);
     for (const o of this.obstacles) {
@@ -583,6 +588,7 @@ export class Ribbon {
       case 'corkscrew':
       case 'slick':
       case 'hazard':
+      case 'crossing':
         break;
     }
   }

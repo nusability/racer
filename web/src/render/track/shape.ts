@@ -59,6 +59,8 @@ export interface CorridorShape {
   gz: Float32Array;
 }
 
+/** Below this horizontal length the right vector is too steep to define the side by. */
+const HORIZONTAL_MIN = 0.3;
 /** Lateral reach of the side geometry past the edge where a drop or deck has no run-off. */
 const DECK_REACH = 3;
 /** Width over which the canyon factor ramps from low wall to full canyon, metres of height. */
@@ -156,9 +158,17 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
             : WALL_OUTER + (CANYON_OUTER - WALL_OUTER) * canyon[k];
       outer[i][k] = half + reach;
     }
+    // A corkscrew rolls the right vector up to vertical; the tangent still gives the side.
     const l = Math.hypot(smp.right.x, smp.right.z);
-    rx[k] = smp.right.x / l;
-    rz[k] = smp.right.z / l;
+    const flip = smp.up.y < 0 && !loop[k] ? -1 : 1;
+    if (l > HORIZONTAL_MIN) {
+      rx[k] = (smp.right.x / l) * flip;
+      rz[k] = (smp.right.z / l) * flip;
+    } else {
+      const t = Math.hypot(smp.tangent.x, smp.tangent.z);
+      rx[k] = -smp.tangent.z / t;
+      rz[k] = smp.tangent.x / t;
+    }
   }
   return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz };
 }

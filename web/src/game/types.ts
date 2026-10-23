@@ -1,7 +1,17 @@
 // Contracts between the menus (src/ui), the race runtime (src/game/raceSession.ts) and the
 // renderer (src/render). The race runtime is wired up in src/main.ts.
 
-import type { PlayerInput, RaceEntrant, RaceResultRow, RacerVisual } from '../core/types.ts';
+import type { PlayerInput, RaceEntrant, RaceEvent, RaceResultRow, RacerVisual } from '../core/types.ts';
+
+/** Why a racer was wrecked out of the race. */
+export type CrashReason = Extract<RaceEvent, { type: 'crash' }>['reason'];
+
+/** How the player's race ended in a wreck, for the HUD banner and the results headline. */
+export interface WreckInfo {
+  reason: CrashReason;
+  /** What hit them, player-facing, for 'obstacle' and 'hazard' (e.g. "A BOULDER", "SABLE ROOK"). */
+  cause: string | null;
+}
 
 export type RaceMode = 'championship' | 'quick';
 
@@ -22,6 +32,8 @@ export interface RaceRequest {
 export interface RaceOutcome {
   request: RaceRequest;
   results: RaceResultRow[];
+  /** Set when the player was wrecked (their row has dnf: true); null when they finished. */
+  playerWreck: WreckInfo | null;
 }
 
 /** Menus hand a race to the runtime and get the outcome back; quitting returns null. */
@@ -68,6 +80,10 @@ export interface Hud {
   flash(message: string): void;
   /** A boost cell was collected: the tank meter flashes and swells briefly. */
   pulseBoost(): void;
+  /** A repair cell was collected: the hull bar flashes green. */
+  pulseRepair(): void;
+  /** The player is wrecked: a race-over banner that stays until dispose(). */
+  wrecked(wreck: WreckInfo): void;
   dispose(): void;
 }
 
