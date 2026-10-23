@@ -94,7 +94,8 @@
 /* The race is over: a slammed-in banner, everything else steps back. */
 .hud__wreck {
   position: absolute;
-  top: 42%;
+  /* High up: the wreck itself plays out in the middle of the screen below it. */
+  top: 17%;
   left: 0;
   right: 0;
   display: none;
@@ -102,7 +103,7 @@
   align-items: center;
   text-align: center;
   padding: 10px 16px 14px;
-  background: linear-gradient(180deg, transparent, rgba(60, 4, 0, 0.82) 18%, rgba(60, 4, 0, 0.82) 82%, transparent);
+  background: linear-gradient(180deg, transparent, rgba(60, 4, 0, 0.62) 18%, rgba(60, 4, 0, 0.62) 82%, transparent);
   transform: translateY(-50%) rotate(-4deg);
 }
 .hud.is-wrecked .hud__wreck { display: flex; }
@@ -110,7 +111,7 @@
 .hud.is-wrecked .hud__flash,
 .hud.is-wrecked .hud__count { opacity: 0; }
 .hud__wreck-title {
-  font-size: clamp(44px, 10vw, 96px);
+  font-size: clamp(36px, 8vw, 80px);
   font-weight: 900;
   font-style: italic;
   line-height: 0.95;

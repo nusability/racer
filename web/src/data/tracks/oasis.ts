@@ -98,10 +98,11 @@ export const oasis: TrackDef = {
         { x: -890, z: -880, y: 0 },
       ],
       features: [
-        { kind: 'arch', at: 2.55, opening: 11, offset: -3, height: 9 },
         { kind: 'boostCells', at: 2.7, lateral: 0, count: 8, spacing: 30 },
-        { kind: 'boostPad', at: 3.5, lateral: 0 },
-        { kind: 'arch', at: 4.45, opening: 11, offset: 2, height: 9 },
+        { kind: 'boostPad', at: 2.3, lateral: 0 },
+        { kind: 'boostPad', at: 2.34, lateral: 0 },
+        { kind: 'boostPad', at: 5.6, lateral: 0 },
+        { kind: 'arch', at: 4.45, opening: 14, offset: 2, height: 9 },
       ],
     },
   ],
@@ -124,7 +125,7 @@ export const oasisScenery: TrackScenery = {
     { kind: 'fair', at: 0.6, side: 1, distance: 5 },
     { kind: 'bazaar', branch: 'bazaar', at: 3.5, side: 1, distance: -153, straddle: true },
     { kind: 'oasisTown', at: 26.0, side: -1, distance: 10, scale: 1.3 },
-    { kind: 'skyfleet', at: 40.0, side: -1, distance: 120, hazard: 'airshipwash' },
+    { kind: 'skyfleet', at: 40.0, side: -1, distance: 260, hazard: 'airshipwash' },
     { kind: 'balloons', at: 30.0, side: -1, distance: 150 },
   ],
 };

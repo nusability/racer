@@ -130,6 +130,6 @@ export const rattlesnakeScenery: TrackScenery = {
     { kind: 'mine', at: 31.4, side: -1, distance: 150, hazard: 'ore' },
     { kind: 'cliffVillage', at: 22.5, side: -1, distance: 40, scale: 1.4 },
     { kind: 'wreck', at: 44.0, side: 1, distance: 30 },
-    { kind: 'balloons', at: 9.0, side: 1, distance: 300 },
+    { kind: 'balloons', at: 47.0, side: -1, distance: 300 },
   ],
 };

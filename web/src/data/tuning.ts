@@ -115,8 +115,13 @@ export const SAND_TOP_SPEED = 0.8;
 export const SAND_DRAG = 8;
 /** Forward speed lost per m/s of sideways speed into a boundary. */
 export const BOUNDARY_SPEED_LOSS = 0.4;
-/** Grinding along a boundary, m/s². */
-export const BOUNDARY_FRICTION_DECEL = 20;
+/**
+ * Grinding along a boundary drags with the engine's own pull at this fraction of top speed, so
+ * a racer held against a wall settles there: slower, never pinned.
+ */
+export const BOUNDARY_GRIND_SPEED = 0.65;
+/** Sideways speed into a boundary that makes contact an impact rather than a press, m/s. */
+export const BOUNDARY_IMPACT_SPEED = 4;
 /** Boundary hits below this sideways speed do no damage, m/s. */
 export const BOUNDARY_DAMAGE_FREE_SPEED = 8;
 /** Damage per m/s of sideways speed above the free speed (before armour). */

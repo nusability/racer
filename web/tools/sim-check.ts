@@ -1,5 +1,6 @@
 // Runs full headless races on every track (plus a synthetic test loop) and prints how they
-// went. Fails (non-zero exit) on NaN, a racer that never finishes, or a determinism break.
+// went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, or a
+// racer pinned against a wall.
 //   npm run sim                 all tracks
 //   npm run sim -- sunpan       one track (simtest is the synthetic loop)
 //   npm run sim -- --ladder     also race six equal racers at different skills
@@ -11,6 +12,7 @@ import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
 import { minJumpSpeed } from '../src/core/jumps.ts';
+import { currentTopSpeed } from '../src/core/handling.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
 import { simFigure8, simTestTrack } from './sim-test-track.ts';
@@ -115,6 +117,35 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
   return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain };
 }
 
+/** Below this share of top speed a wall-hugging racer counts as pinned. */
+const WALL_HUG_MIN_SPEED = 0.5;
+/** ...once it has stayed there this long, seconds (an obstacle hit may dip it for a moment). */
+const WALL_HUG_MAX_SLOW = 1;
+/** Seconds after GO before the check starts: the launch is still building speed. */
+const WALL_HUG_LAUNCH = 4;
+
+/**
+ * A starter holding full steer and boost into each wall for a lap must keep sliding: a wall
+ * hurts, it never pins. Ends early at a wreck (an obstacle or an open edge on that side).
+ */
+function wallHug(track: Track, side: -1 | 1) {
+  const race = new Race(track, { laps: 1, seed: SEED, entrants: [entrant(0, racerById(STARTER), 1, true)] });
+  const v = race.vehicles[0];
+  const r = race.racers[0];
+  const push: PlayerInput = { steer: side, nudge: 0, brake: false, boost: true };
+  const maxSteps = Math.ceil(TIMEOUT_PER_LAP / SIM_DT);
+  let slow = 0;
+  for (let n = 0; race.phase !== 'finished' && r.crashed <= 0; n++) {
+    if (n > maxSteps) return fail(`${track.def.id}: wall hug (${side < 0 ? 'left' : 'right'}) timed out at s=${r.s.toFixed(0)}`);
+    race.step(push);
+    if (race.phase !== 'racing' || race.time < WALL_HUG_LAUNCH || r.airborne) continue;
+    slow = r.speed < currentTopSpeed(v.stats, r, false) * WALL_HUG_MIN_SPEED ? slow + SIM_DT : 0;
+    if (slow > WALL_HUG_MAX_SLOW) {
+      return fail(`${track.def.id}: wall hug (${side < 0 ? 'left' : 'right'}) pinned at ${r.speed.toFixed(0)} m/s, s=${r.s.toFixed(0)} x=${r.x.toFixed(1)}`);
+    }
+  }
+}
+
 function report(track: Track, res: RunResult) {
   const { race } = res;
   console.log(
@@ -160,6 +191,8 @@ for (const def of defs) {
   report(track, a);
   const b = run(track, def.laps, SEED, field, null);
   if (a.fingerprint !== b.fingerprint) fail(`${def.id}: two runs with the same seed diverged`);
+  wallHug(track, -1);
+  wallHug(track, 1);
   if (ladder) {
     console.log('  skill ladder, six equal Dustwings:');
     const starter = racerById(STARTER);
@@ -174,4 +207,4 @@ if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
   process.exit(1);
 }
-console.log('\nsim-check OK (deterministic, no NaN, everyone finished)');
+console.log('\nsim-check OK (deterministic, no NaN, everyone finished, walls never pin)');

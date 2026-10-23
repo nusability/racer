@@ -129,8 +129,8 @@ export const glacierScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
     { kind: 'glacierWall', at: 7.0, side: -1, distance: 20, hazard: 'calving' },
-    { kind: 'icePalace', at: 13.0, side: 1, distance: 80 },
+    { kind: 'icePalace', at: 13.0, side: 1, distance: 60 },
     { kind: 'iceStation', at: 48.0, side: 1, distance: 30 },
-    { kind: 'frozenFalls', at: 27.0, side: -1, distance: 150 },
+    { kind: 'frozenFalls', at: 27.0, side: -1, distance: 60 },
   ],
 };

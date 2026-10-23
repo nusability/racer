@@ -5,7 +5,7 @@ import type { HazardDef } from '../../core/types.ts';
 import { makeFrame } from '../../core/geom.ts';
 import { HAZARD_ROCK_HEIGHT } from '../../data/tuning.ts';
 import { FlatBuilder, type P3 } from './builder.ts';
-import { KERB_BLOCK } from './config.ts';
+import { KERB_BLOCK, type Quality } from './config.ts';
 import { quadFacing, type Paint } from './paint.ts';
 
 // Scheduled hazards on the road, drawn from the same race-time schedule the simulation
@@ -83,7 +83,17 @@ interface Slot {
 }
 
 /** Builds the visuals for every hazard on `ribbons`; ids in `bound` are played by a landmark. */
-export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint, glow: FlatBuilder, bound: Set<string>): ScheduledVisuals {
+export function buildScheduled(
+  ribbons: Ribbon[],
+  look: DebrisLook,
+  paint: Paint,
+  into: { glow: FlatBuilder; props: FlatBuilder },
+  bound: Set<string>,
+  quality: Quality,
+): ScheduledVisuals {
+  const { glow, props: posts } = into;
+  // Low quality keeps the rings and drops their soft shadows and the impact dust.
+  const soft = quality === 'high';
   const droppers: Slot[] = [];
   const blockers: Slot[] = [];
   const sweepers: Slot[] = [];
@@ -132,12 +142,12 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
     return v.set(p.x, p.y, p.z);
   };
   const hide = (mesh: THREE.InstancedMesh, i: number) => {
+    if (i >= mesh.count) return;
     m4.makeScale(0, 0, 0);
     mesh.setMatrixAt(i, m4);
   };
 
-  // --- Static dressing: beacon posts and painted bands for blockers and sweepers ---
-  const posts = new FlatBuilder();
+  // --- Static dressing: beacon posts (merged into the props) and painted bands ---
   const lampSpots: { r: Ribbon; s: number; x: number; kind: 'edge' | 'open' | 'cross'; slot: Slot | null }[] = [];
   for (const slot of [...blockers, ...sweepers]) {
     const { r, h } = slot;
@@ -171,13 +181,6 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
       }
     }
   }
-  const postGeo = posts.build();
-  if (postGeo) {
-    const m = new THREE.Mesh(own(postGeo), own(new THREE.MeshLambertMaterial({ vertexColors: true })));
-    m.name = 'hazardPosts';
-    m.matrixAutoUpdate = false;
-    objects.push(m);
-  }
   const lamps = inst(new THREE.IcosahedronGeometry(LAMP_SIZE, 1), new THREE.MeshBasicMaterial(), lampSpots.length, 'hazardLamps');
   lampSpots.forEach((l, i) => {
     m4.compose(at(l.r, l.s, l.x, l.kind === 'edge' ? POST_HEIGHT + LAMP_SIZE : POST_HEIGHT * 1.6), q.identity(), sc.setScalar(1));
@@ -188,10 +191,10 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
   // --- Droppers ---
   const dropCount = droppers.reduce((n, d) => n + (d.h.def as Def<'dropper'>).count, 0);
   const rings = inst(new THREE.RingGeometry(0.84, 1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }), dropCount, 'hazardRings');
-  const shadows = inst(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }), dropCount, 'hazardShadows');
+  const shadows = inst(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }), soft ? dropCount : 0, 'hazardShadows');
   const debrisMat = new THREE.MeshLambertMaterial({ color: look.color, emissive: new THREE.Color(0xff4a10).multiplyScalar(look.glow), flatShading: true });
   const debris = inst(new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
-  const dust = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: look.dust, transparent: true, opacity: 0.5, depthWrite: false }), dropCount, 'hazardDust');
+  const dust = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: look.dust, transparent: true, opacity: 0.5, depthWrite: false }), soft ? dropCount : 0, 'hazardDust');
   const items: DropItem[] = [];
 
   // --- Barriers and stand-in sweeper bodies ---
@@ -231,7 +234,7 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
           const flash = Math.sin(time * (8 + 22 * close)) > 0;
           rings.setColorAt(i, col.copy(flash ? RING_HOT : RING_COLD));
           m4.compose(at(r, it.s, it.x, RING_LIFT * 0.5), rq, sc.setScalar(d.radius * (0.4 + 0.8 * close)));
-          shadows.setMatrixAt(i, m4);
+          if (soft) shadows.setMatrixAt(i, m4);
           const left = (1 - close) * d.warn;
           // A bound landmark (the digger, the volcano) throws the falling object itself.
           if (left < FALL_TIME && !bound.has(d.id)) {
@@ -250,7 +253,7 @@ export function buildScheduled(ribbons: Ribbon[], look: DebrisLook, paint: Paint
           if (t < 1) {
             const size = d.radius * DUST_SIZE * Math.sqrt(t) * (1 - t * 0.6);
             m4.compose(at(r, it.s, it.x, size * 0.4), q.identity(), sc.set(size, size * 0.6, size));
-            dust.setMatrixAt(i, m4);
+            if (soft) dust.setMatrixAt(i, m4);
           } else hide(dust, i);
         } else {
           hide(rings, i);

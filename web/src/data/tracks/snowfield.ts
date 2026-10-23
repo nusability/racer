@@ -100,8 +100,10 @@ export const snowfield: TrackDef = {
         { x: 1990, z: 640, y: 4 },
       ],
       features: [
-        { kind: 'slick', from: 2.2, to: 7.4, grip: 0.55 },
+        { kind: 'slick', from: 3.0, to: 5.0, grip: 0.75 },
         { kind: 'boostCells', at: 2.6, lateral: 0, count: 6, spacing: 32 },
+        { kind: 'boostPad', at: 2.3, lateral: 0 },
+        { kind: 'boostPad', at: 2.34, lateral: 0 },
         { kind: 'boostPad', at: 6.5, lateral: 0 },
       ],
     },
@@ -122,6 +124,6 @@ export const snowfieldScenery: TrackScenery = {
     { kind: 'mammothHerd', at: 6.2, side: -1, distance: 40, hazard: 'herd' },
     { kind: 'iceStation', at: 15.0, side: -1, distance: 30 },
     { kind: 'skiJump', at: 37.0, side: -1, distance: 60 },
-    { kind: 'snowcatConvoy', at: 22.0, side: 1, distance: 120 },
+    { kind: 'snowcatConvoy', at: 22.0, side: 1, distance: 25 },
   ],
 };

@@ -5,10 +5,11 @@
 // reloads pages while other files are being edited. Output: public/thumbs/<id>.webp plus
 // public/thumbs/thumbs.json (which s each image used).
 //
-// `node tools/thumbs.mjs --explore <dir>` instead renders every landmark of every track from a
-// few distances into <dir> with one contact sheet per track, for choosing the SHOTS below.
+// `node tools/thumbs.mjs --explore <dir> [--track id] [--candidates file.json]` instead renders
+// evenly spaced spots (or the given candidate shots) into one contact sheet per track, for
+// choosing the SHOTS below.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -29,6 +30,11 @@ const WEBP_QUALITY = 0.85;
 const MAX_BYTES = 60 * 1024;
 /** Frames the scene gets to settle (textures, instancing) before the shot. */
 const SETTLE_MS = 1500;
+/**
+ * Where in its cycle a hazard looks most dramatic: a sweeper halfway across, a dropper's
+ * loads just landed (seconds after the warning), a blocker half raised, a gust mid-blow.
+ */
+const HAZARD_SHOW = { sweeper: 0.5, dropper: 0.4, blocker: 0.5, gust: 0.5 };
 /** Boost cells closer than this ahead of the camera are hidden for the shot. */
 const CELL_CLEAR_M = 60;
 /** Explore mode: evenly spaced candidate spots per lap. */
@@ -54,6 +60,12 @@ const SHOTS = {
   seastacks: { u: 0.25, x: 0, branch: -1, why: 'the cliff tunnel mouth' },
   tidalcaves: { u: 0.333, x: 0, branch: -1, why: 'the sea gorge' },
   volcanoisle: { u: 0.333, x: 0, branch: -1, why: 'the volcano' },
+  snowfield: { u: 0.083, x: 0, branch: -1, why: 'the herd crossing the start straight' },
+  frozenharbor: { u: 0.4, x: 0, branch: -1, why: 'the frozen harbour and icebreaker' },
+  glacier: { u: 0.5, x: 0, branch: -1, why: 'the glacier straight' },
+  icefalls: { u: 0.333, x: 0, branch: -1, why: 'switchbacks under the icefall' },
+  avalanche: { u: 0.6, x: 0, branch: -1, why: 'the avalanche slope' },
+  auroracrown: { u: 0.25, x: 0, branch: -1, why: 'aurora over the night track' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
@@ -107,24 +119,46 @@ async function preview(outDir) {
   throw new Error('vite preview did not come up');
 }
 
+/**
+ * One shot. Where: `u` (fraction of the ribbon) or `at` (control-point parameter, like the
+ * track data) plus `ds` metres. Camera: 'fly' is the chase camera at `x`; 'orbit' looks at the
+ * spot from `dist` metres at `pitch`, `yaw` radians round from straight behind (+ = towards the
+ * track's left). `hazard` pins the race clock so that hazard is mid-action.
+ */
 async function shoot(page, trackId, shot) {
   await page.goto(`http://localhost:${PORT}/track-viewer.html?track=${trackId}&pause=1&view=fly`);
   await page.addStyleTag({ content: HIDE_OVERLAY });
   await page.waitForFunction(() => 'viewer' in window);
   const s = await page.evaluate(
-    ({ shot: { u, x, branch }, clear }) => {
+    ({ shot, clear, show }) => {
       const v = window.viewer;
+      const branch = shot.branch ?? -1;
       const ribbon = v.track.ribbon(branch);
-      const target = ribbon.length * u;
+      if ((shot.u === undefined) === (shot.at === undefined)) throw new Error('A shot needs exactly one of u or at');
+      const target = ribbon.wrap((shot.u !== undefined ? ribbon.length * shot.u : ribbon.paramToS(shot.at)) + (shot.ds ?? 0));
+      let time;
+      if (shot.hazard) {
+        const hz = v.track.def.features.filter((f) => f.kind === 'hazard').map((f) => f.hazard).find((h) => h.id === shot.hazard);
+        if (!hz) throw new Error(`No hazard "${shot.hazard}" on this track`);
+        const at = { sweeper: hz.cross * show.sweeper, dropper: hz.warn + show.dropper, blocker: hz.warn + hz.up * show.blocker, gust: hz.on * show.gust }[hz.type];
+        if (at === undefined) throw new Error(`No show time for hazard type "${hz.type}"`);
+        time = (((at - hz.phase) % hz.period) + hz.period) % hz.period;
+      }
       // A boost cell just ahead of the lens fills the frame with glow; take it first.
       for (const c of ribbon.cells) {
         const ahead = ribbon.delta(target, c.s);
         if (ahead > -10 && ahead < clear) v.collect(branch, c.index);
       }
-      v.set({ branch, s: target, x, view: 'fly', paused: true });
+      const view = shot.view ?? 'fly';
+      const cam = { branch, s: target, x: shot.x ?? 0, view, paused: true, ...(time !== undefined ? { time } : {}) };
+      if (view === 'orbit') {
+        const t = ribbon.frameAt(target).tangent;
+        Object.assign(cam, { yaw: Math.atan2(-t.z, -t.x) + (shot.yaw ?? 0), pitch: shot.pitch ?? 0.3, dist: shot.dist ?? 80 });
+      }
+      v.set(cam);
       return target;
     },
-    { shot, clear: CELL_CLEAR_M },
+    { shot, clear: CELL_CLEAR_M, show: HAZARD_SHOW },
   );
   await page.waitForTimeout(SETTLE_MS);
   page.assertClean();
@@ -220,7 +254,7 @@ async function renderAll(page) {
     const webp = await toWebp(page, png);
     if (webp.length > MAX_BYTES) throw new Error(`${id}.webp is ${webp.length} bytes (> ${MAX_BYTES})`);
     writeFileSync(join(OUT_DIR, `${id}.webp`), webp);
-    manifest[id] = { image: `thumbs/${id}.webp`, s: Math.round(s), x: shot.x, branch: shot.branch, subject: shot.why, ...(await outline(page)) };
+    manifest[id] = { image: `thumbs/${id}.webp`, s: Math.round(s), x: shot.x ?? 0, branch: shot.branch ?? -1, view: shot.view ?? 'fly', subject: shot.why, ...(await outline(page)) };
     console.log(`${id}: s=${Math.round(s)} ${(webp.length / 1024).toFixed(1)} KB (${shot.why})`);
   }
   writeFileSync(MANIFEST, `${JSON.stringify(manifest)}\n`);
@@ -229,18 +263,21 @@ async function renderAll(page) {
 async function explore(page, dir) {
   mkdirSync(dir, { recursive: true });
   const only = process.argv.includes('--track') ? process.argv[process.argv.indexOf('--track') + 1] : null;
+  // --candidates <file.json>: { trackId: [shot, ...] } to compare specific framings.
+  const candidates = process.argv.includes('--candidates') ? JSON.parse(readFileSync(process.argv[process.argv.indexOf('--candidates') + 1], 'utf8')) : null;
   for (const id of await trackIds(page)) {
     if (only && id !== only) continue;
     const tiles = [];
-    for (let k = 0; k < EXPLORE_SPOTS; k++) {
-      const u = k / EXPLORE_SPOTS;
-      const { png } = await shoot(page, id, { u, x: 0, branch: -1 });
-      tiles.push({ label: `${id} u=${u.toFixed(3)}`, data: png.toString('base64') });
+    const shots = candidates ? (candidates[id] ?? []) : Array.from({ length: EXPLORE_SPOTS }, (_, k) => ({ u: k / EXPLORE_SPOTS }));
+    for (const [k, shot] of shots.entries()) {
+      const { png } = await shoot(page, id, shot);
+      tiles.push({ label: `${id} #${k} ${JSON.stringify(shot)}`, data: png.toString('base64') });
     }
+    if (!tiles.length) continue;
     const sheet = await page.context().newPage();
     await sheet.setViewportSize({ width: 1280, height: 400 });
     await sheet.setContent(
-      `<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font:16px monospace;color:#fff">${tiles
+      `<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;font:12px monospace;color:#fff;overflow-wrap:anywhere">${tiles
         .map((t) => `<div><img style="width:100%;display:block" src="data:image/png;base64,${t.data}"><div>${t.label}</div></div>`)
         .join('')}</body>`,
     );

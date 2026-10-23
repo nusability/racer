@@ -29,6 +29,8 @@ import {
   SESSION_HARD_LANDING,
   SESSION_BOOST_NOZZLE_HEAT,
   SESSION_IDLE_NOZZLE_HEAT,
+  SESSION_WRECK_BANNER_DELAY,
+  SESSION_WRECK_DEBRIS_SETTLE,
   SESSION_WRECK_LINGER,
   SESSION_WRECK_LOOK_AHEAD,
   SESSION_WRECK_ORBIT_HEIGHT,
@@ -123,6 +125,9 @@ export class RaceSession {
   /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
   private playerWreck: WreckInfo | null = null;
   private wreckFor = 0;
+  /** Simulated seconds since the wreck (slowed), which the debris flight follows. */
+  private wreckSim = 0;
+  private wreckBannerShown = false;
   private readonly wreckAt = new THREE.Vector3();
   private readonly wreckDir = new THREE.Vector3();
 
@@ -229,6 +234,8 @@ export class RaceSession {
     this.trackScene.resetCells();
     this.playerWreck = null;
     this.wreckFor = 0;
+    this.wreckSim = 0;
+    this.wreckBannerShown = false;
     this.ctx.audio.setTimeScale(1);
     this.syncSnapshots(true);
     for (const v of this.views) {
@@ -255,6 +262,12 @@ export class RaceSession {
     if (!this.paused) {
       if (this.playerWreck) {
         this.wreckFor += real;
+        this.wreckSim += dt;
+        // Let the first moments of the break-up play clean before the banner lands.
+        if (!this.wreckBannerShown && this.wreckFor >= SESSION_WRECK_BANNER_DELAY) {
+          this.wreckBannerShown = true;
+          this.hud.wrecked(this.playerWreck);
+        }
         this.ctx.audio.setTimeScale(scale);
         if (this.wreckFor >= SESSION_WRECK_LINGER) {
           this.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck });
@@ -328,7 +341,6 @@ export class RaceSession {
           if (this.wreckDir.lengthSq() === 0) this.wreckDir.set(0, 0, -1);
           this.wreckDir.normalize();
           audio.oneShot('wreck');
-          this.hud.wrecked(this.playerWreck);
         }
         return;
       }
@@ -504,13 +516,14 @@ export class RaceSession {
   }
 
   /**
-   * A slow orbit around the wreck, framed ahead of the impact point because the debris keeps
-   * flying forward.
+   * A slow orbit that follows where the debris is skidding to: the parts keep part of the
+   * craft's momentum and come to rest a few dozen metres ahead of the impact.
    */
   private wreckCamera() {
     const cam = this.cam.camera;
     const angle = SESSION_WRECK_ORBIT_START + this.wreckFor * SESSION_WRECK_ORBIT_RATE;
-    this.tmpPos.copy(this.wreckAt).addScaledVector(this.wreckDir, SESSION_WRECK_LOOK_AHEAD);
+    const run = SESSION_WRECK_LOOK_AHEAD * (1 - Math.exp(-this.wreckSim * SESSION_WRECK_DEBRIS_SETTLE));
+    this.tmpPos.copy(this.wreckAt).addScaledVector(this.wreckDir, run);
     const cx = this.wreckDir.x * Math.cos(angle) - this.wreckDir.z * Math.sin(angle);
     const cz = this.wreckDir.x * Math.sin(angle) + this.wreckDir.z * Math.cos(angle);
     cam.position.set(

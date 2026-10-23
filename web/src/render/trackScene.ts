@@ -118,6 +118,9 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   }
   const dressing = kit.dress({ corridors, ground, quality, seed: def.seed, buoys: scatter.buoys, lit: mats.plain, unlit: mats.unlit, rock: mats.rock });
   for (const o of dressing.objects) group.add(o);
+  const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
+  const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, { glow, props }, bound, quality);
+  for (const o of scheduled.objects) group.add(o);
   add(props.build(), mats.plain, 'props');
   for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
   add(boostPads(corridors.map((c) => c.ribbon)), mats.pad, 'boostPads');
@@ -128,12 +131,9 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     g.computeBoundingSphere();
     add(g, mats.sign, 'forkSigns');
   }
-  const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
-  const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, glow, bound);
-  for (const o of scheduled.objects) group.add(o);
   add(glow.build(), mats.glow, 'glow');
   const ribbons = corridors.map((c) => c.ribbon);
-  const cells = { boost: buildCells(ribbons, 'boost'), repair: buildCells(ribbons, 'repair') };
+  const cells = { boost: buildCells(ribbons, 'boost', quality), repair: buildCells(ribbons, 'repair', quality) };
   for (const f of Object.values(cells)) for (const m of f.meshes) group.add(m);
   for (const l of landmarks) group.add(l.landmark.group);
   checkLandmarkClearance(landmarks, ground);

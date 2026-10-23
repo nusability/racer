@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Track } from '../../core/track.ts';
 import type { TrackScenery } from '../../data/tracks/scenery.ts';
 import { LANDMARKS, type Landmark } from '../landmarks/index.ts';
-import type { HazardBinding } from '../landmarks/types.ts';
+import type { HazardBinding, LandmarkKind } from '../landmarks/types.ts';
 import { LANDMARK_PAD, LANDMARK_VIEW, SEA_LEVEL, type Quality } from './config.ts';
 import type { Ground } from './ground.ts';
 
@@ -28,6 +28,8 @@ const CLOSE = 60;
 const FLUSH_DROP = 0.35;
 /** Sea bed under a floating landmark, so hulls and island skirts always stand in open water. */
 const AFLOAT_BED = 6;
+/** Landmarks drawn in the sky round the camera: no pad, no footprint, never culled. */
+const SKY = new Set<LandmarkKind>(['auroraSky']);
 
 /**
  * Instantiates and positions every landmark. Must run before the corridor and terrain are
@@ -58,8 +60,11 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     // Close to the course, level the ground with the road edge so the landmark meets it flush.
     const foot = ribbon.toWorld(s, p.side * edge, 0);
     const y = p.afloat ? SEA_LEVEL : p.distance < CLOSE ? foot.y - FLUSH_DROP : ground.height(x, z);
-    ground.addPad(x, z, radius * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
-    ground.addFootprint(x, z, radius);
+    // A sky piece (the aurora) hangs round the viewer: it stands on no ground.
+    if (!SKY.has(p.kind)) {
+      ground.addPad(x, z, radius * LANDMARK_PAD, p.afloat ? SEA_LEVEL - AFLOAT_BED : y);
+      ground.addFootprint(x, z, radius);
+    }
     // Local -Z faces the course: toward it is -side along the right vector.
     const tx = -rx * p.side;
     const tz = -rz * p.side;
@@ -71,7 +76,7 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.updateMatrixWorld(true);
     toLocal.copy(g.matrixWorld).invert();
     const spot = hazard ? track.toWorld((hazard.hazard.s0 + hazard.hazard.s1) / 2, 0, 0) : null;
-    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true, hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
+    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true || SKY.has(p.kind), hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
   });
   return placed;
 }
@@ -97,7 +102,8 @@ function branchRibbon(track: Track, id: string) {
 /** Warns (dev aid) about landmarks whose footprint reaches onto some part of the course. */
 export function checkLandmarkClearance(placed: PlacedLandmark[], ground: Ground): void {
   for (const p of placed) {
-    if (p.straddle) continue;
+    // A bound landmark reaches over the road on purpose (that is its job).
+    if (p.straddle || p.hazardAt !== null) continue;
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       const x = p.centre.x + Math.cos(a) * p.radius * 0.9;
       const z = p.centre.z + Math.sin(a) * p.radius * 0.9;

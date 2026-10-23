@@ -19,7 +19,8 @@ import {
   BOOST_START_FILL,
   BOUNDARY_DAMAGE_FREE_SPEED,
   BOUNDARY_DAMAGE_PER_SPEED,
-  BOUNDARY_FRICTION_DECEL,
+  BOUNDARY_GRIND_SPEED,
+  BOUNDARY_IMPACT_SPEED,
   BOUNDARY_GRIND_DAMAGE,
   BOUNDARY_RESTITUTION,
   BOUNDARY_SPEED_LOSS,
@@ -99,6 +100,8 @@ export class Vehicle {
   pace = 1;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
+  /** The wall the racer was against last step (-1 left, 1 right, 0 none): pressing is not a new hit. */
+  private wallSide: -1 | 0 | 1 = 0;
   /** Per ribbon (branch index, -1 = main): the boost and repair cells taken this lap. */
   private readonly collected = new Map<number, Uint8Array>();
   private readonly repaired = new Map<number, Uint8Array>();
@@ -250,7 +253,10 @@ export class Vehicle {
     const maxX = ribbon.maxXAt(st.s);
     const lo = minX + RACER_HALF_WIDTH;
     const hi = maxX - RACER_HALF_WIDTH;
-    if (st.x >= lo && st.x <= hi) return false;
+    if (st.x >= lo && st.x <= hi) {
+      this.wallSide = 0;
+      return false;
+    }
     const side: -1 | 1 = st.x > hi ? 1 : -1;
     if (ribbon.dropAt(st.s, side)) {
       // Over an open edge there is nothing to push back: once the centre is past it, it falls.
@@ -262,9 +268,23 @@ export class Vehicle {
     }
     st.x = side === 1 ? hi : lo;
     const vn = Math.max(0, side * st.vx);
-    st.speed = Math.max(0, st.speed - vn * BOUNDARY_SPEED_LOSS - BOUNDARY_FRICTION_DECEL * SIM_DT);
-    this.damage(Math.max(0, vn - BOUNDARY_DAMAGE_FREE_SPEED) * BOUNDARY_DAMAGE_PER_SPEED + BOUNDARY_GRIND_DAMAGE * SIM_DT);
-    if (vn > 0) st.vx = -side * vn * BOUNDARY_RESTITUTION;
+    // Arriving hard is an impact: speed, hull and a bounce. Held against the wall (already on
+    // it, or touching too gently to count) it only grinds, a drag the engine balances at
+    // BOUNDARY_GRIND_SPEED of top speed, so pushing into a wall slides, it never pins.
+    const impact = this.wallSide !== side && vn > BOUNDARY_IMPACT_SPEED;
+    this.wallSide = side;
+    if (impact) {
+      st.speed = Math.max(0, st.speed - vn * BOUNDARY_SPEED_LOSS);
+      this.damage(Math.max(0, vn - BOUNDARY_DAMAGE_FREE_SPEED) * BOUNDARY_DAMAGE_PER_SPEED);
+      st.vx = -side * vn * BOUNDARY_RESTITUTION;
+    } else if (vn > 0) st.vx = 0;
+    const top = currentTopSpeed(this.stats, st, st.boosting) * this.pace;
+    const thrust = this.stats.accel * (st.boosting ? BOOST_ACCEL_MULT : 1);
+    if (st.speed > top * BOUNDARY_GRIND_SPEED) {
+      const grind = thrust * (1 - BOUNDARY_GRIND_SPEED ** ACCEL_TAPER_EXP);
+      st.speed = Math.max(top * BOUNDARY_GRIND_SPEED, st.speed - grind * SIM_DT);
+    }
+    this.damage(BOUNDARY_GRIND_DAMAGE * SIM_DT);
     this.drive.scrapeTime += SIM_DT;
     const intensity = clamp(SCRAPE_BASE_INTENSITY + vn / IMPACT_INTENSITY_SPEED, 0, 1);
     events.push({ type: 'scrape', id: st.id, side, intensity });
@@ -496,6 +516,7 @@ export class Vehicle {
     st.boosting = false;
     this.freeBoost = 0;
     this.touching = null;
+    this.wallSide = 0;
     if (this.offroad) {
       this.offroad = false;
       events.push({ type: 'offroad', id: st.id, on: false });

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Ribbon } from '../../core/track.ts';
+import type { Quality } from './config.ts';
 
 // Boost and repair cells: floating canisters the racer flies through, cyan ones filling the
 // boost tank and green-and-white ones patching the hull. Every cell of one kind on every
@@ -63,7 +64,7 @@ export interface CellField {
 }
 
 /** ribbons[0] is the main loop (-1 in the public API), then branches in order. */
-export function buildCells(ribbons: Ribbon[], item: CellItem): CellField {
+export function buildCells(ribbons: Ribbon[], item: CellItem, quality: Quality): CellField {
   const look = LOOK[item];
   const items: { pos: THREE.Vector3; phase: number; popAt: number; taken: boolean }[] = [];
   const lookup = new Map<string, number>();
@@ -107,8 +108,12 @@ export function buildCells(ribbons: Ribbon[], item: CellItem): CellField {
   for (let i = 0; i < items.length; i++) halo.setColorAt(i, look.halo);
   let now = 0;
 
+  // The halo shader reads instance colours, so the attribute must exist even with no cells.
+  halo.setColorAt(0, look.halo);
   const field: CellField = {
-    meshes: [core, halo],
+    // On low quality the repair cross goes without its halo: its white-on-green core already
+    // reads, and the draw call is worth more elsewhere.
+    meshes: items.length === 0 ? [] : item === 'repair' && quality === 'low' ? [core] : [core, halo],
     update(time) {
       now = time;
       for (let i = 0; i < items.length; i++) {

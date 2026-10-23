@@ -8,7 +8,7 @@ export type Quality = 'low' | 'high';
  * Corridor geometry is merged per chunk of this many metres: short enough for frustum culling
  * to bite, long enough that the three meshes per chunk stay inside the draw-call budget.
  */
-export const CHUNK_LENGTH = { low: 1000, high: 600 } as const;
+export const CHUNK_LENGTH = { low: 1400, high: 600 } as const;
 /** Chunks whose bounds are farther than the fog's far edge plus this are hidden. */
 export const CULL_MARGIN = 150;
 
