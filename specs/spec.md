@@ -49,16 +49,25 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 ## Core Game Loop
 
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
-   open world. Each world (Mirage Desert, Coral Coast; more to come) has six to eight tracks
-   and three cups, rookie → pro → elite. Winning a world's rookie cup opens the next world.
+   open world. Each world (Mirage Desert, Coral Coast, Frostline; more to come) has six to
+   eight tracks and three cups, rookie → pro → elite. Winning a world's rookie cup opens the
+   next world. Every world mixes track archetypes: a forgiving rookie loop, a technical track
+   of switchbacks, a speed track with a 2–2.7 km straight, and a gimmick track (vertical loop,
+   corkscrew, cliff roads with open edges); several are figure-8s or knots that cross
+   themselves on bridges or at flat X junctions with live cross-traffic.
 2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
    buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
    glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
    slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
-   choices with a clear way round, and only a dead-centre hit at speed wrecks you. Chasms
-   swallow a racer who leaves a jump too slow. Every track has a walled, risky shortcut that
-   saves two or three seconds. A wreck costs about three seconds and a respawn.
+   choices with a clear way round. Collisions matter: obstacles, walls and rivals cost hull,
+   and green repair cells restore some. The landmarks are part of the course: scheduled
+   hazards the player can read and dodge (a sand beast arching over and slamming across the
+   road, a digger dropping ore, ships and rotor wash pushing racers sideways, whales and
+   freighters blocking a causeway, avalanches, calving glaciers, herds crossing). Every track
+   has a walled, risky shortcut that saves two or three seconds. A WRECK ENDS THE RACE: hull
+   gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
+   a loop. The craft disintegrates in slow motion, then the results show a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades.
 
@@ -83,7 +92,11 @@ world. Winning a world's elite cup makes you that world's champion.
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 80% top speed, no damage |
-| Obstacle wreck | Hit within 15% of dead centre above 70% top speed | Anything else deflects (≤ 10% speed) |
+| Obstacle hit | Within 25% of dead centre above 60% top speed = wreck; else 0.7 × centrality × pace ÷ armour hull | Solid hits cost 35–55% hull, glancing 10–20% |
+| Walls | Impact damage above 8 m/s sideways; grinding 3% hull/s | Never slows a racer below 65% top speed |
+| Racer contact | Shoved apart by closing speed, split by armour; 0.002 hull per m/s above 8 m/s | One hit per pair per second |
+| Repair cell | +25% hull | Once per racer per lap |
+| Loop | Below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews |
 | Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1.5–3 s when driven well |
 | Boost pad / launch boost | 1.8 s / 0.9 s free boost | 7–10 pads per track, often in pairs |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
@@ -91,11 +104,12 @@ world. Winning a world's elite cup makes you that world's champion.
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
 | Laps | 2–3 per track, 9.3–10 km | Lap times 54–65 s on the starter racer |
 | Cup rival fields | Rookie: stock cars, skill 0.06–0.18; pro: upgrade 1, 0.52–0.64; elite: upgrade 1, 0.53–0.65 (eased skill²·⁸, with a 0.3 s reaction delay at skill 0) | Tight packs; same bands in every world |
-| Catch-up | Rivals 60–450 m ahead ease up to 6%; behind push up to 2% | Off once the player finishes |
-| Championship pay | 1000/750/550/400/250/150 × 1/4/12 | By place, per cup tier; cup bonus 2k/6k/25k |
-| Quick race pay | 50% of current tier | Scaled by laps |
-| Racer prices | 0 / 3k / 6.5k / 11k / 18k / 30k | Second racer after the first cup |
-| Upgrades | 5 tracks × 5 levels, 300–8500 each | Full set on one racer ≈ one Grand Prix of winnings |
+| Catch-up | Rivals behind push up to +15% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes |
+| Championship pay | 1000/750/550/400/250/150 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
+| Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s | Top glider ~28% faster than the starter |
+| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k | Upgrade costs scale with glider class |
+| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
+| Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 
 ## Platforms & Scope
 

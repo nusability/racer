@@ -46,26 +46,26 @@ const EXPLORE_SPOTS = 12;
  * when a track's layout changes.
  */
 const SHOTS = {
-  sunpan: { u: 0.083, x: 0, branch: -1, why: 'spaceport beams and blimps' },
-  rattlesnake: { u: 0.5, x: 0, branch: -1, why: 'Fang Gulch canyon' },
-  oasis: { u: 0.417, x: 0, branch: -1, why: 'the lit bore under Table Mesa' },
-  bonecanyon: { u: 0.167, x: 0, branch: -1, why: 'gorge and stone arch' },
-  glasssea: { u: 0.083, x: 0, branch: -1, why: 'dusk, balloons and the Triple Leap marking' },
-  devilsteeth: { u: 0.333, x: 0, branch: -1, why: 'the twin rock fangs' },
-  mirageh: { u: 0.25, x: 0, branch: -1, why: 'the wind farm' },
-  stormfront: { u: 0.833, x: 0, branch: -1, why: 'spaceport in the storm haze' },
-  coralcove: { u: 0.083, x: 0, branch: -1, why: 'lagoon and palms' },
-  lagoonloop: { u: 0.833, x: 0, branch: -1, why: 'beachfront towers over the lagoon' },
-  boardwalk: { u: 0.083, x: 0, branch: -1, why: 'the fairground at sunset' },
-  seastacks: { u: 0.25, x: 0, branch: -1, why: 'the cliff tunnel mouth' },
-  tidalcaves: { u: 0.333, x: 0, branch: -1, why: 'the sea gorge' },
-  volcanoisle: { u: 0.333, x: 0, branch: -1, why: 'the volcano' },
-  snowfield: { u: 0.083, x: 0, branch: -1, why: 'the herd crossing the start straight' },
-  frozenharbor: { u: 0.4, x: 0, branch: -1, why: 'the frozen harbour and icebreaker' },
-  glacier: { u: 0.5, x: 0, branch: -1, why: 'the glacier straight' },
-  icefalls: { u: 0.333, x: 0, branch: -1, why: 'switchbacks under the icefall' },
-  avalanche: { u: 0.6, x: 0, branch: -1, why: 'the avalanche slope' },
-  auroracrown: { u: 0.25, x: 0, branch: -1, why: 'aurora over the night track' },
+  sunpan: { at: 8.5, ds: -170, hazard: 'liftoff', why: 'the spaceport ship lifting off over the road' },
+  rattlesnake: { at: 31.4, x: -60, view: 'orbit', yaw: 0.3, pitch: 0.75, dist: 330, hazard: 'ore', hazardAt: 2.8, why: 'Fang Gulch and the switchbacks from above' },
+  oasis: { at: 19.4, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge crossing by the fair' },
+  bonecanyon: { at: 11, ds: -90, hazard: 'neck', why: 'the sand beast rearing over the road' },
+  glasssea: { at: 5, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'beast', why: 'the sand beast arch at dusk' },
+  devilsteeth: { at: 6.3, x: 60, view: 'orbit', yaw: -0.3, pitch: 0.75, dist: 330, hazard: 'spill', hazardAt: 2.8, why: 'the hairpins from above' },
+  mirageh: { at: 2, ds: -100, why: 'the loop under the balloons' },
+  stormfront: { at: 4.02, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge knot with a strider beyond' },
+  coralcove: { at: 9.8, view: 'orbit', yaw: -1, pitch: 0.2, dist: 120, why: 'the lagoon and the air show' },
+  lagoonloop: { at: 5.2, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'breach', why: 'the whale breaching over the lagoon road' },
+  boardwalk: { at: 25.35, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the boardwalk bridge crossing' },
+  seastacks: { at: 9.95, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'freighter', why: 'the freighter closing the channel' },
+  tidalcaves: { at: 30.5, view: 'orbit', yaw: 0.9, pitch: 0.5, dist: 150, why: 'the crossing over the surf' },
+  volcanoisle: { at: 4.4, ds: -170, hazard: 'bombs', why: 'the volcano throwing lava bombs' },
+  snowfield: { at: 6.2, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'herd', why: 'the mammoth herd crossing' },
+  frozenharbor: { at: 27.6, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'icebreaker', why: 'the icebreaker crossing the road' },
+  glacier: { at: 7, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'calving', why: 'the calving glacier slab' },
+  icefalls: { at: 46, ds: -150, why: 'the frozen falls' },
+  avalanche: { at: 24.6, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the corkscrew on stilts' },
+  auroracrown: { at: 43.2, ds: -60, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 90, why: 'the loop under the aurora' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
@@ -123,7 +123,8 @@ async function preview(outDir) {
  * One shot. Where: `u` (fraction of the ribbon) or `at` (control-point parameter, like the
  * track data) plus `ds` metres. Camera: 'fly' is the chase camera at `x`; 'orbit' looks at the
  * spot from `dist` metres at `pitch`, `yaw` radians round from straight behind (+ = towards the
- * track's left). `hazard` pins the race clock so that hazard is mid-action.
+ * track's left). `hazard` pins the race clock so that hazard is mid-action (`hazardAt` overrides
+ * the moment: seconds into its cycle).
  */
 async function shoot(page, trackId, shot) {
   await page.goto(`http://localhost:${PORT}/track-viewer.html?track=${trackId}&pause=1&view=fly`);
@@ -140,8 +141,8 @@ async function shoot(page, trackId, shot) {
       if (shot.hazard) {
         const hz = v.track.def.features.filter((f) => f.kind === 'hazard').map((f) => f.hazard).find((h) => h.id === shot.hazard);
         if (!hz) throw new Error(`No hazard "${shot.hazard}" on this track`);
-        const at = { sweeper: hz.cross * show.sweeper, dropper: hz.warn + show.dropper, blocker: hz.warn + hz.up * show.blocker, gust: hz.on * show.gust }[hz.type];
-        if (at === undefined) throw new Error(`No show time for hazard type "${hz.type}"`);
+        const at = shot.hazardAt ?? { sweeper: hz.cross * show.sweeper, dropper: hz.warn + show.dropper, blocker: hz.warn + hz.up * show.blocker, gust: hz.on * show.gust }[hz.type];
+        if (at === undefined) throw new Error(`No show time for hazard type "${hz.type}" (set hazardAt)`);
         time = (((at - hz.phase) % hz.period) + hz.period) % hz.period;
       }
       // A boost cell just ahead of the lens fills the frame with glow; take it first.
