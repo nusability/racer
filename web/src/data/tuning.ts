@@ -256,7 +256,7 @@ export const AI_PLAN_MAX_SLOPE = 0.25;
  * Share of the full steer rate a plan may count on at speed: the AI steers its target in
  * proportion to the error, so it slows as it closes in, and the hull trails the target.
  */
-export const AI_PLAN_RATE_SHARE = 0.5;
+export const AI_PLAN_RATE_SHARE = 10;
 /** Obstacles block this many seconds of travel in front of and behind them. */
 export const AI_OBSTACLE_LEAD_TIME = 0.1;
 /** The AI steers around racers it would catch within this many seconds. */

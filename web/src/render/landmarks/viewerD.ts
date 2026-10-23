@@ -2,7 +2,7 @@
 // never linked from the game). Its own snowfield, sky, fog and lights, a straight test road along
 // world X (s = world x, lateral x = world z) and, for hazard landmarks, a real course hazard bound
 // through a track-space → local mapping, so the hazard sync can be checked by eye.
-// Query: kind, quality=high|low, cam=near|far|race|orbit|top|hz, pal=day|dusk|night, seed,
+// Query: kind, quality=high|low, cam=near|far|race|orbit|top|hz|pt (p=x,y,z&l=x,y,z), pal=day|dusk|night, seed,
 // t=seconds, pause=1, ang=radians, dist, h, look, wire=1 (collision cylinders), free=1 (unbound),
 // hz=<hazard type> (alternative binding), side=-1 (landmark on the left), hide=draw names.
 
@@ -301,6 +301,14 @@ function placeCamera(t: number): void {
     const d = Number(params.get('dist') ?? FAR_DISTANCE);
     camera.position.set(c.x + Math.sin(angle) * d, FAR_HEIGHT, c.z - side * Math.cos(angle) * d);
     camera.lookAt(c.x, Number(look ?? R * 0.2), c.z);
+    return;
+  }
+  if (cam === 'pt') {
+    // Free camera: p=x,y,z looking at l=x,y,z (world).
+    const [px, py, pz] = (params.get('p') ?? '0,40,-60').split(',').map(Number);
+    const [lx, ly, lz] = (params.get('l') ?? '0,0,0').split(',').map(Number);
+    camera.position.set(px, py, pz);
+    camera.lookAt(lx, ly, lz);
     return;
   }
   if (cam === 'top') {

@@ -82,6 +82,8 @@ const HZ_S = 1000;
 const CAUSEWAY_Y = 2.5;
 const CAUSEWAY_HALF = 15;
 const CHANNEL = 160;
+/** The road sits a little proud of the embankment so they never z-fight. */
+const ROAD_LIFT = 0.2;
 /** Where each bound kind sits relative to the road (its centre's world z) and its sample hazard. */
 const HAZARDS: Partial<Record<Kind, { z: number; def: HazardDef }>> = {
   volcano: { z: 900, def: { type: 'dropper', id: 'lava', from: 0, to: 0, count: 6, radius: 3, period: 8, warn: 2.6, stay: 3, phase: 0 } },
@@ -212,7 +214,7 @@ if (hz) {
   const bank = new THREE.MeshLambertMaterial({ color: palette.sand });
   const half = (GROUND_SIZE - CHANNEL) / 4;
   for (const sx of [-1, 1]) scene.add(new THREE.Mesh(new THREE.BoxGeometry(GROUND_SIZE / 2 - CHANNEL / 2, CAUSEWAY_Y + 3, CAUSEWAY_HALF * 2 + 10).translate(sx * (half + CHANNEL / 2), (CAUSEWAY_Y + 3) / 2 - 3, 0), bank));
-  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, CAUSEWAY_HALF * 2).rotateX(-Math.PI / 2).translate(0, CAUSEWAY_Y + 0.05, 0), new THREE.MeshLambertMaterial({ color: palette.road, side: THREE.DoubleSide })));
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, CAUSEWAY_HALF * 2).rotateX(-Math.PI / 2).translate(0, CAUSEWAY_Y + ROAD_LIFT, 0), new THREE.MeshLambertMaterial({ color: palette.road, side: THREE.DoubleSide })));
 } else {
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, ROAD_WIDTH).rotateX(-Math.PI / 2).translate(0, ROAD_Y, 0), new THREE.MeshLambertMaterial({ color: palette.road })));
 }
@@ -284,8 +286,9 @@ function placeCamera(t: number): void {
   if (cam === 'race') {
     const span = R * 2 + 900;
     const x = ((t * RACE_SPEED) % span) - span / 2;
-    camera.position.set(x, RACE_HEIGHT, 0);
-    camera.lookAt(x + 100, RACE_HEIGHT - 1 + Number(params.get('look') ?? 0), 22);
+    const y = RACE_HEIGHT + (hz ? CAUSEWAY_Y : 0);
+    camera.position.set(x, y, 0);
+    camera.lookAt(x + 100, y - 1 + Number(params.get('look') ?? 0), hz ? 0 : 22);
     return;
   }
   if (cam === 'hz') {
