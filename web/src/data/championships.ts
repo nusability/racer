@@ -1,15 +1,13 @@
 // The championship ladder: three cups of four races, each with a fixed rival roster so the
 // standings tell a story (the same five names chase you all cup). Rivals get tougher per cup.
 //
-// Every field is tight: five rivals in a narrow skill band, on machines matching what the
-// player can plausibly have when they reach that cup, so the race is decided on the track
-// and a casual pilot can win the first cup on the stock Dustwing. Assumed player machines
-// (from the payouts in data/economy.ts):
-// - Dust Cup: stock Dustwing (nothing earned yet).
-// - Canyon Cup: Dustwing with engine 2, thrusters 2, steering 1 (~4,100 of the ~5,000-6,000
-//   a Dust Cup win pays).
-// - Mirage GP: Quadra Vex with engine 2, thrusters 2, steering 2 (~16,000 of the ~18,000 a
-//   Canyon Cup win pays).
+// Every field is tight: five rivals of one machine class in a narrow skill band, matching
+// what a decent player can own on reaching that tier (tools/sim-economy.ts walks the
+// economy). The same band per tier in every world: worlds scale the money, not the difficulty.
+// Assumed player machines on first entering each tier:
+// - Rookie: stock Dustwing (nothing earned yet).
+// - Pro: Scarab GT with engine 1 (bought from the rookie cup's winnings).
+// - Elite: Sirocco with engine 1, thrusters 1, steering 1.
 // tools/sim-check.ts races these assumptions against each cup.
 
 export interface RivalDef {
@@ -55,9 +53,9 @@ export const CUPS: CupDef[] = [
     trackIds: ['sunpan', 'rattlesnake', 'oasis', 'bonecanyon'],
     rivals: [
       { id: 'rasha', name: 'Rasha Dunmore', racerId: 'dustwing', skill: 0.18, upgradeLevel: 0 },
-      { id: 'kesh', name: 'Kesh Varo', racerId: 'scarab', skill: 0.15, upgradeLevel: 0 },
+      { id: 'kesh', name: 'Kesh Varo', racerId: 'dustwing', skill: 0.15, upgradeLevel: 0 },
       { id: 'imra', name: 'Imra Sol', racerId: 'dustwing', skill: 0.12, upgradeLevel: 0 },
-      { id: 'barrow', name: 'Barrow Quill', racerId: 'scarab', skill: 0.09, upgradeLevel: 0 },
+      { id: 'barrow', name: 'Barrow Quill', racerId: 'dustwing', skill: 0.09, upgradeLevel: 0 },
       { id: 'tamsin', name: 'Tamsin Hale', racerId: 'dustwing', skill: 0.06, upgradeLevel: 0 },
     ],
     unlocks: 'canyon',
@@ -70,11 +68,11 @@ export const CUPS: CupDef[] = [
     blurb: 'Tight rock, long drops. The walls start to bite.',
     trackIds: ['oasis', 'bonecanyon', 'glasssea', 'devilsteeth'],
     rivals: [
-      { id: 'vey', name: 'Vey Kadir', racerId: 'dustwing', skill: 0.64, upgradeLevel: 1 },
-      { id: 'oren', name: 'Oren Sirr', racerId: 'scarab', skill: 0.61, upgradeLevel: 1 },
-      { id: 'nyx', name: 'Nyx Ashgrove', racerId: 'dustwing', skill: 0.58, upgradeLevel: 1 },
-      { id: 'dax', name: 'Dax Marrow', racerId: 'scarab', skill: 0.55, upgradeLevel: 1 },
-      { id: 'pell', name: 'Pell Ostrava', racerId: 'dustwing', skill: 0.52, upgradeLevel: 1 },
+      { id: 'vey', name: 'Vey Kadir', racerId: 'scarab', skill: 0.7, upgradeLevel: 0 },
+      { id: 'oren', name: 'Oren Sirr', racerId: 'scarab', skill: 0.67, upgradeLevel: 0 },
+      { id: 'nyx', name: 'Nyx Ashgrove', racerId: 'scarab', skill: 0.64, upgradeLevel: 0 },
+      { id: 'dax', name: 'Dax Marrow', racerId: 'scarab', skill: 0.61, upgradeLevel: 0 },
+      { id: 'pell', name: 'Pell Ostrava', racerId: 'scarab', skill: 0.58, upgradeLevel: 0 },
     ],
     unlocks: 'mirage',
   },
@@ -86,11 +84,11 @@ export const CUPS: CupDef[] = [
     blurb: 'The fastest pilots alive, on tracks that want you dead.',
     trackIds: ['glasssea', 'devilsteeth', 'mirageh', 'stormfront'],
     rivals: [
-      { id: 'zahra', name: 'Zahra Khemet', racerId: 'quadra', skill: 0.65, upgradeLevel: 1 },
-      { id: 'sable', name: 'Sable Rook', racerId: 'sirocco', skill: 0.62, upgradeLevel: 1 },
-      { id: 'ash', name: 'Ash Vantor', racerId: 'quadra', skill: 0.59, upgradeLevel: 1 },
-      { id: 'lio', name: 'Lio Scorch', racerId: 'sirocco', skill: 0.56, upgradeLevel: 1 },
-      { id: 'merrin', name: 'Merrin Tal', racerId: 'quadra', skill: 0.53, upgradeLevel: 1 },
+      { id: 'zahra', name: 'Zahra Khemet', racerId: 'sirocco', skill: 0.7, upgradeLevel: 0 },
+      { id: 'sable', name: 'Sable Rook', racerId: 'sirocco', skill: 0.68, upgradeLevel: 0 },
+      { id: 'ash', name: 'Ash Vantor', racerId: 'sirocco', skill: 0.66, upgradeLevel: 0 },
+      { id: 'lio', name: 'Lio Scorch', racerId: 'sirocco', skill: 0.63, upgradeLevel: 0 },
+      { id: 'merrin', name: 'Merrin Tal', racerId: 'sirocco', skill: 0.61, upgradeLevel: 0 },
     ],
     unlocks: null,
   },
@@ -105,9 +103,9 @@ export const CUPS: CupDef[] = [
     trackIds: ['coralcove', 'lagoonloop', 'boardwalk', 'seastacks'],
     rivals: [
       { id: 'tide', name: 'Tide Okoro', racerId: 'dustwing', skill: 0.18, upgradeLevel: 0 },
-      { id: 'nell', name: 'Nell Spindrift', racerId: 'scarab', skill: 0.15, upgradeLevel: 0 },
+      { id: 'nell', name: 'Nell Spindrift', racerId: 'dustwing', skill: 0.15, upgradeLevel: 0 },
       { id: 'pip', name: 'Pip Saltmarsh', racerId: 'dustwing', skill: 0.12, upgradeLevel: 0 },
-      { id: 'cove', name: 'Cove Calloway', racerId: 'scarab', skill: 0.09, upgradeLevel: 0 },
+      { id: 'cove', name: 'Cove Calloway', racerId: 'dustwing', skill: 0.09, upgradeLevel: 0 },
       { id: 'marin', name: 'Marin Vash', racerId: 'dustwing', skill: 0.06, upgradeLevel: 0 },
     ],
     unlocks: 'reef',
@@ -120,11 +118,11 @@ export const CUPS: CupDef[] = [
     blurb: 'Sea stacks and sunken caves. The tide does not wait.',
     trackIds: ['lagoonloop', 'boardwalk', 'seastacks', 'tidalcaves'],
     rivals: [
-      { id: 'juno', name: 'Juno Shoal', racerId: 'dustwing', skill: 0.64, upgradeLevel: 1 },
-      { id: 'ossian', name: 'Ossian Gale', racerId: 'scarab', skill: 0.61, upgradeLevel: 1 },
-      { id: 'lark', name: 'Lark Seaborne', racerId: 'dustwing', skill: 0.58, upgradeLevel: 1 },
-      { id: 'teo', name: 'Teo Driftwood', racerId: 'scarab', skill: 0.55, upgradeLevel: 1 },
-      { id: 'coralis', name: 'Mira Coralis', racerId: 'dustwing', skill: 0.52, upgradeLevel: 1 },
+      { id: 'juno', name: 'Juno Shoal', racerId: 'scarab', skill: 0.7, upgradeLevel: 0 },
+      { id: 'ossian', name: 'Ossian Gale', racerId: 'scarab', skill: 0.67, upgradeLevel: 0 },
+      { id: 'lark', name: 'Lark Seaborne', racerId: 'scarab', skill: 0.64, upgradeLevel: 0 },
+      { id: 'teo', name: 'Teo Driftwood', racerId: 'scarab', skill: 0.61, upgradeLevel: 0 },
+      { id: 'coralis', name: 'Mira Coralis', racerId: 'scarab', skill: 0.58, upgradeLevel: 0 },
     ],
     unlocks: 'tsunami',
   },
@@ -136,11 +134,11 @@ export const CUPS: CupDef[] = [
     blurb: 'Lava tubes and blowholes, raced flat out by the best on the coast.',
     trackIds: ['seastacks', 'tidalcaves', 'boardwalk', 'volcanoisle'],
     rivals: [
-      { id: 'ishara', name: 'Ishara Wake', racerId: 'quadra', skill: 0.65, upgradeLevel: 1 },
-      { id: 'rook', name: 'Rook Maelstrom', racerId: 'sirocco', skill: 0.62, upgradeLevel: 1 },
-      { id: 'nerys', name: 'Nerys Squall', racerId: 'quadra', skill: 0.59, upgradeLevel: 1 },
-      { id: 'dagan', name: 'Dagan Undertow', racerId: 'sirocco', skill: 0.56, upgradeLevel: 1 },
-      { id: 'siren', name: 'Siren Brisk', racerId: 'quadra', skill: 0.53, upgradeLevel: 1 },
+      { id: 'ishara', name: 'Ishara Wake', racerId: 'sirocco', skill: 0.7, upgradeLevel: 0 },
+      { id: 'rook', name: 'Rook Maelstrom', racerId: 'sirocco', skill: 0.68, upgradeLevel: 0 },
+      { id: 'nerys', name: 'Nerys Squall', racerId: 'sirocco', skill: 0.66, upgradeLevel: 0 },
+      { id: 'dagan', name: 'Dagan Undertow', racerId: 'sirocco', skill: 0.63, upgradeLevel: 0 },
+      { id: 'siren', name: 'Siren Brisk', racerId: 'sirocco', skill: 0.61, upgradeLevel: 0 },
     ],
     unlocks: null,
   },

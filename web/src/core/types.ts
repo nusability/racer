@@ -59,13 +59,62 @@ export type TrackFeature =
    * `count` cells, `spacing` metres apart along s, starting at `at`, all at `lateral`.
    */
   | { kind: 'boostCells'; at: TrackParam; lateral: number; count: number; spacing: number }
+  /** Like boostCells, but each one repairs part of the hull. Rarer, often on a risky line. */
+  | { kind: 'repairCells'; at: TrackParam; lateral: number; count: number; spacing: number }
   /**
    * Hard walls at the road edge (no sand run-off) on one side or both (side omitted).
    * Canyons and tunnels already imply walls on both sides.
    */
   | { kind: 'walls'; from: TrackParam; to: TrackParam; side?: -1 | 1 }
   /** Run-off override: drivable sand beyond the road edge, metres, on one side or both. */
-  | { kind: 'runoff'; from: TrackParam; to: TrackParam; amount: number; side?: -1 | 1 };
+  | { kind: 'runoff'; from: TrackParam; to: TrackParam; amount: number; side?: -1 | 1 }
+  /**
+   * An open drop at the road edge on one side or both: no run-off and no wall. Leaving the
+   * road there means falling off the course (a wreck). Ridges, cliff roads, bridges.
+   */
+  | { kind: 'drop'; from: TrackParam; to: TrackParam; side?: -1 | 1 }
+  /**
+   * A vertical loop starting at `at` on a straight: the road climbs a full circle of
+   * `radius` metres and comes down `span` metres further along, shifted `shift` metres to
+   * the side (so the exit passes beside the entry), then eases back over `settle` metres.
+   * Racers are held to the surface inside it; too slow at the top and they fall (a wreck).
+   */
+  | { kind: 'loop'; at: TrackParam; radius: number; span: number; shift: number; settle: number }
+  /** The road rolls through `turns` full barrel rolls between from and to; racers are held to it. */
+  | { kind: 'corkscrew'; from: TrackParam; to: TrackParam; turns: number }
+  /** A scheduled, moving danger tied to the course (see HazardDef). */
+  | { kind: 'hazard'; hazard: HazardDef };
+
+/**
+ * Hazards are deterministic schedules on race time, so the simulation and the presentation
+ * (landmarks, warning shadows) always agree. Every hazard has an id that scenery can bind a
+ * landmark to (e.g. the sand beast that IS the sweeper).
+ */
+export type HazardDef =
+  /**
+   * A body crossing the road at `at` (a beast, a bucket wheel, a ship's hull, a train): it
+   * sweeps from xFrom to xTo during `cross` seconds, waits `hold` seconds, sweeps back during
+   * `cross`, and is parked off the course for the rest of each `period`. Collides like a pillar.
+   */
+  | { type: 'sweeper'; id: string; at: TrackParam; radius: number; height: number; xFrom: number; xTo: number; cross: number; hold: number; period: number; phase: number }
+  /**
+   * Objects falling onto the course between from and to: every `period`, `count` of them land
+   * on seeded spots across the drivable width. Each is telegraphed `warn` seconds before it
+   * lands (a shadow), then lies there `stay` seconds as an obstacle. Rocks from a digger,
+   * lava bombs, ice blocks, cargo.
+   */
+  | { type: 'dropper'; id: string; from: TrackParam; to: TrackParam; count: number; radius: number; period: number; warn: number; stay: number; phase: number }
+  /**
+   * A barrier that comes down across the course at `at` for `up` seconds of every `period`
+   * (a beast's body lying across the road, a closing gate), leaving an opening `opening`
+   * metres wide centred on `offset`. Telegraphed `warn` seconds before it lands.
+   */
+  | { type: 'blocker'; id: string; at: TrackParam; opening: number; offset: number; height: number; warn: number; up: number; period: number; phase: number }
+  /**
+   * A sideways push between from and to (a ship's downdraft, a jet blast, a gale) of
+   * `strength` m/s² towards +x (negative = towards −x), active `on` seconds of every `period`.
+   */
+  | { type: 'gust'; id: string; from: TrackParam; to: TrackParam; strength: number; on: number; period: number; phase: number };
 
 export interface TrackPalette {
   sky: number; // zenith colour
@@ -161,11 +210,23 @@ export interface TrackSample {
    */
   edgeL: number;
   edgeR: number;
+  /** The boundary on that side is an open drop (falling off = a wreck), not a wall. */
+  dropL: boolean;
+  dropR: boolean;
+  /** Racers are held to the surface here (loops, corkscrews): no air, no ballistic flight. */
+  magnet: boolean;
+  /**
+   * World metres per metre of s (≥ 1). Inside a loop the road is longer than the s span it
+   * occupies; the simulation advances s by speed / stretch so speeds stay true.
+   */
+  stretch: number;
 }
 
 /** A solid obstacle in track space: a vertical cylinder standing on the road. */
 export interface Obstacle {
-  kind: 'pillar' | 'archLeg' | 'boulder';
+  kind: 'pillar' | 'archLeg' | 'boulder' | 'hazard';
+  /** For kind 'hazard': the HazardDef id it belongs to (scheduled obstacles come and go). */
+  hazardId?: string;
   s: number;
   x: number;
   radius: number;
@@ -344,7 +405,7 @@ export type RaceEvent =
   | { type: 'land'; id: string; impact: number }
   | { type: 'boostPad'; id: string }
   /** A racer collected boost cell `cell` of ribbon `branch` (-1 = main loop). */
-  | { type: 'pickup'; id: string; branch: number; cell: number }
+  | { type: 'pickup'; id: string; branch: number; cell: number; item: 'boost' | 'repair' }
   /** A racer's tank ran dry while boost was held. */
   | { type: 'tankEmpty'; id: string }
   | { type: 'lap'; id: string; lap: number; time: number }

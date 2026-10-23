@@ -6,7 +6,7 @@ import type { CupDef } from '../data/championships.ts';
 import { racerById } from '../data/racers.ts';
 import { trackById } from '../data/tracks/index.ts';
 import { WORLDS, worldById, worldOfTrack } from '../data/worlds.ts';
-import { MAX_UPGRADE_LEVEL, UPGRADES, noUpgrades } from '../data/upgrades.ts';
+import { MAX_UPGRADE_LEVEL, noUpgrades, upgradeCost } from '../data/upgrades.ts';
 import type { UpgradeLevels } from '../data/upgrades.ts';
 import type { UpgradeId } from '../core/types.ts';
 import { racePayout } from './economy.ts';
@@ -123,10 +123,8 @@ export class Career {
 
   /** Cost of the next level, or null when maxed. */
   nextUpgradeCost(racerId: string, upgradeId: UpgradeId): number | null {
-    const def = UPGRADES.find((u) => u.id === upgradeId);
-    if (!def) throw new Error(`Unknown upgrade "${upgradeId}"`);
     const lvl = this.upgradeLevels(racerId)[upgradeId];
-    return lvl >= MAX_UPGRADE_LEVEL ? null : def.costs[lvl];
+    return lvl >= MAX_UPGRADE_LEVEL ? null : upgradeCost(racerById(racerId), upgradeId, lvl);
   }
 
   buyUpgrade(racerId: string, upgradeId: UpgradeId): PurchaseResult {
@@ -172,6 +170,17 @@ export class Career {
     if (!this.isWorldUnlocked(world.id)) throw new Error(`Track "${trackId}" is in locked world "${world.id}"`);
     const open = world.cupIds.map(cupById).filter((c) => this.isCupUnlocked(c.id));
     return open.reduce((a, b) => (b.tier > a.tier ? b : a));
+  }
+
+  /**
+   * The cup whose rate a quick race on this track pays: the hardest cup won in the track's
+   * world, or its rookie cup before any win there. Pay follows what was earned, never what
+   * is merely open, so a quick race can't out-earn the championship it stands in for.
+   */
+  quickRacePayCup(trackId: string): CupDef {
+    const cups = worldOfTrack(trackId).cupIds.map(cupById);
+    const won = cups.filter((c) => this.save.wonCups.includes(c.id));
+    return won.reduce((a, b) => (b.tier > a.tier ? b : a), cups[0]);
   }
 
   /** Starts (or restarts) a cup; any other run in progress is abandoned. */
@@ -256,11 +265,10 @@ export class Career {
     const track = trackById(req.trackId);
 
     const cup = req.mode === 'championship' ? this.applyCupResult(req, outcome.results) : null;
-    const tier = cup ? cupById(cup.report.cupId).tier : this.quickRaceCup(track.id).tier;
     const payout = racePayout({
       mode: req.mode,
       place: me.place,
-      tier,
+      cup: cup ? cupById(cup.report.cupId) : this.quickRacePayCup(track.id),
       laps: req.laps,
       standardLaps: track.laps,
       cupWin: cup?.won ? { firstTime: cup.wonFirstTime } : null,

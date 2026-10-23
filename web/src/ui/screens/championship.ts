@@ -19,7 +19,7 @@ const WORLD_CARD_THUMBS = 3;
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 function prizeLine(cup: CupDef): string {
-  const p = racePayout({ mode: 'championship', place: 1, tier: cup.tier, laps: 1, standardLaps: 1, cupWin: { firstTime: true } });
+  const p = racePayout({ mode: 'championship', place: 1, cup, laps: 1, standardLaps: 1, cupWin: { firstTime: true } });
   return `1st pays ${formatCredits(p.race)} · Cup win +${formatCredits(p.cupBonus)}`;
 }
 

@@ -1,21 +1,32 @@
 // Economy tunables. src/game/economy.ts is the only reader; credits are integers everywhere.
 //
-// Pacing target (a decent player averages roughly 2nd place):
-// - 2nd racer (3,000) after 3-4 Dust Cup races,
-// - the last racer (30,000) late in the Mirage Grand Prix,
-// - full upgrades on one racer (~69,000) about one Grand Prix's winnings.
+// Pacing (a decent player averages about 2nd and wins about half the cups it enters; the
+// numbers are walked through both worlds by tools/sim-economy.ts):
+// - Dust Cup, first run: a couple of level-1 upgrades, or a start on saving for glider #2.
+// - Glider #2 during the desert's pro cup; the last current glider near the end of the
+//   second world, with price headroom for gliders later worlds add.
+// - A full upgrade set on the starter costs about a whole world's winnings.
 
-/** Championship payout at tier 1 by finishing place (1st..6th). */
+/** Championship payout at tier 1 in the first world, by finishing place (1st..6th). */
 export const PLACE_PAYOUT: number[] = [1000, 750, 550, 400, 250, 150];
 
-/** Payout multiplier per cup tier (index = tier - 1). */
-export const TIER_PAYOUT_MULTIPLIER: number[] = [1, 4, 12];
+/** Payout multiplier per cup tier (index = tier - 1): harder cups pay more, without dwarfing. */
+export const TIER_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];
 
-/** Bonus for winning a cup, per tier (index = tier - 1). */
-export const CUP_WIN_BONUS: number[] = [2000, 6000, 25000];
+/**
+ * Payout multiplier per world, by its index in WORLDS (desert, coast, ...). A new world appends
+ * one entry; a world without one is an error, not a silent default.
+ */
+export const WORLD_PAYOUT_MULTIPLIER: number[] = [1, 1.6];
+
+/** Bonus for winning a cup, per tier (index = tier - 1), before the world multiplier. */
+export const CUP_WIN_BONUS: number[] = [1200, 2400, 4000];
 
 /** Fraction of the cup-win bonus paid for winning a cup already won before. */
 export const CUP_REPEAT_BONUS_FRACTION = 0.25;
 
-/** Quick race pays this fraction of a championship race at the player's tier. */
-export const QUICK_RACE_PAYOUT_FRACTION = 0.5;
+/**
+ * Quick race pays this fraction of a championship race at the hardest cup the player has won
+ * in that track's world (the rookie cup's rate before any win there).
+ */
+export const QUICK_RACE_PAYOUT_FRACTION = 0.35;

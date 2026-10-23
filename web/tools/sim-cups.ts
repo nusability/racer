@@ -3,7 +3,7 @@
 // measured rather than argued.
 
 import { TRACKS } from '../src/data/tracks/index.ts';
-import { CUPS, type CupDef } from '../src/data/championships.ts';
+import { CUPS, CUP_POINTS, PLAYER_ENTRANT_ID, type CupDef } from '../src/data/championships.ts';
 import { noUpgrades, type UpgradeLevels } from '../src/data/upgrades.ts';
 import { championshipGrid, playerEntrant } from '../src/game/opponents.ts';
 import { Track } from '../src/core/track.ts';
@@ -63,6 +63,8 @@ interface Outcome {
   /** Seconds behind the winner (0 when it won). */
   gap: number;
   crashes: number;
+  /** Championship points every entrant scored, by entrant id. */
+  points: Map<string, number>;
 }
 
 function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerId: string, levels: UpgradeLevels): Outcome {
@@ -78,19 +80,45 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   if (me.finishTime === null) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} never finished`);
   const winner = Math.min(...race.racers.map((r) => r.finishTime ?? Infinity));
   const c = race.vehicles[race.racers.indexOf(me)].drive.crashes;
-  return { place: me.place, gap: me.finishTime - winner, crashes: c.destroyed + c.fell + c.obstacle };
+  const points = new Map(race.results().map((r) => [r.id, CUP_POINTS[r.place - 1]]));
+  return { place: me.place, gap: me.finishTime - winner, crashes: c.destroyed + c.fell + c.obstacle, points };
 }
 
-/** Prints, per track, the bot's place distribution and gap to the winner, then the cup totals. */
-export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: UpgradeLevels, machine: string) {
-  console.log(`\n${cup.name} vs ${bot.name} bot on ${machine}`);
-  const all: Outcome[] = [];
-  for (const trackId of cup.trackIds) {
+export interface StudyResult {
+  /** Per track, the STUDY_RUNS outcomes (run k of every track forms championship k). */
+  byTrack: { trackId: string; runs: Outcome[] }[];
+  /** How often each place (index 0 = 1st) came up over all races. */
+  placeShare: number[];
+  /** Share of the STUDY_RUNS championships (seed k's races, real cup points) the bot won. */
+  cupWinShare: number;
+}
+
+/** Races a cup's real field against the bot on the given machine. */
+export function studyCup(cup: CupDef, bot: PlayerBot, racerId: string, levels: UpgradeLevels): StudyResult {
+  const byTrack = cup.trackIds.map((trackId) => {
     const def = TRACKS.find((t) => t.id === trackId);
     if (!def) throw new Error(`${cup.id}: unknown track ${trackId}`);
     const track = new Track(def);
-    const runs = Array.from({ length: STUDY_RUNS }, (_, k) => raceCup(cup, track, STUDY_SEED + k, bot, racerId, levels));
-    all.push(...runs);
+    return { trackId, runs: Array.from({ length: STUDY_RUNS }, (_, k) => raceCup(cup, track, STUDY_SEED + k, bot, racerId, levels)) };
+  });
+  const all = byTrack.flatMap((t) => t.runs);
+  const placeShare = CUP_POINTS.map((_, i) => all.filter((o) => o.place === i + 1).length / all.length);
+  let cupWins = 0;
+  for (let k = 0; k < STUDY_RUNS; k++) {
+    const totals = new Map<string, number>();
+    for (const t of byTrack) for (const [id, pts] of t.runs[k].points) totals.set(id, (totals.get(id) ?? 0) + pts);
+    const mine = totals.get(PLAYER_ENTRANT_ID) ?? 0;
+    // A tie goes against the player: the standings tiebreak is the last race, not modelled here.
+    if ([...totals].every(([id, pts]) => id === PLAYER_ENTRANT_ID || pts < mine)) cupWins++;
+  }
+  return { byTrack, placeShare, cupWinShare: cupWins / STUDY_RUNS };
+}
+
+/** Prints, per track, the bot's place distribution and gap to the winner, then the cup totals. */
+export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: UpgradeLevels, machine: string): StudyResult {
+  console.log(`\n${cup.name} vs ${bot.name} bot on ${machine}`);
+  const res = studyCup(cup, bot, racerId, levels);
+  for (const { trackId, runs } of res.byTrack) {
     const gaps = runs.map((r) => r.gap).sort((a, b) => a - b);
     console.log(
       `  ${trackId.padEnd(12)} places ${runs.map((r) => r.place).join(',')}  ` +
@@ -98,23 +126,25 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
         `crashes/race ${(runs.reduce((a, r) => a + r.crashes, 0) / runs.length).toFixed(1)}`,
     );
   }
+  const all = res.byTrack.flatMap((t) => t.runs);
   const wins = all.filter((o) => o.place === 1).length;
   const within3 = all.filter((o) => o.gap <= 3).length;
   const counts = [1, 2, 3, 4, 5, 6].map((p) => `${p}:${all.filter((o) => o.place === p).length}`).join(' ');
   console.log(
-    `  total: wins ${wins}/${all.length}, within 3 s of 1st ${within3}/${all.length}, ` +
-      `mean place ${(all.reduce((a, o) => a + o.place, 0) / all.length).toFixed(1)}, places ${counts}`,
+    `  total: race wins ${wins}/${all.length}, cups won ${Math.round(res.cupWinShare * STUDY_RUNS)}/${STUDY_RUNS}, ` +
+      `within 3 s of 1st ${within3}/${all.length}, mean place ${(all.reduce((a, o) => a + o.place, 0) / all.length).toFixed(1)}, places ${counts}`,
   );
+  return res;
 }
 
 /**
  * The player machine each cup tier assumes (see the header of data/championships.ts). Every
  * world's rookie/pro/elite cups share their tier's rival band, so they share this too.
  */
-const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeLevels>; label: string }> = {
+export const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeLevels>; label: string }> = {
   1: { racerId: 'dustwing', levels: {}, label: 'stock Dustwing' },
-  2: { racerId: 'dustwing', levels: { engine: 2, thrusters: 2, steering: 1 }, label: 'Dustwing E2 T2 S1' },
-  3: { racerId: 'quadra', levels: { engine: 2, thrusters: 2, steering: 2 }, label: 'Quadra Vex E2 T2 S2' },
+  2: { racerId: 'scarab', levels: { engine: 1 }, label: 'Scarab GT E1' },
+  3: { racerId: 'sirocco', levels: { engine: 1, thrusters: 1, steering: 1 }, label: 'Sirocco E1 T1 S1' },
 };
 
 export function allCupStudies() {

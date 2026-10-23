@@ -296,3 +296,12 @@ export const AI_SHORTCUT_LOOK_TIME = 2;
 export const BRANCH_JUNCTION_LENGTH = 60;
 /** Distance over which the main loop's run-off narrows to meet a branch junction and widens after it. */
 export const BRANCH_EDGE_FADE = 150;
+
+// --- Hazards (src/core/hazards.ts) ---
+/** Seconds between successive objects of one dropper landing. */
+export const HAZARD_DROP_STAGGER = 0.5;
+/** A dropped object's height as a multiple of its radius. */
+export const HAZARD_ROCK_HEIGHT = 1.6;
+/** A blocker's bar is made of cylinders this big, this far apart across the course. */
+export const HAZARD_BAR_RADIUS = 2.2;
+export const HAZARD_BAR_SPACING = 3.5;

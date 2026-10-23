@@ -16,6 +16,8 @@ import type {
   Vec3,
 } from './types.ts';
 import { catmullRom, cross, makeFrame, normalize, smoothstep, vec3, type Frame } from './geom.ts';
+import { shapeCourse } from './courseShapes.ts';
+import { compileHazards, type CourseHazard } from './hazards.ts';
 import { mulberry32, range } from './rng.ts';
 import {
   ARCH_LEG_MIN_RADIUS,
@@ -72,6 +74,10 @@ export class Ribbon {
   readonly arches: Arch[] = [];
   readonly boostPads: BoostPad[] = [];
   readonly cells: BoostCell[] = [];
+  /** Repair cells; indices are their own (separate from boost cells). */
+  readonly repairCells: BoostCell[] = [];
+  /** Scheduled hazards on this ribbon (see core/hazards.ts). */
+  readonly hazards: CourseHazard[];
   readonly jumps: Jump[] = [];
   /** Arc length at each control point (for a closed loop, plus the full length at the end). */
   private readonly pointS: number[];
@@ -170,6 +176,15 @@ export class Ribbon {
     const runR = new Array<number>(ns).fill(spec.runoff);
     const rng = mulberry32(spec.seed);
     for (const f of spec.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight, runL, runR);
+    for (let k = 0; k < ns; k++) pos[k].y = elev[k];
+    const shape = shapeCourse(
+      { paramToS: (u) => this.paramToS(u), forRange: (a, b, fn) => this.forRange(a, b, fn), nb: (k, d) => this.nb(k, d) },
+      spec.features,
+      pos,
+      runL,
+      runR,
+    );
+    for (let k = 0; k < ns; k++) elev[k] = pos[k].y;
     const edgeL = width.map((w, k) => w / 2 + runL[k]);
     const edgeR = width.map((w, k) => w / 2 + runR[k]);
     for (const o of edgeOverrides) {
@@ -208,13 +223,23 @@ export class Ribbon {
       const p = vec3(pos[k].x, elev[k], pos[k].z);
       const a = pos[this.nb(k, -1)];
       const b = pos[this.nb(k, 1)];
-      // Horizontal run of the central difference with the gap-safe slope for the rise.
-      const run = Math.hypot(b.x - a.x, b.z - a.z);
-      const t = normalize(vec3(b.x - a.x, slope[k] * run, b.z - a.z));
-      const r0 = normalize(cross(t, worldUp));
+      const loopRight = shape.loopRight[k];
+      let t: Vec3;
+      let r0: Vec3;
+      if (loopRight) {
+        t = normalize(vec3(b.x - a.x, b.y - a.y, b.z - a.z));
+        const along = t.x * loopRight.x + t.y * loopRight.y + t.z * loopRight.z;
+        r0 = normalize(vec3(loopRight.x - t.x * along, loopRight.y - t.y * along, loopRight.z - t.z * along));
+      } else {
+        // Horizontal run of the central difference with the gap-safe slope for the rise.
+        const run = Math.hypot(b.x - a.x, b.z - a.z);
+        t = normalize(vec3(b.x - a.x, slope[k] * run, b.z - a.z));
+        r0 = normalize(cross(t, worldUp));
+      }
       const u0 = cross(r0, t);
-      const c = Math.cos(bank[k]);
-      const sn = Math.sin(bank[k]);
+      const roll = bank[k] + shape.bankAdd[k];
+      const c = Math.cos(roll);
+      const sn = Math.sin(roll);
       this.samples.push({
         s: Math.min(total, k * this.step),
         pos: p,
@@ -224,17 +249,22 @@ export class Ribbon {
         width: width[k],
         curvature: curvature[k],
         slope: slope[k],
-        bank: bank[k],
+        bank: roll,
         gap: gap[k],
         ceiling: ceiling[k],
         wallHeight: wallHeight[k],
         edgeL: edgeL[k],
         edgeR: edgeR[k],
+        dropL: shape.dropL[k],
+        dropR: shape.dropR[k],
+        magnet: shape.magnet[k],
+        stretch: shape.stretch[k],
       });
     }
 
     // 6. Things standing on the road.
     for (const f of spec.features) this.applyObjects(f, rng);
+    this.hazards = compileHazards(this, spec.features, spec.seed);
     this.obstacles.sort((a, b) => a.s - b.s);
     this.buckets = Array.from({ length: Math.ceil(this.length / OBSTACLE_BUCKET) }, () => []);
     for (const o of this.obstacles) {
@@ -335,6 +365,19 @@ export class Ribbon {
   }
   ceilingAt(s: number): number {
     return this.sampleAt(s).ceiling;
+  }
+  /** Racers are held to the surface here (loops, corkscrews). */
+  isMagnet(s: number): boolean {
+    return this.sampleAt(s).magnet;
+  }
+  /** World metres per metre of s (inside a loop > 1). */
+  stretchAt(s: number): number {
+    return this.sampleAt(s).stretch;
+  }
+  /** True when leaving the course on that side (−1 left, 1 right) means falling off. */
+  dropAt(s: number, side: -1 | 1): boolean {
+    const smp = this.sampleAt(s);
+    return side < 0 ? smp.dropL : smp.dropR;
   }
   /** Lowest a racer can fall inside a chasm before it counts as a crash. */
   chasmFloorAt(s: number): number {
@@ -529,6 +572,11 @@ export class Ribbon {
       case 'boulders':
       case 'boostPad':
       case 'boostCells':
+      case 'repairCells':
+      case 'drop':
+      case 'loop':
+      case 'corkscrew':
+      case 'hazard':
         break;
     }
   }
@@ -570,10 +618,12 @@ export class Ribbon {
         this.boostPads.push({ s, x: f.lateral, length: BOOST_PAD_LENGTH, width: BOOST_PAD_WIDTH });
         break;
       }
-      case 'boostCells': {
+      case 'boostCells':
+      case 'repairCells': {
+        const list = f.kind === 'boostCells' ? this.cells : this.repairCells;
         const s0 = this.paramToS(f.at);
         for (let i = 0; i < f.count; i++) {
-          this.cells.push({ index: this.cells.length, s: this.wrap(s0 + i * f.spacing), x: f.lateral });
+          list.push({ index: list.length, s: this.wrap(s0 + i * f.spacing), x: f.lateral });
         }
         break;
       }

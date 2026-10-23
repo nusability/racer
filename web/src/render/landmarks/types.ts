@@ -3,6 +3,7 @@
 
 import type * as THREE from 'three';
 import type { TrackPalette } from '../../core/types.ts';
+import type { CourseHazard } from '../../core/hazards.ts';
 
 export type LandmarkKind =
   // Set A: machines and spectacle
@@ -34,11 +35,24 @@ export type LandmarkKind =
   | 'beachParty'
   | 'airshow';
 
+/**
+ * A landmark that IS part of the course (the sand beast that crosses the road, the digger
+ * dropping rocks on it, the ship whose downdraft pushes racers): it animates from the same
+ * schedule the simulation collides with. Read the state with the functions in core/hazards.ts.
+ */
+export interface HazardBinding {
+  hazard: CourseHazard;
+  /** Track space (main-loop s, x, height y above the road) → this landmark's local space. */
+  toLocal(s: number, x: number, y: number, out: THREE.Vector3): THREE.Vector3;
+}
+
 export interface LandmarkOptions {
   /** Seeds every layout choice, so a placement looks the same on every visit. */
   seed: number;
   palette: TrackPalette;
   quality: 'low' | 'high';
+  /** Set when the placement binds this landmark to a course hazard. */
+  hazard?: HazardBinding;
 }
 
 export interface Landmark {
@@ -49,7 +63,10 @@ export interface Landmark {
   group: THREE.Group;
   /** Horizontal radius it occupies on the ground, metres (for spacing and culling). */
   radius: number;
-  /** Animate. Called every frame while the landmark is within view distance. */
+  /**
+   * Animate. Called every frame while the landmark is within view distance. `time` is race
+   * time (the hazard schedules' clock), so a bound landmark stays in step with collisions.
+   */
   update(time: number, dt: number): void;
   dispose(): void;
 }

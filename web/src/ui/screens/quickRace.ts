@@ -104,7 +104,7 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
       return;
     }
     raceBtn.disabled = false;
-    const win = racePayout({ mode: 'quick', place: 1, tier: career.quickRaceCup(t.id).tier, laps, standardLaps: t.laps, cupWin: null });
+    const win = racePayout({ mode: 'quick', place: 1, cup: career.quickRacePayCup(t.id), laps, standardLaps: t.laps, cupWin: null });
     pays.textContent = `1st pays ${formatCredits(win.total)}`;
     const best = career.save.records[t.id]?.bestRace[String(laps)];
     raceBtn.append(h('span', 'btn__sub', `${t.name} · ${laps} lap${laps > 1 ? 's' : ''}${best ? ` · PB ${formatTime(best)}` : ''}`));

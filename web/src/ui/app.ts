@@ -3,6 +3,7 @@
 import './styles.css';
 import type { GameAudio } from '../audio/audio.ts';
 import { Career } from '../game/career.ts';
+import type { KeyValueStore } from '../game/save.ts';
 import type { RaceLauncher, RaceRequest, ShowroomApi } from '../game/types.ts';
 import { h } from './kit.ts';
 import { championshipScreen, cupScreen, worldScreen } from './screens/championship.ts';
@@ -19,6 +20,11 @@ export interface AppDeps {
   launchRace: RaceLauncher;
   showroom: ShowroomApi;
   audio: GameAudio;
+  /**
+   * Where the career is saved. The game passes localStorage; dev pages pass their own store so
+   * their fake races can never pay into the real save.
+   */
+  store: KeyValueStore;
 }
 
 function build(ctx: AppCtx, nav: Nav): Screen {
@@ -45,7 +51,7 @@ function build(ctx: AppCtx, nav: Nav): Screen {
 }
 
 export function startApp(deps: AppDeps): void {
-  const career = new Career(window.localStorage);
+  const career = new Career(deps.store);
   deps.audio.setEnabled(career.save.settings.sound);
 
   const shell = h('div', 'app');

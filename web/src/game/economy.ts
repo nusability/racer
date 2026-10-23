@@ -5,14 +5,21 @@ import {
   PLACE_PAYOUT,
   QUICK_RACE_PAYOUT_FRACTION,
   TIER_PAYOUT_MULTIPLIER,
+  WORLD_PAYOUT_MULTIPLIER,
 } from '../data/economy.ts';
+import type { CupDef } from '../data/championships.ts';
+import { WORLDS } from '../data/worlds.ts';
 import type { RaceMode } from './types.ts';
 
 export interface PayoutInput {
   mode: RaceMode;
   /** 1-based finishing place. */
   place: number;
-  tier: number;
+  /**
+   * The cup whose rate applies: the cup raced (championship) or, for a quick race, the
+   * hardest cup won in the track's world (its rookie cup before any win there).
+   */
+  cup: CupDef;
   laps: number;
   /** The track's standard lap count; quick races pay per lap against it. */
   standardLaps: number;
@@ -26,22 +33,27 @@ export interface Payout {
   total: number;
 }
 
-function tierMultiplier(tier: number): number {
-  const m = TIER_PAYOUT_MULTIPLIER[tier - 1];
-  if (m === undefined) throw new Error(`No payout multiplier for tier ${tier}`);
-  return m;
+function pick(table: number[], index: number, what: string): number {
+  const v = table[index];
+  if (v === undefined) throw new Error(`No ${what} at index ${index} in data/economy.ts`);
+  return v;
+}
+
+function worldMultiplier(cup: CupDef): number {
+  const world = WORLDS.findIndex((w) => w.id === cup.worldId);
+  if (world < 0) throw new Error(`Cup "${cup.id}" is in unknown world "${cup.worldId}"`);
+  return pick(WORLD_PAYOUT_MULTIPLIER, world, 'world multiplier');
 }
 
 export function racePayout(p: PayoutInput): Payout {
-  const base = PLACE_PAYOUT[p.place - 1];
-  if (base === undefined) throw new Error(`No payout for place ${p.place}`);
-  let race = base * tierMultiplier(p.tier);
-  // Quick races scale with distance so a 1-lap sprint can't be farmed at full rate.
-  if (p.mode === 'quick') race *= QUICK_RACE_PAYOUT_FRACTION * (p.laps / p.standardLaps);
+  const world = worldMultiplier(p.cup);
+  let race = pick(PLACE_PAYOUT, p.place - 1, 'place payout') * pick(TIER_PAYOUT_MULTIPLIER, p.cup.tier - 1, 'tier multiplier') * world;
+  // Quick races pay per lap up to the standard distance: shorter pays less, longer no more.
+  if (p.mode === 'quick') race *= QUICK_RACE_PAYOUT_FRACTION * (Math.min(p.laps, p.standardLaps) / p.standardLaps);
   let cupBonus = 0;
   if (p.cupWin) {
-    const bonus = CUP_WIN_BONUS[p.tier - 1];
-    if (bonus === undefined) throw new Error(`No cup bonus for tier ${p.tier}`);
+    // The bonus table is already per tier; only the world scales it.
+    const bonus = pick(CUP_WIN_BONUS, p.cup.tier - 1, 'cup bonus') * world;
     cupBonus = bonus * (p.cupWin.firstTime ? 1 : CUP_REPEAT_BONUS_FRACTION);
   }
   const raceCredits = Math.round(race);

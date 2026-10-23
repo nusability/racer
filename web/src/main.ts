@@ -56,7 +56,7 @@ const launchRace: RaceLauncher = (req, onDone) => {
   );
 };
 
-startApp({ root, launchRace, showroom, audio });
+startApp({ root, launchRace, showroom, audio, store: window.localStorage });
 
 // Dev builds expose the live session so browser automation can inspect it.
 if (import.meta.env.DEV) Object.assign(window, { __session: () => session });

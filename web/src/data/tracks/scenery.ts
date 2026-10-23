@@ -76,4 +76,9 @@ export interface LandmarkPlacement {
    * the ground under it dug to a sea bed.
    */
   afloat?: boolean;
+  /**
+   * Bind to the course hazard with this id (on the main loop): the landmark animates from the
+   * hazard's schedule and is given a track-space → local mapping (see HazardBinding).
+   */
+  hazard?: string;
 }

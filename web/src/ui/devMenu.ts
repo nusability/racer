@@ -58,4 +58,13 @@ const showroom: ShowroomApi = {
   hide: () => console.info('[showroom] hide'),
 };
 
-startApp({ root, launchRace, showroom, audio: new GameAudio() });
+/**
+ * The viewer's fake races (WIN in one tap) must never pay into the game's save: on the dev
+ * server both pages share an origin, so the viewer keeps its career under its own key prefix.
+ */
+const viewerStore = {
+  getItem: (key: string) => window.localStorage.getItem(`menu-viewer:${key}`),
+  setItem: (key: string, value: string) => window.localStorage.setItem(`menu-viewer:${key}`, value),
+};
+
+startApp({ root, launchRace, showroom, audio: new GameAudio(), store: viewerStore });
