@@ -258,6 +258,7 @@ export class Ribbon {
         dropL: shape.dropL[k],
         dropR: shape.dropR[k],
         magnet: shape.magnet[k],
+        grip: shape.grip[k],
         stretch: shape.stretch[k],
       });
     }
@@ -369,6 +370,10 @@ export class Ribbon {
   /** Racers are held to the surface here (loops, corkscrews). */
   isMagnet(s: number): boolean {
     return this.sampleAt(s).magnet;
+  }
+  /** Surface grip multiplier at s (1 = normal). */
+  gripAt(s: number): number {
+    return this.sampleAt(s).grip;
   }
   /** World metres per metre of s (inside a loop > 1). */
   stretchAt(s: number): number {
@@ -576,6 +581,7 @@ export class Ribbon {
       case 'drop':
       case 'loop':
       case 'corkscrew':
+      case 'slick':
       case 'hazard':
         break;
     }

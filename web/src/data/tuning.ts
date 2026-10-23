@@ -305,3 +305,5 @@ export const HAZARD_ROCK_HEIGHT = 1.6;
 /** A blocker's bar is made of cylinders this big, this far apart across the course. */
 export const HAZARD_BAR_RADIUS = 2.2;
 export const HAZARD_BAR_SPACING = 3.5;
+/** A slick stretch blends its grip in over this fraction (inverse) of its length at each end. */
+export const SLICK_BLEND_FRACTION = 8;

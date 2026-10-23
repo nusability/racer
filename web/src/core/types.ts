@@ -80,6 +80,8 @@ export type TrackFeature =
    * Racers are held to the surface inside it; too slow at the top and they fall (a wreck).
    */
   | { kind: 'loop'; at: TrackParam; radius: number; span: number; shift: number; settle: number }
+  /** A slippery surface (ice, wet rock): the craft answers steering with `grip` (0..1) of its usual bite. */
+  | { kind: 'slick'; from: TrackParam; to: TrackParam; grip: number }
   /** The road rolls through `turns` full barrel rolls between from and to; racers are held to it. */
   | { kind: 'corkscrew'; from: TrackParam; to: TrackParam; turns: number }
   /** A scheduled, moving danger tied to the course (see HazardDef). */
@@ -215,6 +217,8 @@ export interface TrackSample {
   dropR: boolean;
   /** Racers are held to the surface here (loops, corkscrews): no air, no ballistic flight. */
   magnet: boolean;
+  /** Surface grip multiplier (1 = normal; ice < 1). */
+  grip: number;
   /**
    * World metres per metre of s (≥ 1). Inside a loop the road is longer than the s span it
    * occupies; the simulation advances s by speed / stretch so speeds stay true.

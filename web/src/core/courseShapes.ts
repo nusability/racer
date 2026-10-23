@@ -4,6 +4,7 @@
 
 import type { TrackFeature, Vec3 } from './types.ts';
 import { cross, normalize, smoothstep, vec3 } from './geom.ts';
+import { SLICK_BLEND_FRACTION } from '../data/tuning.ts';
 
 export interface ShapeHelpers {
   paramToS(u: number): number;
@@ -17,6 +18,7 @@ export interface CourseShape {
   stretch: number[];
   dropL: boolean[];
   dropR: boolean[];
+  grip: number[];
   /** Extra bank (radians) a corkscrew adds on top of the curvature bank. */
   bankAdd: number[];
   /**
@@ -43,6 +45,7 @@ export function shapeCourse(
     stretch: new Array<number>(n).fill(1),
     dropL: new Array<boolean>(n).fill(false),
     dropR: new Array<boolean>(n).fill(false),
+    grip: new Array<number>(n).fill(1),
     bankAdd: new Array<number>(n).fill(0),
     loopRight: new Array<Vec3 | null>(n).fill(null),
   };
@@ -58,6 +61,13 @@ export function shapeCourse(
             runR[k] = 0;
             shape.dropR[k] = true;
           }
+        });
+        break;
+      case 'slick':
+        h.forRange(h.paramToS(f.from), h.paramToS(f.to), (k, t) => {
+          // Blend in and out over the ends so grip never changes in a single step.
+          const edge = Math.min(1, Math.min(t, 1 - t) * SLICK_BLEND_FRACTION);
+          shape.grip[k] = 1 + (f.grip - 1) * smoothstep(edge);
         });
         break;
       case 'corkscrew':
