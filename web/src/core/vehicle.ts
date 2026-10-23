@@ -3,66 +3,69 @@
 // is (a lateral target the craft chases), not its heading. The player and the AI drive the
 // same model, so the AI can never be faster than physics allows.
 
-import type { Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats } from './types.ts';
+import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats } from './types.ts';
+import { gustAt } from './hazards.ts';
 import type { Ribbon } from './track.ts';
 import {
   ACCEL_TAPER_EXP,
   AIR_STEER_FACTOR,
   ARCH_HALF_DEPTH,
   BOOST_ACCEL_MULT,
+  BOOST_PAD_DURATION,
+  BOOST_PAD_MAX_HEIGHT,
   BOOST_PASSIVE_REFILL,
   BOOST_RESUME_FILL,
   BOOST_START_FILL,
-  CELL_MAX_HEIGHT,
-  CELL_RADIUS,
-  CELL_VALUE,
-  BOOST_PAD_DURATION,
-  BOOST_PAD_MAX_HEIGHT,
   BOUNDARY_DAMAGE_FREE_SPEED,
   BOUNDARY_DAMAGE_PER_SPEED,
   BOUNDARY_FRICTION_DECEL,
+  BOUNDARY_GRIND_DAMAGE,
   BOUNDARY_RESTITUTION,
   BOUNDARY_SPEED_LOSS,
   BRAKE_DECEL,
   CEILING_BOUNCE,
   CEILING_DAMAGE,
   CEILING_SPEED_LOSS,
+  CELL_MAX_HEIGHT,
+  CELL_RADIUS,
+  CELL_VALUE,
   CORNER_PULL,
   CORNER_PULL_BRAKE,
   DAMAGE_TOP_SPEED_LOSS,
+  DROP_OVERREACH,
   FRENET_MIN_DENOM,
   GRAVITY,
   GRIP_REF,
+  GUST_DRIFT,
   HANDLING_REF,
   HOVER_SUCTION,
   IMPACT_INTENSITY_SPEED,
+  LANDING_STEP_TOLERANCE,
   LAND_DAMAGE,
   LAND_SOFT_IMPACT,
   LAND_SPEED_LOSS,
-  LANDING_STEP_TOLERANCE,
   LATERAL_RESPONSE,
   LATERAL_SPEED_MAX,
+  LOOP_MIN_SPEED,
   MAX_LEAN,
   MAX_VISUAL_YAW,
-  OBSTACLE_CRASH_OFFSET,
-  OBSTACLE_CRASH_SPEED_FRACTION,
   OBSTACLE_DAMAGE,
   OBSTACLE_DEFLECT_SPEED,
   OBSTACLE_QUERY_RANGE,
   OBSTACLE_SPEED_LOSS,
+  OBSTACLE_WRECK_OFFSET,
+  OBSTACLE_WRECK_SPEED_FRACTION,
   OVERSPEED_DECAY,
   RACER_HALF_WIDTH,
   RACER_HEIGHT,
   RACER_RADIUS,
-  RESPAWN_DAMAGE,
-  RESPAWN_DELAY,
-  RESPAWN_INVULNERABLE,
-  RESPAWN_SPEED_FRACTION,
+  REPAIR_VALUE,
   ROLL_PER_LATERAL_SPEED,
   SAND_DRAG,
   SAND_TOP_SPEED,
   SCRAPE_BASE_INTENSITY,
   SIM_DT,
+  SLICK_DAMPING_FLOOR,
   SLOPE_SPEED_FACTOR,
   STEER_TARGET_RATE,
   TARGET_OVERREACH,
@@ -156,7 +159,7 @@ export class Vehicle {
       bestLap: null,
       steer: 0,
     };
-    this.drive = { crashes: { destroyed: 0, fell: 0, obstacle: 0 }, scrapeTime: 0, offroadTime: 0 };
+    this.drive = { crashes: { destroyed: 0, fell: 0, offEdge: 0, loopStall: 0, obstacle: 0, hazard: 0 }, scrapeTime: 0, offroadTime: 0 };
     this.targetX = x;
     this.alt = ribbon.elevationAt(s);
     this.grounded = true;
@@ -337,12 +340,12 @@ export class Vehicle {
       this.alt += st.vy * dt;
       if (gap) {
         if (this.alt < ribbon.chasmFloorAt(s)) {
-          this.crash('fell', ribbon, events);
+          this.crash('fell', events);
           return;
         }
       } else if (this.alt <= surface) {
         if (wasOverGap && this.alt < surface - LANDING_STEP_TOLERANCE) {
-          this.crash('fell', ribbon, events);
+          this.crash('fell', events);
           return;
         }
         const vSurf = ribbon.slopeAt(s) * sdot;
@@ -447,32 +450,42 @@ export class Vehicle {
     }
   }
 
+  /** Boost cells refill the tank, repair cells the hull: each once per racer per lap. */
   private cells(ribbon: Ribbon, sOld: number, events: RaceEvent[]) {
     const st = this.state;
-    if (ribbon.cells.length === 0 || this.alt - ribbon.elevationAt(st.s) > CELL_MAX_HEIGHT) return;
-    let taken = this.collected.get(st.branch);
-    for (const c of ribbon.cells) {
+    if (this.alt - ribbon.elevationAt(st.s) > CELL_MAX_HEIGHT) return;
+    this.collect(ribbon, ribbon.cells, this.collected, sOld, events, 'boost');
+    this.collect(ribbon, ribbon.repairCells, this.repaired, sOld, events, 'repair');
+  }
+
+  private collect(ribbon: Ribbon, cells: readonly BoostCell[], taken: Map<number, Uint8Array>, sOld: number, events: RaceEvent[], item: 'boost' | 'repair') {
+    if (cells.length === 0) return;
+    const st = this.state;
+    for (const c of cells) {
       const crossed = ribbon.delta(sOld, c.s) > 0 && ribbon.delta(st.s, c.s) <= 0;
       if (!crossed || Math.abs(st.x - c.x) >= CELL_RADIUS + RACER_RADIUS) continue;
-      if (taken === undefined) {
-        taken = new Uint8Array(ribbon.cells.length);
-        this.collected.set(st.branch, taken);
+      let flags = taken.get(st.branch);
+      if (flags === undefined) {
+        flags = new Uint8Array(cells.length);
+        taken.set(st.branch, flags);
       }
-      if (taken[c.index]) continue;
-      taken[c.index] = 1;
-      st.boost = Math.min(1, st.boost + CELL_VALUE);
-      events.push({ type: 'pickup', id: st.id, branch: st.branch, cell: c.index });
+      if (flags[c.index]) continue;
+      flags[c.index] = 1;
+      if (item === 'boost') st.boost = Math.min(1, st.boost + CELL_VALUE);
+      else st.damage = Math.max(0, st.damage - REPAIR_VALUE);
+      events.push({ type: 'pickup', id: st.id, branch: st.branch, cell: c.index, item });
     }
   }
 
-  /** Whether this racer has taken that cell this lap (cells reappear for it each lap). */
-  hasCollected(branch: number, cell: number): boolean {
-    return this.collected.get(branch)?.[cell] === 1;
+  /** Whether this racer has taken that boost (or repair) cell this lap (they reappear each lap). */
+  hasCollected(branch: number, cell: number, item: 'boost' | 'repair' = 'boost'): boolean {
+    return (item === 'boost' ? this.collected : this.repaired).get(branch)?.[cell] === 1;
   }
 
   /** A new lap: every cell is there to take again. */
   newLap() {
     this.collected.clear();
+    this.repaired.clear();
   }
 
   /** Starts a free boost burst (launch boost at GO). */
@@ -493,15 +506,21 @@ export class Vehicle {
     this.state.damage = Math.min(1, this.state.damage + amount / this.stats.armor);
   }
 
-  private crash(reason: CrashReason, ribbon: Ribbon, events: RaceEvent[]) {
+  /** Hull damage from outside (a racer contact): armour divides it; a spent hull wrecks. */
+  harm(amount: number, events: RaceEvent[]) {
+    if (this.state.crashed > 0) return;
+    this.damage(amount);
+    if (this.state.damage >= 1) this.crash('destroyed', events);
+  }
+
+  /** A wreck is final: the racer stops where it is and is out of the race. */
+  private crash(reason: CrashReason, events: RaceEvent[]) {
     const st = this.state;
-    st.crashed = RESPAWN_DELAY;
+    st.crashed = SIM_DT;
     st.speed = 0;
     st.vx = 0;
     st.boosting = false;
     this.freeBoost = 0;
-    this.crashBranch = st.branch;
-    this.crashS = ribbon.wrap(st.s);
     this.touching = null;
     if (this.offroad) {
       this.offroad = false;
@@ -509,30 +528,6 @@ export class Vehicle {
     }
     this.drive.crashes[reason]++;
     events.push({ type: 'crash', id: st.id, reason });
-  }
-
-  /** Puts the racer back on the centre of `ribbon` at s (the race chooses where). */
-  respawn(branch: number, ribbon: Ribbon, s: number, events: RaceEvent[]) {
-    const st = this.state;
-    st.branch = branch;
-    st.s = s;
-    st.x = 0;
-    this.targetX = 0;
-    st.yaw = 0;
-    st.vx = 0;
-    st.vy = 0;
-    st.steer = 0;
-    this.alt = ribbon.elevationAt(s);
-    this.grounded = true;
-    st.y = 0;
-    st.airborne = false;
-    st.speed = this.stats.topSpeed * RESPAWN_SPEED_FRACTION;
-    st.damage = Math.min(st.damage, RESPAWN_DAMAGE);
-    st.crashed = 0;
-    st.invulnerable = RESPAWN_INVULNERABLE;
-    st.roll = ribbon.bankAt(s);
-    this.respawnDue = false;
-    events.push({ type: 'respawn', id: st.id });
   }
 }
 

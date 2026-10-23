@@ -44,8 +44,23 @@ export interface CorridorShape {
   /** Horizontal unit right vector (bank removed): side geometry stands on world up. */
   rx: Float32Array;
   rz: Float32Array;
+  /** The side is an open drop: a sheer face falls away from the road edge, nothing stands there. */
+  drop: [Uint8Array, Uint8Array];
+  /** Loops and corkscrews: the road leaves the ground, so it gets guard rails and a deck. */
+  magnet: Uint8Array;
+  /** Inside a vertical loop (the road is lifted off its baseline). */
+  loop: Uint8Array;
+  /**
+   * Where the ground meets the course: the centreline, except inside a loop, where it is the
+   * baseline the loop stands on (the road itself is up in the air).
+   */
+  gx: Float32Array;
+  gy: Float32Array;
+  gz: Float32Array;
 }
 
+/** Lateral reach of the side geometry past the edge where a drop or deck has no run-off. */
+const DECK_REACH = 3;
 /** Width over which the canyon factor ramps from low wall to full canyon, metres of height. */
 const CANYON_RAMP = 10;
 
@@ -55,14 +70,14 @@ export const sideIndex = (side: number): 0 | 1 => (side > 0 ? 1 : 0);
 export type WaterSpans = { from: TrackParam; to: TrackParam }[];
 
 export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
-  const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track) }];
+  const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track, track.def.features) }];
   const mainWater = views[0].shape.water;
   for (const w of water) {
     const s0 = track.paramToS(w.from);
     const len = track.wrap(track.paramToS(w.to) - s0);
     for (let d = 0; d <= len; d += track.step / 2) mainWater[Math.round(track.wrap(s0 + d) / track.step) % track.samples.length] = 1;
   }
-  for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon) });
+  for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon, b.def.features) });
   // Junctions: each ribbon's side facing the other opens, since the other's road covers it.
   for (const b of track.branches) {
     const main = views[0].shape.open[sideIndex(b.side)];
@@ -83,7 +98,7 @@ export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
   return views;
 }
 
-export function corridorShape(r: Ribbon): CorridorShape {
+export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShape {
   const n = r.samples.length;
   const wall = new Float32Array(n);
   for (let k = 0; k < n; k++) wall[k] = r.samples[k].wallHeight;
@@ -104,6 +119,22 @@ export function corridorShape(r: Ribbon): CorridorShape {
   const water = new Uint8Array(n);
   const rx = new Float32Array(n);
   const rz = new Float32Array(n);
+  const drop: [Uint8Array, Uint8Array] = [new Uint8Array(n), new Uint8Array(n)];
+  const magnet = new Uint8Array(n);
+  const loop = new Uint8Array(n);
+  const gx = new Float32Array(n);
+  const gy = new Float32Array(n);
+  const gz = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    const p = r.samples[k];
+    drop[0][k] = p.dropL ? 1 : 0;
+    drop[1][k] = p.dropR ? 1 : 0;
+    magnet[k] = p.magnet ? 1 : 0;
+    gx[k] = p.pos.x;
+    gy[k] = p.pos.y;
+    gz[k] = p.pos.z;
+  }
+  for (const f of features) if (f.kind === 'loop') loopBaseline(r, f.at, f.span, loop, gx, gy, gz);
   for (let k = 0; k < n; k++) {
     const smp = r.samples[k];
     const half = smp.width / 2;
@@ -116,7 +147,9 @@ export function corridorShape(r: Ribbon): CorridorShape {
       const sand = run[i][k] >= RUNOFF_MIN;
       const reach = smp.gap
         ? run[i][k] + CHASM_SIDE
-        : tunnel[k]
+        : drop[i][k] || magnet[k]
+          ? DECK_REACH
+          : tunnel[k]
           ? TUNNEL_ROCK_WIDTH
           : sand
             ? run[i][k] + RIDGE_OUTER
@@ -127,5 +160,24 @@ export function corridorShape(r: Ribbon): CorridorShape {
     rx[k] = smp.right.x / l;
     rz[k] = smp.right.z / l;
   }
-  return { wall, canyon, tunnel, run, outer, water, open, rx, rz };
+  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz };
+}
+
+/** Inside a loop the ground follows the straight line from the sample before it to the one after. */
+function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array, gx: Float32Array, gy: Float32Array, gz: Float32Array) {
+  const s0 = r.paramToS(at);
+  const k0 = Math.ceil(s0 / r.step);
+  const k1 = Math.floor((s0 + span) / r.step);
+  const n = r.samples.length;
+  const wrap = (k: number) => ((k % n) + n) % n;
+  const a = r.samples[wrap(k0 - 1)].pos;
+  const b = r.samples[wrap(k1 + 1)].pos;
+  for (let k = k0; k <= k1; k++) {
+    const t = (k - k0 + 1) / (k1 - k0 + 2);
+    const q = wrap(k);
+    loop[q] = 1;
+    gx[q] = a.x + (b.x - a.x) * t;
+    gy[q] = a.y + (b.y - a.y) * t;
+    gz[q] = a.z + (b.z - a.z) * t;
+  }
 }
