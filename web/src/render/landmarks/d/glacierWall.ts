@@ -33,6 +33,11 @@ const LEAN = 0.06;
 const COLLAPSE = 0.12;
 const REGROW_FROM = 0.25;
 const DUST_RATE = 0.05;
+/** Share of columns whose middle band is self-lit, its brightness, and how much fades by night. */
+const LIT_SHARE = 0.4;
+const LIT_GLOW = 0.8;
+const LIT_DUSK = 0.45;
+const CREVASSE_GLOW = 0.6;
 
 
 export function createGlacierWall(opts: LandmarkOptions): Landmark {
@@ -50,6 +55,8 @@ export function createGlacierWall(opts: LandmarkOptions): Landmark {
   const boost = glowBoost(opts.palette);
   const snow = ik.snow;
   const deep = mix(ICE_DEEP, opts.palette.sky, 0.15);
+  const dusk = opts.palette.dusk;
+  const iceGlow = LIT_GLOW * (1 - LIT_DUSK * dusk);
 
   // --- The face: columns of ice, deep blue at the foot to white at the crest ---
   const n = ik.q(COLUMNS.high, COLUMNS.low);
@@ -65,12 +72,17 @@ export function createGlacierWall(opts: LandmarkOptions): Landmark {
     const m = T(x, 0, z + d / 2, (rng() - 0.5) * 0.12, -0.04 - rng() * 0.05);
     const base = vary(rng, mix(ICE, deep, 0.62), 0.05);
     kit.solid.add(box(w, h * 0.3, d), base, m);
-    kit.solid.add(box(w * 0.98, h * 0.42, d), vary(rng, mix(ICE, deep, 0.28), 0.05), m.clone().multiply(T(0, h * 0.3, 0.5)));
+    // Some columns hold light in their middle band: the blue that thick ice glows with.
+    const mid = vary(rng, mix(ICE, deep, 0.28), 0.05);
+    if (rng() < LIT_SHARE) kit.lights.add(box(w * 0.98, h * 0.42, d), shade(mid, iceGlow), m.clone().multiply(T(0, h * 0.3, 0.5)));
+    else kit.solid.add(box(w * 0.98, h * 0.42, d), mid, m.clone().multiply(T(0, h * 0.3, 0.5)));
     kit.solid.add(box(w * 0.96, h * 0.16, d), vary(rng, mix(ICE, snow, 0.35), 0.03), m.clone().multiply(T(0, h * 0.72, 1)));
-    kit.solid.add(new THREE.ConeGeometry(w * 0.68, h * (0.1 + rng() * 0.2), 4).translate(0, h * 0.05, 0), mix(snow, ICE, 0.2), m.clone().multiply(T(rng() * 2, h * 0.88, 2, Math.PI / 4, 0, 0, [1, 1, d / w])));
+    // Jagged serac spikes along the crest of each column.
+    for (let k = 0; k < 2; k++) kit.solid.add(new THREE.ConeGeometry(w * 0.4, h * (0.08 + rng() * 0.16), 4).translate(0, h * 0.05, 0), mix(snow, ICE, 0.15 + k * 0.2), m.clone().multiply(T((rng() - 0.5) * w * 0.5, h * 0.88, 4 + k * d * 0.4, rng() * 3)));
     // Strata: thin pale bands of old snow layers across the ice.
     if (rng() < 0.5) kit.solid.add(box(w * 1.01, 1.2, d * 0.98), mix(snow, ICE, 0.4), m.clone().multiply(T(0, h * (0.15 + rng() * 0.5), 0.2)));
-    if (rng() < 0.4) kit.solid.add(box(1.4, h * (0.4 + rng() * 0.4), 4), ICE_DARK, T(x + w / 2, 0, z - 0.5));
+    // Crevasses: dark by day, glowing a deep cold blue at night.
+    if (rng() < 0.4) kit.lights.add(box(1.4, h * (0.4 + rng() * 0.4), 4), mix(ICE_DARK, 0x30b0ff, CREVASSE_GLOW * dusk), T(x + w / 2, 0, z - 0.5));
   }
   // Behind the face: the glacier tongue climbing away, its crest broken into seracs.
   kit.solid.add(box(2 * HALF_W, 4, RADIUS * 0.9), snow, T(0, FACE_H * 0.85, FACE_Z + RADIUS * 0.45 + 30, 0, -0.08));

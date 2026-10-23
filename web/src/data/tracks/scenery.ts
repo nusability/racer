@@ -54,7 +54,22 @@ export interface BeachScenery extends SceneryBase {
   lava?: boolean;
 }
 
-export type TrackScenery = DesertScenery | BeachScenery;
+/** The ice: snowfields in valleys between mountain walls, peaks on the horizon, pines, seracs. */
+export interface IceScenery extends SceneryBase {
+  biome: 'ice';
+  /** Snow-capped peaks on the horizon. */
+  peaks: number;
+  /** Height of the mountain walls rising a little way off the course, metres. */
+  massifHeight: number;
+  /** Peak height of the wind-carved drifts near the road, metres. */
+  driftHeight: number;
+  /** Pines beside the course per kilometre of lap. */
+  pinesPerKm: number;
+  /** Chance (percent per pine) of a cluster of blue seracs further out. */
+  seracs: number;
+}
+
+export type TrackScenery = DesertScenery | BeachScenery | IceScenery;
 
 export interface LandmarkPlacement {
   kind: LandmarkKind;

@@ -4,7 +4,8 @@
 // through a track-space → local mapping, so the hazard sync can be checked by eye.
 // Query: kind, quality=high|low, cam=near|far|race|orbit|top|hz|pt (p=x,y,z&l=x,y,z), pal=day|dusk|night, seed,
 // t=seconds, pause=1, ang=radians, dist, h, look, wire=1 (collision cylinders), free=1 (unbound),
-// hz=<hazard type> (alternative binding), side=-1 (landmark on the left), hide=draw names.
+// hz=<hazard type> (alternative binding), side=-1 (landmark on the left), hide=draw names,
+// bench=1 (time update() over a simulated stretch before the first frame).
 
 import * as THREE from 'three';
 import type { HazardDef, TrackPalette } from '../../core/types.ts';
@@ -277,6 +278,15 @@ function budget(root: THREE.Object3D): { calls: number; tris: number; clouds: nu
   return { calls, tris, clouds, points, parts: parts.join(' ') };
 }
 const cost = budget(lm.group);
+// bench=1: average update() cost over a simulated stretch of race (ms per call), before rendering.
+const BENCH_FRAMES = 600;
+const BENCH_DT = 1 / 60;
+let benchMs = Number.NaN;
+if (params.get('bench') === '1') {
+  const b0 = performance.now();
+  for (let i = 0; i < BENCH_FRAMES; i++) lm.update(startT + i * BENCH_DT, BENCH_DT);
+  benchMs = (performance.now() - b0) / BENCH_FRAMES;
+}
 
 // --- Camera ---
 const camera = new THREE.PerspectiveCamera(cam === 'race' ? RACE_FOV : VIEW_FOV, innerWidth / innerHeight, 0.5, 3200);
@@ -343,9 +353,9 @@ function frame(now: number): void {
   hud.textContent =
     `${kind} · ${quality} · ${cam} · t=${time.toFixed(2)} · r=${R.toFixed(0)} m · ${hz}\n` +
     `landmark: ${cost.calls} draws · ${Math.round(cost.tris)} tris · ${cost.clouds} clouds/${cost.points} pts (frame: ${seen.calls} / ${seen.triangles})\n` +
-    `build ${buildMs.toFixed(0)} ms · update ${updateMs.toFixed(3)} ms\n${cost.parts}`;
+    `build ${buildMs.toFixed(0)} ms · update ${updateMs.toFixed(3)} ms · bench ${benchMs.toFixed(3)} ms\n${cost.parts}`;
   (window as unknown as { __cost: typeof cost; __update: number }).__cost = cost;
-  (window as unknown as { __update: number }).__update = updateMs;
+  (window as unknown as { __update: number }).__update = Number.isNaN(benchMs) ? updateMs : benchMs;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Race } from '../core/race.ts';
 import { Track } from '../core/track.ts';
 import type { PlayerInput, RaceEvent, RacerState } from '../core/types.ts';
+import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
 import { trackById } from '../data/tracks/index.ts';
 import { SIM_DT } from '../data/tuning.ts';
@@ -20,7 +21,7 @@ import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
-import type { Hud, InputSource, RaceOutcome, RaceRequest, Settings } from './types.ts';
+import type { CrashReason, Hud, InputSource, RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 import {
   SESSION_DUST_RANGE,
   SESSION_FINISH_LINGER,
@@ -28,7 +29,15 @@ import {
   SESSION_HARD_LANDING,
   SESSION_BOOST_NOZZLE_HEAT,
   SESSION_IDLE_NOZZLE_HEAT,
-  SESSION_INVULNERABLE_BLINK,
+  SESSION_WRECK_LINGER,
+  SESSION_WRECK_LOOK_AHEAD,
+  SESSION_WRECK_ORBIT_HEIGHT,
+  SESSION_WRECK_ORBIT_RADIUS,
+  SESSION_WRECK_ORBIT_RATE,
+  SESSION_WRECK_ORBIT_START,
+  SESSION_WRECK_SLOWMO,
+  SESSION_WRECK_SLOWMO_EASE,
+  SESSION_WRECK_SLOWMO_HOLD,
   SESSION_OFFROAD_DUST,
   SESSION_MAX_FRAME_DT,
   SESSION_SHAKE_HIT,
@@ -52,7 +61,29 @@ interface RacerView {
   draw: PoseSnapshot;
   wasBoosting: boolean;
   offroad: boolean;
+  /** Shattered: the debris flies on its own, so the pose is no longer written. */
+  wrecked: boolean;
+  /** What this racer last hit, for the wreck banner. */
+  lastHit: Extract<RaceEvent, { type: 'hit' }>['kind'] | null;
 }
+
+/** Player-facing name of what wrecked a racer, by the kind of the last thing it hit. */
+const HIT_CAUSE: Partial<Record<Extract<RaceEvent, { type: 'hit' }>['kind'], string>> = {
+  pillar: 'a rock pillar',
+  archLeg: 'an arch',
+  boulder: 'a boulder',
+  racer: 'a rival',
+  ceiling: 'the ceiling',
+};
+
+const WRECK_KIND: Record<CrashReason, WreckKind> = {
+  destroyed: 'explode',
+  obstacle: 'impact',
+  hazard: 'impact',
+  fell: 'fall',
+  offEdge: 'fall',
+  loopStall: 'fall',
+};
 
 export class RaceSession {
   private readonly ctx: SessionContext;
@@ -89,6 +120,11 @@ export class RaceSession {
   private readonly tmpVel = new THREE.Vector3();
   private readonly tmpDir = new THREE.Vector3();
   private readonly frameRight = new THREE.Vector3();
+  /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
+  private playerWreck: WreckInfo | null = null;
+  private wreckFor = 0;
+  private readonly wreckAt = new THREE.Vector3();
+  private readonly wreckDir = new THREE.Vector3();
 
   constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null) => void) {
     this.ctx = ctx;
@@ -107,7 +143,16 @@ export class RaceSession {
         detail: e.isPlayer || ctx.settings.quality === 'high' ? 'high' : 'low',
       });
       this.scene.add(model.root);
-      this.views.push({ model, prev: emptySnapshot(), curr: emptySnapshot(), draw: emptySnapshot(), wasBoosting: false, offroad: false });
+      this.views.push({
+        model,
+        prev: emptySnapshot(),
+        curr: emptySnapshot(),
+        draw: emptySnapshot(),
+        wasBoosting: false,
+        offroad: false,
+        wrecked: false,
+        lastHit: null,
+      });
     }
     this.syncSnapshots(true);
 
@@ -182,8 +227,16 @@ export class RaceSession {
     this.shownBranch = -1;
     this.cam.reset();
     this.trackScene.resetCells();
+    this.playerWreck = null;
+    this.wreckFor = 0;
+    this.ctx.audio.setTimeScale(1);
     this.syncSnapshots(true);
-    for (const v of this.views) v.model.root.visible = true;
+    for (const v of this.views) {
+      if (v.wrecked) v.model.reset();
+      v.wrecked = false;
+      v.lastHit = null;
+      v.model.root.visible = true;
+    }
   }
 
   private finish(outcome: RaceOutcome | null) {
@@ -196,8 +249,18 @@ export class RaceSession {
   /** Advance and draw one display frame. */
   frame(dtRaw: number) {
     if (this.done) return;
-    const dt = Math.min(dtRaw, SESSION_MAX_FRAME_DT);
+    const real = Math.min(dtRaw, SESSION_MAX_FRAME_DT);
+    const scale = this.timeScale();
+    const dt = real * scale;
     if (!this.paused) {
+      if (this.playerWreck) {
+        this.wreckFor += real;
+        this.ctx.audio.setTimeScale(scale);
+        if (this.wreckFor >= SESSION_WRECK_LINGER) {
+          this.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck });
+          return;
+        }
+      }
       this.clock += dt;
       this.acc += dt;
       const input: PlayerInput = this.input.read();
@@ -209,10 +272,10 @@ export class RaceSession {
         this.syncSnapshots(false);
         for (const ev of events) this.handleEvent(ev);
       }
-      if (this.race.phase === 'finished') {
+      if (this.race.phase === 'finished' && !this.playerWreck) {
         this.finishedFor += dt;
         if (this.finishedFor >= SESSION_FINISH_LINGER) {
-          this.finish({ request: this.request, results: this.race.results() });
+          this.finish({ request: this.request, results: this.race.results(), playerWreck: null });
           return;
         }
       }
@@ -240,6 +303,7 @@ export class RaceSession {
         return;
       }
       case 'hit':
+        this.views[this.indexOf(ev.id)].lastHit = ev.kind;
         if (ev.id === pid) {
           audio.oneShot('hit', ev.intensity);
           this.cam.addShake(SESSION_SHAKE_HIT * ev.intensity);
@@ -248,21 +312,24 @@ export class RaceSession {
       case 'crash': {
         const i = this.indexOf(ev.id);
         const v = this.views[i];
-        this.worldPos(i, this.tmpPos);
-        this.tmpVel.set(0, 0, 0);
-        this.effects.explosion(this.tmpPos, this.tmpVel, racerById(this.request.entrants[i].racerId).visual.glow);
-        v.model.root.visible = false;
+        const root = v.model.root;
+        // The craft keeps most of its momentum: it was flying forward at its last speed.
+        this.tmpVel.set(0, 0, -1).applyQuaternion(root.quaternion).multiplyScalar(Math.max(v.prev.speed, v.curr.speed));
+        const kind = WRECK_KIND[ev.reason];
+        root.visible = true;
+        v.model.shatter(this.tmpVel, { kind });
+        if (kind !== 'fall') this.effects.wreck(root.position, this.tmpVel, racerById(this.request.entrants[i].racerId).visual.glow);
+        v.wrecked = true;
         if (ev.id === pid) {
-          audio.oneShot('crash');
-          this.cam.addShake(1);
-          this.hud.flash(ev.reason === 'fell' ? 'FELL!' : 'WRECKED!');
+          const cause = ev.reason === 'obstacle' || ev.reason === 'hazard' ? (v.lastHit ? (HIT_CAUSE[v.lastHit] ?? null) : null) : null;
+          this.playerWreck = { reason: ev.reason, cause };
+          this.wreckAt.copy(root.position);
+          this.wreckDir.copy(this.tmpVel).setY(0);
+          if (this.wreckDir.lengthSq() === 0) this.wreckDir.set(0, 0, -1);
+          this.wreckDir.normalize();
+          audio.oneShot('wreck');
+          this.hud.wrecked(this.playerWreck);
         }
-        return;
-      }
-      case 'respawn': {
-        const i = this.indexOf(ev.id);
-        this.views[i].model.root.visible = true;
-        snapshot(this.race.racers[i], this.views[i].prev);
         return;
       }
       case 'land': {
@@ -286,9 +353,14 @@ export class RaceSession {
       }
       case 'pickup':
         if (ev.id === pid) {
-          this.trackScene.collectCell(ev.branch, ev.cell);
-          this.hud.pulseBoost();
-          audio.oneShot('pickup');
+          this.trackScene.collectCell(ev.item, ev.branch, ev.cell);
+          if (ev.item === 'repair') {
+            this.hud.pulseRepair();
+            audio.oneShot('repair');
+          } else {
+            this.hud.pulseBoost();
+            audio.oneShot('pickup');
+          }
         }
         return;
       case 'tankEmpty':
@@ -352,12 +424,10 @@ export class RaceSession {
     const pi = this.playerIndex();
     this.race.racers.forEach((r, i) => {
       const v = this.views[i];
-      lerpSnapshot(this.track, v.prev, v.curr, alpha, v.draw);
-      poseObject(this.track, v.draw, v.model.root);
-      if (r.crashed <= 0) {
-        const blinkOn = r.invulnerable <= 0 || Math.floor(this.clock * SESSION_INVULNERABLE_BLINK) % 2 === 0;
-        const inLens = i !== pi && v.model.root.position.distanceTo(this.cam.camera.position) < CAM_HIDE_NEAR;
-        v.model.root.visible = blinkOn && !inLens;
+      if (!v.wrecked) {
+        lerpSnapshot(this.track, v.prev, v.curr, alpha, v.draw);
+        poseObject(this.track, v.draw, v.model.root);
+        v.model.root.visible = i === pi || v.model.root.position.distanceTo(this.cam.camera.position) >= CAM_HIDE_NEAR;
       }
       const stats = this.request.entrants[i].stats;
       v.model.update(dt, this.clock, {
@@ -388,8 +458,9 @@ export class RaceSession {
     const top = this.request.entrants[pi].stats.topSpeed;
     const speedFrac = p.speed / top;
     const pv = this.views[pi].draw;
+    if (this.playerWreck) this.wreckCamera();
     // The camera follows the interpolated pose, not the raw step, or it judders.
-    this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
+    else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
     if (pv.branch !== this.shownBranch) {
       if (pv.branch >= 0) this.hud.flash(this.track.branches[pv.branch].def.name.toUpperCase());
       this.shownBranch = pv.branch;
@@ -397,9 +468,10 @@ export class RaceSession {
     this.minimap.update(this.race.racers, pi, this.dotColors);
     this.speedLines.update(dt, Math.max(0, Math.min(1, (speedFrac - 0.45) * 1.6)) + (p.boosting ? 0.35 : 0));
     this.effects.update(dt, this.cam.camera);
-    this.trackScene.update(this.clock, this.cam.camera.position);
+    // Hazards run on race time: the scene must show exactly what the simulation collides with.
+    this.trackScene.update(this.race.time, this.cam.camera.position);
 
-    if (!this.paused) {
+    if (!this.paused && !this.playerWreck) {
       this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne });
       this.ctx.audio.wind(Math.min(1, speedFrac));
       this.ctx.audio.scrapeLoop(this.scrapeLevel);
@@ -420,6 +492,34 @@ export class RaceSession {
       finished: p.finishTime !== null,
     });
     this.ctx.renderer.render(this.scene, this.cam.camera);
+  }
+
+  /** Slow motion while the player's craft comes apart, easing back to real time. */
+  private timeScale(): number {
+    if (!this.playerWreck) return 1;
+    const t = this.wreckFor;
+    if (t < SESSION_WRECK_SLOWMO_HOLD) return SESSION_WRECK_SLOWMO;
+    const u = Math.min(1, (t - SESSION_WRECK_SLOWMO_HOLD) / SESSION_WRECK_SLOWMO_EASE);
+    return SESSION_WRECK_SLOWMO + (1 - SESSION_WRECK_SLOWMO) * u * u;
+  }
+
+  /**
+   * A slow orbit around the wreck, framed ahead of the impact point because the debris keeps
+   * flying forward.
+   */
+  private wreckCamera() {
+    const cam = this.cam.camera;
+    const angle = SESSION_WRECK_ORBIT_START + this.wreckFor * SESSION_WRECK_ORBIT_RATE;
+    this.tmpPos.copy(this.wreckAt).addScaledVector(this.wreckDir, SESSION_WRECK_LOOK_AHEAD);
+    const cx = this.wreckDir.x * Math.cos(angle) - this.wreckDir.z * Math.sin(angle);
+    const cz = this.wreckDir.x * Math.sin(angle) + this.wreckDir.z * Math.cos(angle);
+    cam.position.set(
+      this.tmpPos.x - cx * SESSION_WRECK_ORBIT_RADIUS,
+      this.tmpPos.y + SESSION_WRECK_ORBIT_HEIGHT,
+      this.tmpPos.z - cz * SESSION_WRECK_ORBIT_RADIUS,
+    );
+    cam.up.set(0, 1, 0);
+    cam.lookAt(this.tmpPos);
   }
 
   dispose() {

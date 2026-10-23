@@ -2,6 +2,7 @@ import type { TrackPalette } from '../../../core/types.ts';
 import type { TrackScenery } from '../../../data/tracks/scenery.ts';
 import { beachKit } from './beach.ts';
 import { desertKit } from './desert.ts';
+import { iceKit } from './ice.ts';
 import type { BiomeKit } from './kit.ts';
 
 /** The look of a track's world, from its scenery (which names the biome). */
@@ -11,6 +12,8 @@ export function biomeKit(scenery: TrackScenery, palette: TrackPalette): BiomeKit
       return desertKit(scenery, palette);
     case 'beach':
       return beachKit(scenery, palette);
+    case 'ice':
+      return iceKit(scenery, palette);
   }
 }
 

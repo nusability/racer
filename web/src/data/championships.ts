@@ -10,6 +10,8 @@
 // - Elite: Sirocco with engine 1, thrusters 1, steering 1.
 // tools/sim-check.ts races these assumptions against each cup.
 
+import { CUPS_ICE } from './cupsIce.ts';
+
 export interface RivalDef {
   /** Stable id: standings points are keyed by it. */
   id: string;
@@ -142,6 +144,8 @@ export const CUPS: CupDef[] = [
     ],
     unlocks: null,
   },
+  // Frostline's cups live in their own file; same tier bands as above.
+  ...CUPS_ICE,
 ];
 
 export function cupById(id: string): CupDef {

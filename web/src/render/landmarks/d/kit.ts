@@ -29,11 +29,10 @@ export const STEEL = 0x56616e;
 export const DARK = 0x23272e;
 export const WARM_LIGHT = 0xffd890;
 export const RED_LIGHT = 0xff3030;
-export const COLD_LIGHT = 0xd8f4ff;
 export const SAFETY = 0xff6a1a;
 
 /** Snow takes a little of the track's snow tint (the palette's `sand`). */
-export function snowColor(opts: LandmarkOptions, k = 1): THREE.Color {
+function snowColor(opts: LandmarkOptions, k = 1): THREE.Color {
   return shade(mix(0xf6faff, opts.palette.sand, SNOW_TINT), k);
 }
 const SNOW_TINT = 0.45;
@@ -191,7 +190,7 @@ export class IceKit {
 
 // --- Small helpers ------------------------------------------------------------------------
 
-export const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 export const smooth01 = (x: number): number => {
   const t = clamp01(x);
   return t * t * (3 - 2 * t);

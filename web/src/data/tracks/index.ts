@@ -14,8 +14,11 @@ import { boardwalk, boardwalkScenery } from './boardwalk.ts';
 import { seastacks, seastacksScenery } from './seastacks.ts';
 import { tidalcaves, tidalcavesScenery } from './tidalcaves.ts';
 import { volcanoisle, volcanoisleScenery } from './volcanoisle.ts';
+import { snowfield, snowfieldScenery } from './snowfield.ts';
+import { frozenharbor, frozenharborScenery } from './frozenharbor.ts';
+import { glacier, glacierScenery } from './glacier.ts';
 
-export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront, coralcove, lagoonloop, boardwalk, seastacks, tidalcaves, volcanoisle];
+export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront, coralcove, lagoonloop, boardwalk, seastacks, tidalcaves, volcanoisle, snowfield, frozenharbor, glacier];
 
 const SCENERY: Record<string, TrackScenery> = {
   sunpan: sunpanScenery,
@@ -32,6 +35,9 @@ const SCENERY: Record<string, TrackScenery> = {
   seastacks: seastacksScenery,
   tidalcaves: tidalcavesScenery,
   volcanoisle: volcanoisleScenery,
+  snowfield: snowfieldScenery,
+  frozenharbor: frozenharborScenery,
+  glacier: glacierScenery,
 };
 
 export function trackById(id: string): TrackDef {

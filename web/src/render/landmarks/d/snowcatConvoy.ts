@@ -12,9 +12,9 @@ import { addBeam, brush, col, glowBoost } from '../a/kit.ts';
 import { DARK, IceKit, RED_LIGHT, RoadFrame, SAFETY, STEEL, WARM_LIGHT, bindHazard, smooth01, type Def } from './kit.ts';
 
 const SALT = 0x5ca75;
-const RADIUS = 200;
+const RADIUS = 160;
 /** The service road runs along local X at this z, between the depot and the tunnel portal. */
-const SERVICE_Z = 40;
+const SERVICE_Z = -RADIUS * 0.72;
 const SERVICE_W = 14;
 const ENDS = RADIUS * 0.85;
 const CONVOY = { high: 5, low: 3 } as const;
@@ -48,7 +48,7 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   const { rng, rig } = ik;
   const kit = ik.b;
   const bound = bindHazard('snowcatConvoy', opts, ['sweeper'] as const, {
-    def: { type: 'sweeper', id: 'free', at: 0, radius: 5, height: 6, xFrom: -40, xTo: 30, cross: 6, hold: 3, period: 20, phase: 0 },
+    def: { type: 'sweeper', id: 'free', at: 0, radius: 5, height: 6, xFrom: 40, xTo: -30, cross: 6, hold: 3, period: 20, phase: 0 },
     roadZ: -RADIUS * 0.45,
     lateral: -1,
     minX: -12,
@@ -59,7 +59,8 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   const dusk = opts.palette.dusk;
   const accent = opts.palette.accent;
 
-  // --- The service road, snow banks, reflector poles ---
+  // --- The service road, snow banks, reflector poles (lamps without halos: the CPU glow cloud
+  // is this landmark's second and last point cloud) ---
   kit.solid.add(box(ENDS * 2, 0.15, SERVICE_W), shade(ik.snow, 0.85), T(0, 0, SERVICE_Z));
   for (const side of [-1, 1]) {
     for (let i = 0; i < 12; i++) {
@@ -72,13 +73,13 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
     const x = -ENDS + (i + 0.5) * ((ENDS * 2) / nPoles);
     const z = SERVICE_Z + (i % 2 ? 1 : -1) * (SERVICE_W / 2 + 1);
     kit.solid.add(prism(0.12, 0.12, 3, 4), i % 4 < 2 ? SAFETY : DARK, T(x, 0, z));
-    kit.lamp(box(0.3, 0.3, 0.3), [x, 3, z], WARM_LIGHT, 1.5 + 2 * dusk);
+    kit.lamp(box(0.3, 0.3, 0.3), [x, 3, z], WARM_LIGHT, 0);
   }
   // Depot shed (where the convoy goes in) and a tunnel portal in a snow bank (where it comes out).
   kit.solid.add(box(30, 18, 34), mix(STEEL, ik.snow, 0.3), T(ENDS + 8, 0, SERVICE_Z));
   kit.solid.add(new THREE.CylinderGeometry(17, 17, 30, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.5, 1), accent, T(ENDS + 8, 18, SERVICE_Z));
   kit.solid.add(box(0.6, 12, 12), DARK, T(ENDS - 7.4, 0, SERVICE_Z));
-  kit.lamp(box(0.4, 1.2, 12), [ENDS - 7.6, 12.5, SERVICE_Z], 0xffb040, 4, undefined, { depth: 0.8, freq: 3, phase: 0, sharp: 3 });
+  kit.lamp(box(0.4, 1.2, 12), [ENDS - 7.6, 12.5, SERVICE_Z], 0xffb040, 0, undefined, { depth: 0.8, freq: 3, phase: 0, sharp: 3 });
   kit.solid.add(new THREE.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), ik.snow, T(-ENDS - 10, 0, SERVICE_Z, 0, 0, 0, [24, 20, 30]));
   kit.solid.add(new THREE.TorusGeometry(9, 2.2, 5, 10, Math.PI), shade(STEEL, 0.9), T(-ENDS + 12, 0, SERVICE_Z, Math.PI / 2));
   kit.solid.add(box(1, 9, 16), DARK, T(-ENDS + 11, 0, SERVICE_Z));
@@ -86,7 +87,7 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   for (let k = 0; k < 3; k++) kit.solid.add(prism(5, 5, 4, 10).rotateZ(Math.PI / 2), k ? 0xe8e4dc : SAFETY, T(ENDS - 20 - k * 12, 5, SERVICE_Z + 30));
   for (let k = 0; k < 6; k++) kit.solid.add(box(12, 5, 5), kit.festiveColor(), T(ENDS - 50 + (k % 3) * 12.5, Math.floor(k / 3) * 5, SERVICE_Z + 45));
   kit.solid.add(prism(0.6, 1, 60, 4), STEEL, T(ENDS - 70, 0, SERVICE_Z + 30));
-  kit.lamp(new THREE.OctahedronGeometry(0.9), [ENDS - 70, 60.8, SERVICE_Z + 30], RED_LIGHT, 7, undefined, { depth: 0.95, freq: 2.2, phase: 0, sharp: 7 });
+  kit.lamp(new THREE.OctahedronGeometry(0.9), [ENDS - 70, 60.8, SERVICE_Z + 30], RED_LIGHT, 0, undefined, { depth: 0.95, freq: 2.2, phase: 0, sharp: 7 });
 
   // --- The convoy: tracked haulers towing cargo sledges, rig bones driven along the road ---
   const cats: Cat[] = [];
