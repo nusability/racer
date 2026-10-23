@@ -14,7 +14,7 @@ import type { Payout } from './economy.ts';
 import { PLAYER_NAME, championshipGrid, playerEntrant, quickRaceGrid } from './opponents.ts';
 import { APPLIED_RACE_MEMORY, loadSave, writeSave } from './save.ts';
 import type { KeyValueStore, SaveData } from './save.ts';
-import type { RaceOutcome, RaceRequest, Settings } from './types.ts';
+import type { RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 
 export const MIN_QUICK_LAPS = 1;
 export const MAX_QUICK_LAPS = 5;
@@ -57,6 +57,8 @@ export interface RaceReport {
   newBestLap: boolean;
   newBestRace: boolean;
   cup: CupReport | null;
+  /** How the player was wrecked, or null when they finished. */
+  playerWreck: WreckInfo | null;
 }
 
 /** FNV-1a: turns a race id into a stable 32-bit seed. */
@@ -265,7 +267,7 @@ export class Career {
     const track = trackById(req.trackId);
 
     const cup = req.mode === 'championship' ? this.applyCupResult(req, outcome.results) : null;
-    const payout = racePayout({
+    const earned = racePayout({
       mode: req.mode,
       place: me.place,
       cup: cup ? cupById(cup.report.cupId) : this.quickRacePayCup(track.id),
@@ -273,6 +275,8 @@ export class Career {
       standardLaps: track.laps,
       cupWin: cup?.won ? { firstTime: cup.wonFirstTime } : null,
     });
+    // A wrecked player earns nothing for the race; a cup already decided on points still pays.
+    const payout = me.dnf ? { race: 0, cupBonus: earned.cupBonus, total: earned.cupBonus } : earned;
     this.save.credits += payout.total;
 
     const rec = (this.save.records[track.id] ??= { bestLap: null, bestRace: {} });
@@ -296,6 +300,7 @@ export class Career {
       newBestLap,
       newBestRace,
       cup: cup?.report ?? null,
+      playerWreck: outcome.playerWreck,
     };
     this.reports.set(req.raceId, report);
     return report;
@@ -311,8 +316,9 @@ export class Career {
     for (const r of results) {
       const pts = CUP_POINTS[r.place - 1];
       if (pts === undefined) throw new Error(`No points for place ${r.place}`);
-      awarded[r.id] = pts;
-      run.points[r.id] = (run.points[r.id] ?? 0) + pts;
+      // A wreck ends the race for that racer: it scores nothing, whatever place it was given.
+      awarded[r.id] = r.dnf ? 0 : pts;
+      run.points[r.id] = (run.points[r.id] ?? 0) + awarded[r.id];
     }
     const raceIndex = run.raceIndex;
     run.raceIndex += 1;

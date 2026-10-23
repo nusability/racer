@@ -1,11 +1,11 @@
 // Race orchestration: grid, countdown, laps, finish, standings and racer contacts.
 // Deterministic: same track, config and input tape give the same race.
 
-import type { PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
+import type { Obstacle, PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
 import type { Branch, Ribbon, Track } from './track.ts';
 import { AiDriver, driverSeed } from './ai.ts';
 import { Vehicle } from './vehicle.ts';
-import { jumpAround } from './jumps.ts';
+import { hazardObstacles } from './hazards.ts';
 import { junctionBounds, type JunctionBounds } from './junction.ts';
 import {
   AUTOPILOT_SKILL,
@@ -22,12 +22,13 @@ import {
   GRID_STAGGER,
   RACER_BUMP_SHARE,
   RACER_HALF_WIDTH,
+  RACER_DAMAGE_PER_SPEED,
   RACER_HEIGHT,
-  RACER_HIT_INTENSITY,
+  RACER_HIT_INTENSITY_SPEED,
   RACER_LENGTH,
-  RACER_PUSH_RATE,
-  RESPAWN_BACKOFF,
-  RESPAWN_JUMP_RUNUP,
+  RACER_SHOVE,
+  RACER_SHOVE_MIN,
+  RACER_SHOVE_TARGET_TIME,
   SIM_DT,
   START_BOOST_DURATION,
 } from '../data/tuning.ts';
@@ -80,6 +81,10 @@ export class Race {
   private readonly touching = new Set<number>();
   /** Per branch: branch s where its entry junction ends and its exit junction starts. */
   private readonly junctions: JunctionBounds[];
+  /** Racer indices in the order they wrecked. */
+  private readonly wrecks: number[] = [];
+  /** This step's hazard obstacles per ribbon (branch index, -1 = main). */
+  private readonly hazardNow = new Map<number, Obstacle[]>();
 
   constructor(track: Track, config: RaceConfig) {
     if (config.entrants.length === 0) throw new Error('Race: no entrants');
@@ -110,6 +115,11 @@ export class Race {
     return this.racers[this.playerIndex];
   }
 
+  /** The player is out of the race. The race keeps simulating; the session decides when to end it. */
+  get playerWrecked(): boolean {
+    return this.playerIndex >= 0 && this.racers[this.playerIndex].crashed > 0;
+  }
+
   step(input: PlayerInput): RaceEvent[] {
     const events: RaceEvent[] = [];
     if (this.phase === 'countdown') {
@@ -121,17 +131,23 @@ export class Race {
     // The player's autopilot runs even while the player drives, so it takes over (after the
     // finish) already warmed up and its RNG never depends on when that happens.
     const inputs = this.vehicles.map((v, i) => {
-      const ai = this.drivers[i].drive(v, this.track, this.racers);
+      const ai = this.drivers[i].drive(v, this.track, this.racers, this.time);
       const human = i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
     this.catchUp();
+    this.hazardNow.clear();
     this.vehicles.forEach((v, i) => {
+      if (v.state.crashed > 0) {
+        v.step(inputs[i], this.track.ribbon(v.state.branch), NO_OBSTACLES, this.time, events);
+        return;
+      }
       const from = this.mainS(v.state);
-      v.step(inputs[i], this.track.ribbon(v.state.branch), events);
-      if (v.respawnDue) this.respawn(v, events);
-      else if (v.state.crashed <= 0) this.junction(v);
+      const ribbon = this.track.ribbon(v.state.branch);
+      v.step(inputs[i], ribbon, this.hazardsOn(v.state.branch), this.time, events);
+      if (v.state.crashed > 0) this.wrecks.push(i);
+      else this.junction(v);
       // Standings distance runs along the main loop, whichever ribbon the racer is on.
       v.state.distance += this.track.delta(from, this.mainS(v.state));
     });
@@ -144,6 +160,7 @@ export class Race {
     return events;
   }
 
+  /** Valid at any moment: finishers by time, then racers still running by distance, then wrecks. */
   results(): RaceResultRow[] {
     return this.entrants
       .map((e, i) => ({
@@ -154,8 +171,20 @@ export class Race {
         time: this.racers[i].finishTime,
         bestLap: this.racers[i].bestLap,
         isPlayer: e.isPlayer,
+        dnf: this.racers[i].crashed > 0,
       }))
       .sort((a, b) => a.place - b.place);
+  }
+
+  /** The obstacles a ribbon's hazards present this step, computed once per ribbon. */
+  private hazardsOn(branch: number): readonly Obstacle[] {
+    let out = this.hazardNow.get(branch);
+    if (!out) {
+      const ribbon = this.track.ribbon(branch);
+      out = ribbon.hazards.length === 0 ? [] : hazardObstacles(ribbon.hazards, this.time, []);
+      this.hazardNow.set(branch, out);
+    }
+    return out;
   }
 
   private stepCountdown(input: PlayerInput, events: RaceEvent[]) {
@@ -198,21 +227,33 @@ export class Race {
   }
 
   private updatePlaces() {
+    // A later wreck lasted longer, so it places ahead of an earlier one.
+    const wreckRank = (r: RacerState) => this.wrecks.indexOf(this.racers.indexOf(r));
     const order = this.racers.slice().sort((a, b) => {
       if (a.finishTime !== null && b.finishTime !== null) return a.finishTime - b.finishTime;
       if (a.finishTime !== null) return -1;
       if (b.finishTime !== null) return 1;
+      const aOut = a.crashed > 0;
+      const bOut = b.crashed > 0;
+      if (aOut && bOut) return wreckRank(b) - wreckRank(a);
+      if (aOut !== bOut) return aOut ? 1 : -1;
       return b.distance - a.distance;
     });
     order.forEach((r, i) => (r.place = i + 1));
   }
 
   private checkEnd() {
-    const allDone = this.racers.every((r) => r.finishTime !== null);
+    const allDone = this.racers.every((r) => r.finishTime !== null || r.crashed > 0);
     const graceOver = this.playerFinishTime !== null && this.time >= this.playerFinishTime + FINISH_GRACE;
     if (allDone || graceOver) this.phase = 'finished';
   }
 
+  /**
+   * Racer contacts are physical. Side by side, both are shoved apart with an impulse that
+   * grows with how fast they closed, the lighter (less armoured) one moving more, and the
+   * shove carries their lines with it: side-swiping a rival into a wall is a tactic. Nose to
+   * tail, the chaser hands speed to the leader. Every new contact costs both some hull.
+   */
   private contacts(events: RaceEvent[]) {
     const n = this.vehicles.length;
     for (let i = 0; i < n; i++) {
@@ -228,22 +269,41 @@ export class Race {
         const dx = b.state.x - a.state.x;
         const overlapX = 2 * RACER_HALF_WIDTH - Math.abs(dx);
         const overlapS = RACER_LENGTH - Math.abs(ds);
+        const fresh = !this.touching.has(key);
+        this.touching.add(key);
+        let closing: number;
         if (overlapS < overlapX) {
-          // Nose to tail: the chaser gives some of its closing speed to the leader.
           const [rear, front] = ds > 0 ? [a.state, b.state] : [b.state, a.state];
-          const share = Math.max(0, rear.speed - front.speed) * RACER_BUMP_SHARE;
+          closing = Math.max(0, rear.speed - front.speed);
+          const share = closing * RACER_BUMP_SHARE;
           rear.speed -= share;
           front.speed += share;
         } else {
           const dir = dx >= 0 ? 1 : -1;
-          a.state.vx -= dir * overlapX * RACER_PUSH_RATE * SIM_DT;
-          b.state.vx += dir * overlapX * RACER_PUSH_RATE * SIM_DT;
+          // Overlap is resolved at once, split by mass, so racers never sit inside each other.
+          const ma = a.stats.armor;
+          const mb = b.stats.armor;
+          const shareA = mb / (ma + mb);
+          const shareB = ma / (ma + mb);
+          a.state.x -= dir * overlapX * shareA;
+          b.state.x += dir * overlapX * shareB;
+          closing = Math.max(0, dir * (a.state.vx - b.state.vx));
+          if (fresh) {
+            const shove = 2 * (RACER_SHOVE_MIN + RACER_SHOVE * closing);
+            a.state.vx -= dir * shove * shareA;
+            b.state.vx += dir * shove * shareB;
+            a.targetX -= dir * shove * shareA * RACER_SHOVE_TARGET_TIME;
+            b.targetX += dir * shove * shareB * RACER_SHOVE_TARGET_TIME;
+          }
         }
-        if (!this.touching.has(key)) {
-          this.touching.add(key);
-          events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity: RACER_HIT_INTENSITY });
-          events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity: RACER_HIT_INTENSITY });
-        }
+        if (!fresh) continue;
+        a.harm(closing * RACER_DAMAGE_PER_SPEED, events);
+        b.harm(closing * RACER_DAMAGE_PER_SPEED, events);
+        const intensity = Math.min(1, closing / RACER_HIT_INTENSITY_SPEED);
+        events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity });
+        events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity });
+        if (a.state.crashed > 0) this.wrecks.push(i);
+        if (b.state.crashed > 0) this.wrecks.push(j);
       }
     }
   }
@@ -251,8 +311,7 @@ export class Race {
   private inContact(a: Vehicle, b: Vehicle): boolean {
     const sa = a.state;
     const sb = b.state;
-    if (sa.crashed > 0 || sb.crashed > 0 || sa.invulnerable > 0 || sb.invulnerable > 0) return false;
-    if (sa.branch !== sb.branch) return false;
+    if (sa.crashed > 0 || sb.crashed > 0 || sa.branch !== sb.branch) return false;
     return (
       Math.abs(this.track.ribbon(sa.branch).delta(sa.s, sb.s)) < RACER_LENGTH &&
       Math.abs(sb.x - sa.x) < 2 * RACER_HALF_WIDTH &&
@@ -319,31 +378,7 @@ export class Race {
     if (x !== st.x) v.transfer(-1, st.s, x);
     if (b.side * st.vx > 0) st.vx = 0;
   }
-
-  /**
-   * Respawn a bit behind the crash on the same ribbon, never in or just before a chasm; a
-   * crash in a branch's entry junction (or one backed up into it) goes back onto the main road.
-   */
-  private respawn(v: Vehicle, events: RaceEvent[]) {
-    const main = this.track;
-    let branch = v.crashBranch;
-    let s: number;
-    if (branch >= 0) {
-      const b = main.branches[branch];
-      s = v.crashS - RESPAWN_BACKOFF;
-      const jump = jumpAround(b.ribbon, s, RESPAWN_JUMP_RUNUP);
-      if (jump) s = jump.rampStart - RESPAWN_JUMP_RUNUP;
-      if (s <= this.junctions[branch].inEnd) {
-        branch = -1;
-        s = main.wrap(b.entryS + Math.max(0, s));
-      }
-    } else s = main.wrap(v.crashS - RESPAWN_BACKOFF);
-    if (branch < 0) {
-      const jump = jumpAround(main, s, RESPAWN_JUMP_RUNUP);
-      if (jump) s = main.wrap(jump.rampStart - RESPAWN_JUMP_RUNUP);
-    }
-    v.respawn(branch, main.ribbon(branch), s, events);
-  }
 }
 
 const worldBuf = { x: 0, y: 0, z: 0 };
+const NO_OBSTACLES: readonly Obstacle[] = [];
