@@ -41,8 +41,12 @@ export const GRID_ROW_SPACING = 18;
 export const GRID_STAGGER = 9;
 /** Lateral offset of the two grid lanes from the centreline, metres. */
 export const GRID_LANE_OFFSET = 6;
-/** Free boost for holding boost exactly at GO: a reward for timing, not for holding early. */
+/** Free boost for pressing boost right at GO: a reward for timing, not for holding early. */
 export const START_BOOST_DURATION = 0.9;
+/** Seconds after GO in which a first press of boost still counts as a perfect start. */
+export const PERFECT_START_WINDOW = 0.3;
+/** Touching boost during the countdown floods the engines: no thrust for this long after GO. */
+export const FALSE_START_STALL = 1;
 /** How long the field may keep racing after the player finishes, seconds. */
 export const FINISH_GRACE = 20;
 /**
@@ -110,11 +114,11 @@ export const FRENET_MIN_DENOM = 0.3;
 
 // Sand run-off and hard boundaries
 /** Top speed multiplier on sand: cutting across it is a choice, not a free line. */
-export const SAND_TOP_SPEED = 0.8;
+export const SAND_TOP_SPEED = 0.7;
 /** Extra drag on sand, m/s². */
-export const SAND_DRAG = 8;
+export const SAND_DRAG = 14;
 /** Forward speed lost per m/s of sideways speed into a boundary. */
-export const BOUNDARY_SPEED_LOSS = 0.4;
+export const BOUNDARY_SPEED_LOSS = 0.6;
 /**
  * Grinding along a boundary drags with the engine's own pull at this fraction of top speed, so
  * a racer held against a wall settles there: slower, never pinned.
@@ -178,6 +182,8 @@ export const RACER_SHOVE_TARGET_TIME = 0.25;
 export const RACER_DAMAGE_FREE_SPEED = 8;
 /** Hull per m/s of closing speed above that in a racer contact (before armour). */
 export const RACER_DAMAGE_PER_SPEED = 0.002;
+/** Forward speed both racers lose per m/s of a side contact's closing speed: trading paint costs time. */
+export const RACER_SCRUB = 0.3;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
 export const RACER_BUMP_SHARE = 0.3;
 /**
@@ -205,18 +211,20 @@ export const SLICK_DAMPING_FLOOR = 0.35;
 // Boost tank
 /** Tank fill at the start of a race: enough for a launch and a first straight. */
 export const BOOST_START_FILL = 0.4;
-/** Tank refilled per second without collecting anything, so nobody is ever boost-less. */
-export const BOOST_PASSIVE_REFILL = 0.025;
+/** Tank refilled per second without collecting anything: a trickle, cells are the real source. */
+export const BOOST_PASSIVE_REFILL = 0.015;
+/** The trickle pauses for this long after the tank was last used: boost is spent, not leased. */
+export const BOOST_REFILL_DELAY = 1.5;
 /** A tank run dry boosts again only once it holds this much: no sputtering on the trickle. */
 export const BOOST_RESUME_FILL = 0.1;
 /** Tank fill one boost cell gives. */
-export const CELL_VALUE = 0.22;
+export const CELL_VALUE = 0.1;
 /** Pickup radius of a boost cell, metres (added to the racer's radius). */
 export const CELL_RADIUS = 3;
 /** A cell is collected only by a racer at most this high above the road: jumps fly over. */
 export const CELL_MAX_HEIGHT = 6;
-/** Free boost from a pad, seconds: pads are a main boost source, no tank used. */
-export const BOOST_PAD_DURATION = 1.8;
+/** Free boost from a pad, seconds: a short kick for taking the pad's line, no tank used. */
+export const BOOST_PAD_DURATION = 1.2;
 /** A pad only works for a racer at most this high above it, metres. */
 export const BOOST_PAD_MAX_HEIGHT = 3;
 
@@ -311,6 +319,8 @@ export const AI_MISTAKE_DURATION = 0.6;
 export const AI_JUMP_SPEED_MARGIN = 1.3;
 /** Chance per race start that an AI nails the launch boost, at skill 1. */
 export const AI_START_BOOST_CHANCE = 0.8;
+/** Chance an AI of skill 0 false-starts (it falls with the square of the missing skill). */
+export const AI_FALSE_START_CHANCE = 0.25;
 /** The AI detours to a boost pad when it lies within this of its line, metres. */
 export const AI_PAD_DETOUR = 7;
 /** An AI keeps this far from an open edge, metres (novices give cliffs a wide berth). */

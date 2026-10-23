@@ -10,13 +10,15 @@ import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
 import { AiDriver } from '../src/core/ai.ts';
 import { steerRate } from '../src/core/handling.ts';
-import { SIM_DT } from '../src/data/tuning.ts';
+import { PERFECT_START_WINDOW, SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput } from '../src/core/types.ts';
 
-/** Both bots hold boost through the countdown, so they get the launch boost at GO. */
-const HOLD_BOOST: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: true };
+/** Every bot keeps off boost through the countdown (touching it floods the engines). */
+const WAIT: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
 /** A race longer than this many seconds per lap means someone is stuck. */
 const TIMEOUT_PER_LAP = 240;
+/** Seconds after GO before position changes count: the grid sorts itself out first. */
+const START_SHUFFLE = 5;
 /** Races per track per bot (different seeds) to average out luck. */
 export const STUDY_RUNS = 5;
 const STUDY_SEED = 7000;
@@ -58,7 +60,10 @@ export function botDriver(race: Race, seed: number, bot: PlayerBot): (r: Race) =
     // A thumb drags smoothly: the target moves no faster than full steer would move it.
     const reach = steerRate(v.stats) * SIM_DT;
     const nudge = Math.max(-reach, Math.min(reach, aim - v.targetX));
-    return { steer: 0, nudge, brake: bot.brakes && wanted.brake, boost: bot.holdBoost || wanted.boost };
+    // At GO it reacts a reaction time late, then stabs boost for the launch.
+    if (r.time < bot.delay) return { steer: 0, nudge, brake: false, boost: false };
+    const launch = r.time < bot.delay + PERFECT_START_WINDOW / 2;
+    return { steer: 0, nudge, brake: bot.brakes && wanted.brake, boost: launch || bot.holdBoost || wanted.boost };
   };
 }
 
@@ -77,6 +82,13 @@ interface Outcome {
   lapped: boolean;
   /** Hull lost by the end (1 = destroyed). */
   damage: number;
+  /** Times the lead changed hands after the start shuffle. */
+  leadChanges: number;
+  /** Places the bot lost to rivals going past it, and gained passing them (after the start). */
+  passed: number;
+  overtakes: number;
+  /** Share of its race the bot spent boosting. */
+  boostShare: number;
   /** Championship points every entrant scored, by entrant id. */
   points: Map<string, number>;
 }
@@ -90,9 +102,25 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   // The race ends a grace period after the player finishes, so a rival still running then
   // gets its margin from how far it had left at the player's finish, at its average pace.
   let rivalEta = Infinity;
+  let leader = '';
+  let leadChanges = 0;
+  let passed = 0;
+  let overtakes = 0;
+  let boosting = 0;
+  let place = me.place;
   for (let n = 0; race.phase !== 'finished'; n++) {
     if (n > maxSteps) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} race timed out`);
-    race.step(race.phase === 'countdown' ? HOLD_BOOST : drive(race));
+    race.step(race.phase === 'countdown' ? WAIT : drive(race));
+    if (race.phase === 'countdown' || me.crashed > 0 || me.finishTime !== null) continue;
+    if (me.boosting) boosting += SIM_DT;
+    const first = race.racers.find((r) => r.place === 1);
+    if (race.time > START_SHUFFLE && first && leader !== '' && first.id !== leader) leadChanges++;
+    if (first) leader = first.id;
+    if (race.time > START_SHUFFLE) {
+      if (me.place > place) passed += me.place - place;
+      if (me.place < place) overtakes += place - me.place;
+    }
+    place = me.place;
     if (me.finishTime !== null && rivalEta === Infinity) {
       for (const r of race.racers) {
         if (r === me || r.crashed > 0) continue;
@@ -116,6 +144,10 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     wreck,
     lapped,
     damage: me.damage,
+    leadChanges,
+    passed,
+    overtakes,
+    boostShare: boosting / Math.max(SIM_DT, me.finishTime ?? race.time),
     points,
   };
 }
@@ -171,6 +203,11 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
     `  total: race wins ${wins}/${all.length}, cups won ${Math.round(res.cupWinShare * STUDY_RUNS)}/${STUDY_RUNS}, ` +
       `within 3 s of 1st ${within3}/${all.length}, places ${counts}, DNF ${wrecks.length}/${all.length}${reasons ? ` (${reasons})` : ''}, ` +
       `mean hull lost by finishers ${Math.round((100 * finished.reduce((t, o) => t + o.damage, 0)) / Math.max(1, finished.length))}%`,
+  );
+  const mean = (f: (o: Outcome) => number) => fmt(all.reduce((t, o) => t + f(o), 0) / all.length);
+  console.log(
+    `  per race: lead changes ${mean((o) => o.leadChanges)}, bot passed ${mean((o) => o.passed)}x, ` +
+      `bot overtook ${mean((o) => o.overtakes)}x, bot boosting ${Math.round(100 * all.reduce((t, o) => t + o.boostShare, 0) / all.length)}% of its race`,
   );
   const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);
   if (margins.length) {

@@ -177,3 +177,37 @@ export function stepper(o: StepperOpts): HTMLElement {
   set(value);
   return h('div', 'stepper', h('span', 'stepper__label', o.label), minus, out, plus);
 }
+
+/** How long a destructive button waits for its confirming second tap, ms. */
+const CONFIRM_WINDOW_MS = 3000;
+
+/**
+ * A destructive button: the first tap arms it ("TAP AGAIN"), a second tap within the window
+ * runs it. Stays in the page instead of a native dialog.
+ */
+export function confirmButton(o: ButtonOpts): HTMLButtonElement {
+  let armedUntil = 0;
+  const b = button({
+    ...o,
+    onTap: () => {
+      const now = performance.now();
+      if (now < armedUntil) {
+        armedUntil = 0;
+        label.textContent = o.label;
+        b.classList.remove('is-armed');
+        o.onTap();
+        return;
+      }
+      armedUntil = now + CONFIRM_WINDOW_MS;
+      label.textContent = 'TAP AGAIN';
+      b.classList.add('is-armed');
+      window.setTimeout(() => {
+        if (performance.now() < armedUntil) return;
+        label.textContent = o.label;
+        b.classList.remove('is-armed');
+      }, CONFIRM_WINDOW_MS);
+    },
+  });
+  const label = b.querySelector('.btn__label') as HTMLElement;
+  return b;
+}

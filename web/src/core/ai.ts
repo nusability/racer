@@ -56,6 +56,7 @@ import {
   AI_SHORTCUT_LOOK_TIME,
   AI_SKILL_CURVE,
   AI_START_BOOST_CHANCE,
+  AI_FALSE_START_CHANCE,
   AI_TARGET_NOISE,
   AI_TARGET_TIME,
   AI_WALL_MARGIN,
@@ -132,8 +133,15 @@ export class AiDriver {
   }
 
   /** Whether this driver holds boost at the exact moment of GO. */
-  startBoost(): boolean {
-    return this.rng() < AI_START_BOOST_CHANCE * this.skill;
+  /**
+   * How this driver leaves the grid: a false start (boost touched early), a perfect start
+   * (boost right at GO) or a plain one. Rookies jump the gun now and then; aces nail it.
+   */
+  startAction(): 'false' | 'perfect' | 'none' {
+    const roll = this.rng();
+    const early = AI_FALSE_START_CHANCE * (1 - this.skill) ** 2;
+    if (roll < early) return 'false';
+    return roll < early + AI_START_BOOST_CHANCE * this.skill ? 'perfect' : 'none';
   }
 
   /**

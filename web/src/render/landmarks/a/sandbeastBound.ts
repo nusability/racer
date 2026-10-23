@@ -45,6 +45,8 @@ const SLAM_START = 0.8;
 const HEAVE = 1.6;
 
 const EMIT_STEP = 0.05;
+/** Sand streams poured off the back per emission tick. */
+const SAND_STREAMS = 3;
 
 export function createBoundBeast(opts: LandmarkOptions): Landmark {
   const bound = boundHazard(opts, 'sandbeast', ['sweeper', 'blocker'] as const);
@@ -85,7 +87,7 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
   const rk = r * k;
   const sandBurst = brush({ life: 4, size0: rk * 2, size1: rk * 7, c0: shade(c.sand, 1.1), c1: mix(opts.palette.sand, opts.palette.horizon, 0.5), alpha: 0.7, keep: 0.4, lift: 1.5 * k });
   const spray = brush({ life: 1.8, size0: rk * 0.8, size1: rk * 2.4, c0: shade(c.sand, 1.1), c1: mix(opts.palette.sand, opts.palette.horizon, 0.4), alpha: 0.65, keep: 0.45, lift: -9 * k });
-  const sandFall = brush({ life: 2.4, size0: rk * 0.35, size1: rk * 0.6, c0: shade(c.sand, 1.05), c1: c.sand, alpha: 0.85, keep: 0.8, lift: -22 * k });
+  const sandFall = brush({ life: 2.4, size0: rk * 0.35, size1: rk * 1.1, c0: shade(c.sand, 1.05), c1: c.sand, alpha: 0.85, keep: 0.8, lift: -22 * k });
 
   // Path in track space (x, height, ds) per sample, then local positions and arc lengths.
   const px = new Float32Array(SAMPLES);
@@ -141,7 +143,8 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
       const beyond = (x - roadEdgeA) * -side;
       let y = r + humpAt(x);
       if (beyond > 0) y -= Math.min(1, beyond / TAIL_OUT) * 3 * r;
-      const sway = Math.sin(u * Math.PI * 2 + time * 0.8) * 4 * u * (1 - slam);
+      // A slow, heavy sinuous roll along the body: a long wave, never a wobble.
+      const sway = Math.sin(u * Math.PI * 1.3 + time * 0.35) * 7 * u * (1 - slam);
       px[i] += (x - px[i]) * slam;
       py[i] += (y - py[i]) * slam;
       pd[i] = sway;
@@ -223,7 +226,7 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
         open = rear * (1 - slam);
         fountain = st.progress;
         // A tremor through the body as it gathers itself.
-        rear += Math.sin(time * 23) * 0.03 * rear;
+        rear += Math.sin(time * 9) * 0.012 * rear;
       } else if (st.stage === 'down') {
         slam = 1;
       } else {
@@ -280,11 +283,14 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
 
   /** Sand pouring off any part of the back that is up in the air. */
   function emitSandFall(): void {
-    const s = beast.segs[Math.floor(evt() * beast.segs.length)];
-    if (s.bone.scale.x === 0 || evt() > 0.6) return;
-    rig.local(s.bone, (evt() - 0.5) * s.r * 1.6, s.r * 1.1, 0, W);
-    smoke.emit(sandFall, W.x, W.y, W.z, 0, -2 * k, 0);
+    for (let n = 0; n < SAND_STREAMS; n++) {
+      const s = beast.segs[Math.floor(evt() * beast.segs.length)];
+      if (s.bone.scale.x === 0) continue;
+      rig.local(s.bone, (evt() - 0.5) * s.r * 2, s.r * (0.6 + evt() * 0.6), -evt() * s.r * 2, W);
+      smoke.emit(sandFall, W.x, W.y, W.z, 0, -2 * k, 0);
+    }
   }
+
 
   return { group: kit.group, radius: reach, update, dispose: () => disposeKit(kit) };
 }

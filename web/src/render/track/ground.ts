@@ -177,29 +177,37 @@ export class Ground {
     return smp.pos.y + smp.right.y * x;
   }
 
-  /** The visible ground surface: road level by the corridor, easing out to the dunes. */
+  /**
+   * The visible ground surface: road level by the corridor, easing out to the dunes. Nothing
+   * rises inside the drivable width (road and run-off up to the hard boundary): the ease only
+   * starts past the boundary, after landmark pads, so no dune, sand bar or pad edge ever
+   * stands where a craft can fly.
+   */
   height(x: number, z: number, near: Nearest | null = this.nearest(x, z)): number {
     let h = this.natural(x, z, near);
+    for (const p of this.pads) {
+      const t = smoothstep((Math.hypot(x - p.x, z - p.z) - p.r) / PAD_FADE);
+      h = p.y + (h - p.y) * t;
+    }
     if (near) {
       const smp = this.views[near.v].ribbon.samples[near.k];
       const half = smp.width / 2;
       const out = Math.max(0, Math.abs(near.d) - half);
       const sh = this.views[near.v].shape;
+      const side = sideIndex(near.d);
+      const falls = sh.drop[side][near.k] || (sh.magnet[near.k] && !sh.loop[near.k]);
       // Beside a lagoon the ground drops to a shallow sea bed: the run-off is water. Past a
       // drop, and under a corkscrew, it falls far away; under a loop it is the loop's baseline.
       const roadSide = sh.water[near.k]
         ? SEA_LEVEL - LAGOON_DEPTH
-        : sh.drop[sideIndex(near.d)][near.k] || (sh.magnet[near.k] && !sh.loop[near.k])
+        : falls
           ? sh.gy[near.k] - DROP_FALL
           : sh.loop[near.k]
             ? sh.gy[near.k] - SHOULDER_DROP
             : this.roadY(near.v, near.k, Math.sign(near.d) * half) - SHOULDER_DROP;
+      const flat = falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
-      h = roadSide + (h - roadSide) * smoothstep((out - SHOULDER_FLAT) / blend);
-    }
-    for (const p of this.pads) {
-      const t = smoothstep((Math.hypot(x - p.x, z - p.z) - p.r) / PAD_FADE);
-      h = p.y + (h - p.y) * t;
+      h = roadSide + (h - roadSide) * smoothstep((out - flat) / blend);
     }
     return h;
   }

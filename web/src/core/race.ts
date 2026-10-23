@@ -30,11 +30,14 @@ import {
   RACER_HIT_INTENSITY_SPEED,
   RACER_LENGTH,
   RACER_RADIUS,
+  RACER_SCRUB,
   RACER_SHOVE,
   RACER_SHOVE_MIN,
   RACER_SHOVE_TARGET_TIME,
   SIM_DT,
   START_BOOST_DURATION,
+  PERFECT_START_WINDOW,
+  FALSE_START_STALL,
 } from '../data/tuning.ts';
 
 const MS_PER_KMH = 3.6;
@@ -81,6 +84,10 @@ export class Race {
   private readonly drivers: AiDriver[];
   private readonly playerIndex: number;
   private playerFinishTime: number | null = null;
+  /** The player touched boost during the countdown. */
+  private playerFlooded = false;
+  /** The player launched neither late nor perfectly yet, so a press in the start window counts. */
+  private playerLaunchPending = false;
   /** Per pair of racers, the race time they last touched, so one tussle is one hit. */
   private readonly lastTouch = new Map<number, number>();
   /** Per branch: branch s where its entry junction ends and its exit junction starts. */
@@ -130,7 +137,10 @@ export class Race {
       this.stepCountdown(input, events);
       return events;
     }
-    if (this.phase === 'racing') this.time += SIM_DT;
+    if (this.phase === 'racing') {
+      this.time += SIM_DT;
+      this.startWindow(input, events);
+    }
     // Inputs are all read from the same pre-step state, so entrant order can't bias the race.
     // The player's autopilot runs even while the player drives, so it takes over (after the
     // finish) already warmed up and its RNG never depends on when that happens.
@@ -200,12 +210,37 @@ export class Race {
     if (this.countdownSteps % STEPS_PER_SECOND === 0) {
       events.push({ type: 'countdown', n: this.countdownSteps / STEPS_PER_SECOND });
     }
-    if (this.countdownSteps > 0) return;
+    // Any touch of boost before GO floods the player's engines (the countdown step that
+    // reaches GO is GO itself, so a press there is on time).
+    if (this.countdownSteps > 0) {
+      if (input.boost) this.playerFlooded = true;
+      return;
+    }
     this.phase = 'racing';
     this.vehicles.forEach((v, i) => {
-      const launch = i === this.playerIndex ? input.boost : this.drivers[i].startBoost();
-      if (launch) v.grantFreeBoost(START_BOOST_DURATION);
+      const start = i === this.playerIndex ? (this.playerFlooded ? 'false' : 'none') : this.drivers[i].startAction();
+      if (start === 'false') {
+        v.stall(FALSE_START_STALL);
+        events.push({ type: 'falseStart', id: v.state.id });
+      } else if (start === 'perfect') this.perfectStart(v, events);
+      else if (i === this.playerIndex) this.playerLaunchPending = true;
     });
+    this.startWindow(input, events);
+  }
+
+  /** Right after GO, a player who hasn't launched yet gets the launch boost by pressing boost. */
+  private startWindow(input: PlayerInput, events: RaceEvent[]) {
+    if (!this.playerLaunchPending) return;
+    if (this.time > PERFECT_START_WINDOW) this.playerLaunchPending = false;
+    else if (input.boost) {
+      this.playerLaunchPending = false;
+      this.perfectStart(this.vehicles[this.playerIndex], events);
+    }
+  }
+
+  private perfectStart(v: Vehicle, events: RaceEvent[]) {
+    v.grantFreeBoost(START_BOOST_DURATION);
+    events.push({ type: 'perfectStart', id: v.state.id });
   }
 
   private laps(v: Vehicle, before: number, events: RaceEvent[]) {
@@ -290,6 +325,8 @@ export class Race {
           b.state.x += dir * overlapX * shareB;
           closing = Math.max(0, dir * (a.state.vx - b.state.vx));
           if (fresh) {
+            a.state.speed = Math.max(0, a.state.speed - closing * RACER_SCRUB);
+            b.state.speed = Math.max(0, b.state.speed - closing * RACER_SCRUB);
             const shove = 2 * (RACER_SHOVE_MIN + RACER_SHOVE * closing);
             a.state.vx -= dir * shove * shareA;
             b.state.vx += dir * shove * shareB;

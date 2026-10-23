@@ -1,6 +1,7 @@
 // What every screen gets: the career, audio, showroom, navigation and the race launcher.
 import type { GameAudio } from '../../audio/audio.ts';
 import type { Career, RaceReport } from '../../game/career.ts';
+import type { KeyValueStore } from '../../game/save.ts';
 import type { RaceRequest, ShowroomApi } from '../../game/types.ts';
 
 export type Nav =
@@ -12,10 +13,13 @@ export type Nav =
   | { screen: 'quick'; worldId?: string; trackId?: string; laps?: number }
   | { screen: 'garage'; racerId?: string }
   | { screen: 'settings' }
+  | { screen: 'debug' }
   | { screen: 'results'; report: RaceReport };
 
 export interface AppCtx {
   career: Career;
+  /** Where the career and the per-device debug flags live. */
+  store: KeyValueStore;
   audio: GameAudio;
   showroom: ShowroomApi;
   go(nav: Nav): void;

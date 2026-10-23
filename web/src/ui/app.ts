@@ -13,6 +13,7 @@ import { mainMenuScreen } from './screens/mainMenu.ts';
 import { quickRaceScreen } from './screens/quickRace.ts';
 import { resultsScreen } from './screens/results.ts';
 import { settingsScreen } from './screens/settings.ts';
+import { debugScreen } from './screens/debug.ts';
 import { titleScreen } from './screens/title.ts';
 
 export interface AppDeps {
@@ -45,6 +46,8 @@ function build(ctx: AppCtx, nav: Nav): Screen {
       return garageScreen(ctx, nav.racerId);
     case 'settings':
       return settingsScreen(ctx);
+    case 'debug':
+      return debugScreen(ctx);
     case 'results':
       return resultsScreen(ctx, nav.report);
   }
@@ -91,6 +94,6 @@ export function startApp(deps: AppDeps): void {
     });
   }
 
-  const ctx: AppCtx = { career, audio: deps.audio, showroom: deps.showroom, go, race };
+  const ctx: AppCtx = { career, store: deps.store, audio: deps.audio, showroom: deps.showroom, go, race };
   go({ screen: 'title' });
 }

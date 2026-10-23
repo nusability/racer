@@ -12,7 +12,7 @@ import type { UpgradeId } from '../core/types.ts';
 import { racePayout } from './economy.ts';
 import type { Payout } from './economy.ts';
 import { PLAYER_NAME, championshipGrid, playerEntrant, quickRaceGrid } from './opponents.ts';
-import { APPLIED_RACE_MEMORY, loadSave, writeSave } from './save.ts';
+import { APPLIED_RACE_MEMORY, freshSave, loadSave, writeSave } from './save.ts';
 import type { KeyValueStore, SaveData } from './save.ts';
 import type { RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 
@@ -150,13 +150,14 @@ export class Career {
 
   isWorldUnlocked(worldId: string): boolean {
     const w = worldById(worldId);
-    return w.unlockedBy === null || this.save.wonCups.includes(w.unlockedBy);
+    return this.save.debugUnlockAll === true || w.unlockedBy === null || this.save.wonCups.includes(w.unlockedBy);
   }
 
   /** A world's rookie cup opens with the world; pro and elite open on the previous cup's win. */
   isCupUnlocked(cupId: string): boolean {
     const cup = cupById(cupId);
     if (!this.isWorldUnlocked(cup.worldId)) return false;
+    if (this.save.debugUnlockAll) return true;
     const prev = CUPS.find((c) => c.unlocks === cup.id);
     return !prev || this.save.wonCups.includes(prev.id);
   }
@@ -304,6 +305,46 @@ export class Career {
     };
     this.reports.set(req.raceId, report);
     return report;
+  }
+
+  // --- Debug menu only (src/ui/screens/debug.ts). Never called from normal play. ----------
+
+  /** Opens every world and cup (wins and pay tiers stay as earned). */
+  debugUnlockAll(): void {
+    this.save.debugUnlockAll = true;
+    this.persist();
+  }
+
+  debugAddCredits(amount: number): void {
+    if (!Number.isInteger(amount) || amount <= 0) throw new Error(`Bad debug credit amount ${amount}`);
+    this.save.credits += amount;
+    this.persist();
+  }
+
+  /** Owns the racer without paying; existing upgrades are kept. */
+  debugGiveRacer(racerId: string): void {
+    racerById(racerId);
+    if (this.save.ownedRacers.includes(racerId)) return;
+    this.save.ownedRacers.push(racerId);
+    this.save.upgrades[racerId] = noUpgrades();
+    this.persist();
+  }
+
+  debugSetUpgrade(racerId: string, upgradeId: UpgradeId, level: number): void {
+    if (!this.owns(racerId)) throw new Error(`Debug: give "${racerId}" before upgrading it`);
+    if (!Number.isInteger(level) || level < 0 || level > MAX_UPGRADE_LEVEL) throw new Error(`Debug: bad level ${level}`);
+    this.save.upgrades[racerId][upgradeId] = level;
+    this.persist();
+  }
+
+  /** A fresh career that keeps the player's settings. */
+  debugResetProgress(): void {
+    const settings = this.save.settings;
+    const fresh = freshSave();
+    for (const k of Object.keys(this.save) as (keyof SaveData)[]) delete this.save[k];
+    Object.assign(this.save, fresh, { settings });
+    this.reports.clear();
+    this.persist();
   }
 
   private applyCupResult(req: RaceRequest, results: RaceResultRow[]): { report: CupReport; won: boolean; wonFirstTime: boolean } {

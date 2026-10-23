@@ -417,6 +417,10 @@ export type RaceEvent =
   | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'offEdge' | 'loopStall' | 'obstacle' | 'hazard' }
   | { type: 'respawn'; id: string }
   | { type: 'launch'; id: string }
+  /** At GO: boost was touched during the countdown, so the engines flooded and launch late. */
+  | { type: 'falseStart'; id: string }
+  /** Boost pressed right at GO (and not before): the launch boost fires. */
+  | { type: 'perfectStart'; id: string }
   | { type: 'land'; id: string; impact: number }
   | { type: 'boostPad'; id: string }
   /** A racer collected boost cell `cell` of ribbon `branch` (-1 = main loop). */

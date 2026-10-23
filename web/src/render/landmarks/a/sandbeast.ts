@@ -115,7 +115,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
     setJaws(beast, open, time);
     segs.forEach((s, i) => {
       const a = aHead + (i + 1) * dTheta;
-      const y = active ? onArc(s.bone, a, Math.sin(time * 1.5 - i * 0.4) * 0.12) : -100;
+      const y = active ? onArc(s.bone, a, Math.sin(time * 0.3 - i * 0.12) * 0.05) : -100;
       // Below the sand there's nothing to draw; hiding stops it poking through dune hollows.
       s.bone.scale.setScalar(active && y > -s.r * 2 ? 1 : 0);
     });
@@ -156,7 +156,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
           smoke.emit(spray, mound.position.x - 10, 3, (evt() - 0.5) * 16, -8 - evt() * 8, 8 + evt() * 8, (evt() - 0.5) * 10);
         }
         if (!active) continue;
-        for (let i = 0; i < nSeg; i += 2) {
+        for (let i = 0; i < nSeg; i++) {
           const s = segs[i];
           if (s.bone.scale.x === 0) continue;
           const y = s.bone.position.y;
@@ -165,7 +165,7 @@ export function createSandbeast(opts: LandmarkOptions): Landmark {
             const x = s.bone.position.x;
             smoke.emit(spray, x, 2, s.bone.position.z, (evt() - 0.5) * 30, 10 + evt() * 14, (evt() - 0.5) * 30);
             if (evt() < 0.3) smoke.emit(plume, x, 6, s.bone.position.z, (evt() - 0.5) * 8, 6 + evt() * 6, (evt() - 0.5) * 8);
-          } else if (y > s.r && evt() < 0.45) {
+          } else if (y > s.r) {
             // Sand pouring off the plated back.
             rig.local(s.bone, (evt() - 0.5) * s.r * 1.6, s.r * 1.1, 0, P);
             smoke.emit(sandFall, P.x, P.y, P.z, (evt() - 0.5) * 3, -2, (evt() - 0.5) * 3);

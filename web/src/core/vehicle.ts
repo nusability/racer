@@ -15,6 +15,7 @@ import {
   BOOST_PAD_DURATION,
   BOOST_PAD_MAX_HEIGHT,
   BOOST_PASSIVE_REFILL,
+  BOOST_REFILL_DELAY,
   BOOST_RESUME_FILL,
   BOOST_START_FILL,
   BOUNDARY_DAMAGE_FREE_SPEED,
@@ -100,6 +101,10 @@ export class Vehicle {
   pace = 1;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
+  /** Seconds since the tank was last spent from: the trickle refill waits a moment. */
+  private sinceSpend = Infinity;
+  /** Seconds the engines stay flooded after a false start: no thrust, no boost. */
+  private stalled = 0;
   /** The wall the racer was against last step (-1 left, 1 right, 0 none): pressing is not a new hit. */
   private wallSide: -1 | 0 | 1 = 0;
   /** Per ribbon (branch index, -1 = main): the boost and repair cells taken this lap. */
@@ -215,8 +220,9 @@ export class Vehicle {
     const dt = SIM_DT;
     this.freeBoost = Math.max(0, this.freeBoost - dt);
     if (this.dry && st.boost >= BOOST_RESUME_FILL) this.dry = false;
-    const spend = wantBoost && this.freeBoost <= 0 && !this.dry;
-    st.boost = Math.min(1, st.boost + BOOST_PASSIVE_REFILL * dt);
+    const spend = wantBoost && this.freeBoost <= 0 && !this.dry && this.stalled <= 0;
+    this.sinceSpend = spend ? 0 : this.sinceSpend + dt;
+    if (this.sinceSpend >= BOOST_REFILL_DELAY) st.boost = Math.min(1, st.boost + BOOST_PASSIVE_REFILL * dt);
     if (spend) {
       st.boost = Math.max(0, st.boost - dt / this.stats.boostTank);
       if (st.boost === 0) {
@@ -234,7 +240,10 @@ export class Vehicle {
     if (this.offroad) top *= SAND_TOP_SPEED;
     let dv: number;
     if (brake) dv = -BRAKE_DECEL;
-    else if (st.speed < top) {
+    else if (this.stalled > 0) {
+      this.stalled -= SIM_DT;
+      dv = 0;
+    } else if (st.speed < top) {
       const thrust = this.stats.accel * (st.boosting ? BOOST_ACCEL_MULT : 1);
       dv = thrust * (1 - (st.speed / top) ** ACCEL_TAPER_EXP);
     } else dv = -(st.speed - top) * OVERSPEED_DECAY;
@@ -483,6 +492,12 @@ export class Vehicle {
   }
 
   /** Starts a free boost burst (launch boost at GO). */
+  /** A false start: the engines give nothing for `seconds`, and any launch boost is lost. */
+  stall(seconds: number) {
+    this.stalled = seconds;
+    this.freeBoost = 0;
+  }
+
   grantFreeBoost(seconds: number) {
     this.freeBoost = Math.max(this.freeBoost, seconds);
   }

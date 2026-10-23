@@ -41,6 +41,8 @@ export interface SaveData {
   /** Increments per applied race; names the next race id and seeds it. */
   raceSerial: number;
   appliedRaceIds: string[];
+  /** Debug menu "unlock everything": every world and cup open without faking wins. */
+  debugUnlockAll?: boolean;
 }
 
 /** Minimal storage surface so the career also runs headless (node) with a fake. */
@@ -129,6 +131,7 @@ function validate(d: Record<string, unknown>): SaveData {
   check(validSettings(d.settings), 'settings');
   check(isInt(d.raceSerial) && d.raceSerial >= 1, 'raceSerial');
   check(isStrArr(d.appliedRaceIds), 'appliedRaceIds');
+  check(d.debugUnlockAll === undefined || typeof d.debugUnlockAll === 'boolean', 'debugUnlockAll');
   return d as unknown as SaveData;
 }
 

@@ -20,6 +20,7 @@ import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/tr
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
+import { saveTelemetry, TelemetryRecorder } from './telemetry.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
 import type { CrashReason, Hud, InputSource, RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 import {
@@ -122,6 +123,7 @@ export class RaceSession {
   private readonly tmpVel = new THREE.Vector3();
   private readonly tmpDir = new THREE.Vector3();
   private readonly frameRight = new THREE.Vector3();
+  private telemetry: TelemetryRecorder;
   /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
   private playerWreck: WreckInfo | null = null;
   private wreckFor = 0;
@@ -138,6 +140,7 @@ export class RaceSession {
     const def = trackById(request.trackId);
     this.track = new Track(def);
     this.race = this.newRace();
+    this.telemetry = new TelemetryRecorder(request, ctx.settings, __BUILD__);
 
     this.env = applyEnvironment(this.scene, def.palette, ctx.settings.quality);
     this.trackScene = buildTrackScene(this.track, ctx.settings.quality);
@@ -226,6 +229,7 @@ export class RaceSession {
   private restart() {
     this.resume();
     this.race = this.newRace();
+    this.telemetry = new TelemetryRecorder(this.request, this.ctx.settings, __BUILD__);
     this.acc = 0;
     this.finishedFor = 0;
     this.countdown = null;
@@ -249,6 +253,8 @@ export class RaceSession {
   private finish(outcome: RaceOutcome | null) {
     if (this.done) return;
     this.done = true;
+    // A quit race isn't worth a log: there is no outcome to explain.
+    if (outcome) saveTelemetry(this.telemetry.finish(outcome));
     this.dispose();
     this.onDone(outcome);
   }
@@ -276,10 +282,12 @@ export class RaceSession {
       }
       this.clock += dt;
       this.acc += dt;
+      this.telemetry.frame(real);
       const input: PlayerInput = this.input.read();
       while (this.acc >= SIM_DT) {
         this.acc -= SIM_DT;
         const events = this.race.step(input);
+        this.telemetry.step(this.race, input, events);
         // A nudge is a displacement, not a rate: it must land on exactly one step.
         input.nudge = 0;
         this.syncSnapshots(false);
