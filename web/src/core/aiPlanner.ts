@@ -7,6 +7,7 @@
 import type { Ribbon } from './track.ts';
 import {
   AI_PLAN_BLOCK_COST,
+  AI_PLAN_CLEARANCE_COST,
   AI_PLAN_HALF_SPAN,
   AI_PLAN_LATERAL,
   AI_PLAN_LINE_COST,
@@ -101,16 +102,22 @@ export class PathPlanner {
         node[k * cols + j] = c;
       }
       for (const o of q.blockers) {
-        const reach = o.radius + RACER_RADIUS + clearance;
+        const touch = o.radius + RACER_RADIUS;
+        const reach = touch + clearance;
         // A capsule: the blocker's circle stretched both ways along s.
         const along = Math.max(0, Math.abs(ribbon.delta(o.s, sk)) - stretch);
         if (along >= reach) continue;
         const hw = Math.sqrt(reach * reach - along * along);
+        const hard = along < touch ? Math.sqrt(touch * touch - along * along) : 0;
         const j0 = Math.max(0, Math.ceil((o.x - hw - lo) / AI_PLAN_LATERAL));
         const j1 = Math.min(cols - 1, Math.floor((o.x + hw - lo) / AI_PLAN_LATERAL));
-        // Dearer toward the centre: if contact can't be avoided, a glance off the edge beats
-        // a dead-centre hit (the only kind that crashes).
-        for (let j = j0; j <= j1; j++) node[k * cols + j] += AI_PLAN_BLOCK_COST * (2 - Math.abs(xAt(j) - o.x) / reach);
+        for (let j = j0; j <= j1; j++) {
+          const off = Math.abs(xAt(j) - o.x);
+          // Contact is blocked, dearer toward the centre: if it can't be avoided, a glance
+          // beats a dead-centre hit (a wreck). The clearance margin is only dear, so a gap
+          // tighter than this driver likes is threaded close rather than not at all.
+          node[k * cols + j] += off < hard ? AI_PLAN_BLOCK_COST * (2 - off / touch) : AI_PLAN_CLEARANCE_COST * (1 - (off - hard) / (hw - hard));
+        }
       }
     }
 

@@ -22,6 +22,7 @@ import {
   mulberry32,
   rock,
   shade,
+  smooth,
   strut,
 } from './kit.ts';
 import { boundHazard, boundReach } from './bound.ts';
@@ -315,7 +316,7 @@ export function createMine(opts: LandmarkOptions): Landmark {
     } else slew.rotation.y = Math.sin(time * SLEW_RATE) * SLEW_ARC;
     // Re-aim the stays from the mast top to the boom tip.
     TIP.copy(P1).applyAxisAngle(X_AXIS, boom.rotation.x).add(P0).sub(mastTop);
-    stay.quaternion.setFromUnitVectors(Y_AXIS, TIP.clone().normalize());
+    stay.quaternion.setFromUnitVectors(Y_AXIS, TIP_DIR.copy(TIP).normalize());
     stay.scale.set(1, TIP.length(), 1);
     wheel.rotation.x = -time * WHEEL_SPIN;
     for (const o of ores) {
@@ -364,6 +365,8 @@ export function createMine(opts: LandmarkOptions): Landmark {
       while (acc > EMIT_STEP) {
         acc -= EMIT_STEP;
         // Spill from the buckets biting the face, steam off the sorting towers, road dust.
+        // Each falling rock streams a dust trail, so the drop reads from far down the road.
+        if (digger) for (const p of digger.falling) smoke.emit(spill, p.x, p.y, p.z, 0, 0, 0);
         if (!digger || dumping) {
           rig.local(wheel, (evt() - 0.5) * 10, -WHEEL_R + evt() * 6, (evt() - 0.5) * 10, V);
           smoke.emit(digger ? spill : dust, V.x, V.y, V.z, (evt() - 0.5) * 6, -1, (evt() - 0.5) * 6);
@@ -390,5 +393,6 @@ const EMIT_STEP = 0.12;
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const TIP = new THREE.Vector3();
+const TIP_DIR = new THREE.Vector3();
 /** Where on the loop (radians) trucks tip their load. */
 const DUMP_ANGLE = 1.2;

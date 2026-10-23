@@ -172,7 +172,7 @@ export const RACER_SHOVE_TARGET_TIME = 0.25;
 /** Racer contacts closing slower than this do no damage, m/s: rubbing is free, ramming is not. */
 export const RACER_DAMAGE_FREE_SPEED = 8;
 /** Hull per m/s of closing speed above that in a racer contact (before armour). */
-export const RACER_DAMAGE_PER_SPEED = 0.003;
+export const RACER_DAMAGE_PER_SPEED = 0.002;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
 export const RACER_BUMP_SHARE = 0.3;
 /**
@@ -256,13 +256,15 @@ export const AI_PLAN_MAX_SLOPE = 0.25;
  * Share of the full steer rate a plan may count on at speed: the AI steers its target in
  * proportion to the error, so it slows as it closes in, and the hull trails the target.
  */
-export const AI_PLAN_RATE_SHARE = 10;
+export const AI_PLAN_RATE_SHARE = 0.5;
 /** Obstacles block this many seconds of travel in front of and behind them. */
 export const AI_OBSTACLE_LEAD_TIME = 0.1;
 /** The AI steers around racers it would catch within this many seconds. */
 export const AI_RACER_LOOK_TIME = 1.2;
 /** Planner cost of a blocked cell; dwarfs any line or swerve cost so blocked means avoid. */
 export const AI_PLAN_BLOCK_COST = 1e6;
+/** Planner cost of one step inside a blocker's clearance margin, at its edge of contact. */
+export const AI_PLAN_CLEARANCE_COST = 300;
 /** Planner cost per metre off the racing line per step. */
 export const AI_PLAN_LINE_COST = 1;
 /** Planner cost per metre of swerve: keeps paths smooth. */

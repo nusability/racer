@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Track } from '../../core/track.ts';
 import type { TrackScenery } from '../../data/tracks/scenery.ts';
 import { LANDMARKS, type Landmark } from '../landmarks/index.ts';
+import type { HazardBinding } from '../landmarks/types.ts';
 import { LANDMARK_PAD, LANDMARK_VIEW, SEA_LEVEL, type Quality } from './config.ts';
 import type { Ground } from './ground.ts';
 
@@ -32,7 +33,11 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
   scenery.landmarks.forEach((p, i) => {
     const ribbon = p.branch === undefined ? track : branchRibbon(track, p.branch);
     const factory = LANDMARKS[p.kind];
-    const landmark = factory({ seed: track.def.seed * 131 + i * 17, palette: track.def.palette, quality });
+    // A bound landmark maps track space into its own local space; the inverse placement is
+    // filled in once it has been placed below.
+    const toLocal = new THREE.Matrix4();
+    const hazard = p.hazard === undefined ? undefined : bindHazard(track, p.hazard, toLocal);
+    const landmark = factory({ seed: track.def.seed * 131 + i * 17, palette: track.def.palette, quality, hazard });
     const scale = p.scale ?? 1;
     const radius = landmark.radius * scale;
     if (p.distance < 0 && !p.straddle) throw new Error(`landmark ${p.kind} on ${track.def.id}: negative distance needs straddle`);
@@ -58,9 +63,23 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.rotation.y = Math.atan2(-tx, -tz) + (p.heading ?? 0);
     g.scale.setScalar(scale);
     g.name = `landmark:${p.kind}`;
+    g.updateMatrixWorld(true);
+    toLocal.copy(g.matrixWorld).invert();
     placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true });
   });
   return placed;
+}
+
+function bindHazard(track: Track, id: string, toLocal: THREE.Matrix4): HazardBinding {
+  const hazard = track.hazards.find((h) => h.def.id === id);
+  if (!hazard) throw new Error(`Track ${track.def.id}: no hazard "${id}" on the main loop to bind a landmark to`);
+  return {
+    hazard,
+    toLocal(s, x, y, out) {
+      const w = track.toWorld(s, x, y);
+      return out.set(w.x, w.y, w.z).applyMatrix4(toLocal);
+    },
+  };
 }
 
 function branchRibbon(track: Track, id: string) {

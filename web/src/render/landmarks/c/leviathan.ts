@@ -37,7 +37,7 @@ function girth(u: number): number {
 }
 
 function segmentGeometry(): THREE.BufferGeometry {
-  const g = new THREE.IcosahedronGeometry(1, 1).toNonIndexed();
+  const g = new THREE.IcosahedronGeometry(1, 1);
   const p = g.getAttribute('position');
   const col: number[] = [];
   const back = new THREE.Color(BACK);

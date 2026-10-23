@@ -11,7 +11,7 @@ import { RoadFrame, cycleTime, type HazardOf } from './bound.ts';
 import { rock, smooth, type Rig } from './kit.ts';
 
 /** Gap from the road edge to the excavator's slew axis, metres. */
-const BASE_GAP = 46;
+const BASE_GAP = 90;
 /** Slew from its rest bearing out over the road, and back, seconds (shortened to fit). */
 const SWING = 4;
 /** Rest bearing: boom swung aside, along the road, radians from facing it. */
@@ -35,6 +35,8 @@ export class BoundDigger {
   private readonly from: THREE.Vector3[] = [];
   private readonly landed: boolean[] = [];
   private readonly v = new THREE.Vector3();
+  /** Positions of the rocks in the air this frame (for their dust trails). */
+  readonly falling: THREE.Vector3[] = [];
   private readonly dumpEnd: number;
   private readonly swing: number;
 
@@ -92,6 +94,7 @@ export class BoundDigger {
    * `onLand` once per rock at the moment it lands.
    */
   updateRocks(time: number, tip: THREE.Vector3, onLand: (at: THREE.Vector3) => void): void {
+    this.falling.length = 0;
     const d = this.hazard.def;
     dropperItems(this.hazard, time, this.items);
     this.items.forEach((it, i) => {
@@ -114,6 +117,7 @@ export class BoundDigger {
       b.position.set(f.x + (this.v.x - f.x) * p, f.y + (this.v.y - f.y) * p * p, f.z + (this.v.z - f.z) * p);
       b.rotation.set(p * 5 + i, p * 3, 0);
       b.scale.setScalar(1);
+      this.falling.push(b.position);
     });
   }
 }

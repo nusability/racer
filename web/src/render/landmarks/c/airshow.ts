@@ -9,13 +9,14 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import type { Particles } from '../b/points.ts';
-import { T, beam, box, prism, shade, tri, vary } from '../b/shapes.ts';
+import { T, beam, box, shade, tri, vary } from '../b/shapes.ts';
 import { bunting } from '../b/props.ts';
+import { bindingOf, withBound } from './hazard.ts';
+import { jetParts, jetPass } from './jetPass.ts';
 import { DARK, FOAM, FOAM_Y, GLASS, RED_LIGHT, WHITE, finishCoast, hull, trail, wake } from './kit.ts';
 
 const SALT = 0xa125;
 const RADIUS = 240;
-const JET_LEN = 14;
 /** Jets are drawn larger than life so the display reads from the track and across the bay. */
 const JET_SCALE = 1.7;
 const LOOP = { hub: [0, 190, 60] as V3, r: 130, spin: 0.42 } as const;
@@ -45,14 +46,7 @@ interface Pose {
 function jet(kit: Kit, pose: Pose, body: THREE.ColorRepresentation, motion: Motion): void {
   const side = new THREE.Vector3().crossVectors(pose.fwd, pose.up);
   const m = new THREE.Matrix4().makeBasis(pose.fwd, pose.up, side).setPosition(...pose.at).multiply(new THREE.Matrix4().makeScale(JET_SCALE, JET_SCALE, JET_SCALE));
-  const L = JET_LEN;
-  const add = (g: THREE.BufferGeometry, c: THREE.ColorRepresentation): void => kit.moving.add(g, c, m, motion);
-  add(new THREE.OctahedronGeometry(1).scale(L / 2, 0.9, 0.95), body);
-  add(new THREE.OctahedronGeometry(1).scale(2.2, 0.6, 0.55).translate(L * 0.18, 0.55, 0), GLASS);
-  add(tri([L * 0.2, 0, 0], [-L * 0.42, 0, 6], [-L * 0.42, 0, -6]), WHITE);
-  for (const s of [-1, 1]) add(tri([-L * 0.3, 0, s * 4.6], [-L * 0.42, 0, s * 6], [-L * 0.42, 0, s * 4]), body);
-  for (const s of [-1, 1]) add(tri([-L * 0.25, 0.4, s * 0.5], [-L * 0.48, 0.4, s * 0.6], [-L * 0.46, 3.6, s * 1.4]), shade(body, 0.8));
-  add(prism(0.6, 0.6, 0.5, 6).rotateZ(Math.PI / 2).translate(-L / 2, 0, 0), DARK);
+  jetParts((g, c) => kit.moving.add(g, c, m, motion), body);
 }
 
 /** Pose on a circle round `hub` about `axis`, `theta` round from `top` (radius vector at 0). */
@@ -162,6 +156,7 @@ function carrier(kit: Kit): void {
 }
 
 export function createAirshow(opts: LandmarkOptions): Landmark {
+  const bound = bindingOf(opts, 'airshow', ['gust'] as const);
   const kit = new Kit(opts, SALT);
   const smoke = kit.particles(false, 1.2);
   formationLoop(kit, smoke);
@@ -169,5 +164,8 @@ export function createAirshow(opts: LandmarkOptions): Landmark {
   barrelRoll(kit, smoke);
   drones(kit);
   carrier(kit);
-  return finishCoast(kit, RADIUS);
+  // Bound to a gust: the team skims across the course in the push's direction, wash and all.
+  const drive = bound && jetPass(kit, bound);
+  const lm = finishCoast(kit, RADIUS);
+  return drive ? withBound(lm, drive) : lm;
 }

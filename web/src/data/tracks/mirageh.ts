@@ -83,7 +83,8 @@ export const mirageh: TrackDef = {
     { kind: 'repairCells', at: 17, lateral: 13, count: 3, spacing: 30 },
     { kind: 'boostCells', at: 18.2, lateral: -6, count: 5, spacing: 30 },
     { kind: 'narrow', from: 21.6, to: 26.4, width: 30, blend: 80 },
-    { kind: 'drop', from: 22.2, to: 25.8 },
+    { kind: 'drop', from: 22.2, to: 25.8, side: -1 },
+    { kind: 'drop', from: 22.2, to: 23.9, side: 1 },
     { kind: 'boostCells', at: 22.6, lateral: 0, count: 6, spacing: 34 },
     {
       kind: 'hazard',

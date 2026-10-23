@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import type { Landmark, LandmarkOptions } from '../types.ts';
 import { buildHauler, buildLancer, craftColours, type Craft } from './craft.ts';
+import { boundHazard, boundReach } from './bound.ts';
+import { GUST_LAMPS, GustShip } from './spaceportBound.ts';
 import { GANTRY_H, PAD_H, PAD_R, RAIL_RINGS, buildPad, buildRail, railPoint, railSlope } from './spaceportParts.ts';
 import {
   T,
@@ -74,7 +76,8 @@ export function createSpaceport(opts: LandmarkOptions): Landmark {
   const nPads = hi ? 3 : 2;
   const nTransit = hi ? 2 : 1;
   const nShips = nPads + nTransit;
-  const lampCount = nPads * (PAD_LAMPS + APPROACH_LAMPS) + 8 + nShips * 4 + RAIL_RINGS + 1;
+  const bound = boundHazard(opts, 'spaceport', ['gust'] as const);
+  const lampCount = nPads * (PAD_LAMPS + APPROACH_LAMPS) + 8 + nShips * 4 + RAIL_RINGS + 1 + (bound ? GUST_LAMPS : 0);
   const kit = makeKit(lampCount + (hi ? 420 : 200), lampCount, hi ? 520 : 240);
   const { rig, glow, smoke } = kit;
 
@@ -180,7 +183,10 @@ export function createSpaceport(opts: LandmarkOptions): Landmark {
     });
   }
 
-  rig.build(kit.group, RADIUS, HEIGHT);
+  // Bound: a heavy hauler crosses low over the road at the gust, its downdraft the push.
+  const gustShip = bound ? new GustShip(rig, bound.binding, bound.hazard, craftColours(shade(hullA, 0.9), accent), palette) : null;
+  const cullRadius = gustShip ? Math.max(RADIUS, boundReach(gustShip.frame, 700)) : RADIUS;
+  rig.build(kit.group, cullRadius, HEIGHT);
 
   // --- Particles ---
   const sandCol = mix(palette.sand, 0xffffff, 0.15);
@@ -354,6 +360,7 @@ export function createSpaceport(opts: LandmarkOptions): Landmark {
     const sledMain = rt < RAIL_RUN + RAIL_FLY && rt >= RAIL_RUN * 0.5 ? 1 : 0;
     sled.main.scale.set(1, 1, Math.max(0.001, sledMain * (0.85 + 0.15 * Math.sin(time * 41))));
 
+    gustShip?.pose(time);
     // Bones are posed; bring their matrices up to date for the glows and emitters.
     rig.sync();
 
@@ -439,6 +446,7 @@ export function createSpaceport(opts: LandmarkOptions): Landmark {
     lamp(towerX - 6, TOWER_H + 34, towerZ, 12, white, strobe * boost);
     lamp(towerX, TOWER_H + 13, towerZ, 9, red, (fract(time * 0.9) < 0.5 ? 0.9 : 0.2) * boost);
     for (let k = 0; k < 6; k++) lamp(farmX - 24 + (k % 3) * 24, 34, farmZ, 4, red, (fract(time * 0.5 + k * 0.17) < 0.5 ? 0.9 : 0.25) * boost);
+    if (gustShip) lampI = gustShip.effects(time, dt, rig, glow, smoke, lampI, warm, evt);
     while (lampI < glow.fixed) lamp(0, -1000, 0, 0, white, 0);
 
     glow.update(dt);
@@ -452,7 +460,7 @@ export function createSpaceport(opts: LandmarkOptions): Landmark {
 
   return {
     group: kit.group,
-    radius: RADIUS,
+    radius: cullRadius,
     update,
     dispose: () => disposeKit(kit),
   };

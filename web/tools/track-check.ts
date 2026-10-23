@@ -7,7 +7,7 @@ import { worldOfTrack } from '../src/data/worlds.ts';
 import { SEA_LEVEL } from '../src/render/track/config.ts';
 import { Ribbon, Track } from '../src/core/track.ts';
 import type { TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, GRAVITY } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -146,7 +146,7 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
     }
   }
   const elev = t.samples.map((s) => s.pos.y);
-  const maxSlope = Math.max(...t.samples.filter((s) => !s.gap).map((s) => Math.abs(s.slope)));
+  const maxSlope = Math.max(...t.samples.filter((s) => !s.gap && !s.magnet).map((s) => Math.abs(s.slope)));
   const runoffs = t.samples.map((s) => Math.min(s.edgeL, s.edgeR) - s.width / 2);
   console.log(
     `  ${label}: len ${fmt(t.length)}m  minRadius ${fmt(1 / maxCurv)}m @${uAt(maxCurvS).toFixed(2)}  ` +
@@ -294,6 +294,10 @@ function checkPickups(t: Ribbon, label: string, warn: string[], junctions: [numb
     const why = bad(c.s, c.x, CELL_RADIUS);
     if (why) w(`boost cell ${c.index} at s=${fmt(c.s)} x=${c.x} ${why}`);
   }
+  for (const c of t.repairCells) {
+    const why = bad(c.s, c.x, CELL_RADIUS);
+    if (why) w(`repair cell ${c.index} at s=${fmt(c.s)} x=${c.x} ${why}`);
+  }
   for (const p of t.boostPads) {
     for (const ds of [-p.length / 2, 0, p.length / 2]) {
       const why = bad(p.s + ds, p.x, p.width / 2);
@@ -338,6 +342,119 @@ function checkWorld(t: Track, def: TrackDef, warn: string[]) {
   for (const r of ribbons) {
     const low = r.samples.reduce((m, p) => (p.gap ? m : Math.min(m, p.pos.y)), Infinity);
     if (low < SEA_LEVEL + SEA_CLEARANCE) warn.push(`world: road dips to ${low.toFixed(1)}m, under ${SEA_CLEARANCE}m above the sea`);
+  }
+}
+
+/** Around a declared crossing the two stretches may overlap within this much s of it. */
+const CROSSING_ZONE = 260;
+/** A declared crossing's two points must be this close horizontally to really meet. */
+const CROSSING_MEET = 40;
+/** A flat X keeps both roads level within this. */
+const FLAT_LEVEL = 1.5;
+/** A loop or corkscrew sits on a straight: no corner tighter than this around it. */
+const STUNT_STRAIGHT = 600;
+const STUNT_APPROACH = 150;
+/** Drops keep this far from a junction (racers cross there). */
+const DROP_JUNCTION_CLEAR = 120;
+/** Rookie hazards (difficulty ≤ ROOKIE): long warnings, wide openings, gentle gusts. */
+const ROOKIE = 2;
+const ROOKIE_WARN = 2.5;
+const ROOKIE_OPENING = 24;
+const ROOKIE_GUST = 5;
+const ROOKIE_CROSS = 3;
+/** Any hazard: at least this much warning and a lane this wide. */
+const HAZARD_WARN = 1.2;
+
+function checkCrossings(t: Track, warn: string[]) {
+  for (const c of t.crossings) {
+    const a = t.sampleAt(c.s);
+    const b = t.sampleAt(c.other);
+    const label = `crossing @s=${fmt(c.s)}/${fmt(c.other)}`;
+    const meet = Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
+    if (meet > CROSSING_MEET) warn.push(`${label}: the two stretches are ${fmt(meet)}m apart, they do not meet there`);
+    const dy = Math.abs(a.pos.y - b.pos.y);
+    if (c.style === 'bridge' && dy < CROSSING_BRIDGE_CLEARANCE) warn.push(`${label}: bridge clearance ${dy.toFixed(1)}m < ${CROSSING_BRIDGE_CLEARANCE}m`);
+    if (c.style === 'flat' && dy > FLAT_LEVEL) warn.push(`${label}: flat X roads differ by ${dy.toFixed(1)}m`);
+    for (const s of [c.s, c.other]) {
+      for (let d = -CROSSING_ZONE / 2; d <= CROSSING_ZONE / 2; d += t.step) {
+        const p = t.sampleAt(s + d);
+        if (p.gap || Number.isFinite(p.ceiling) || p.magnet) {
+          warn.push(`${label}: chasm, tunnel or stunt in the crossing`);
+          break;
+        }
+      }
+    }
+    console.log(`  ${label} ${c.style}: meet ${fmt(meet)}m, height difference ${dy.toFixed(1)}m`);
+  }
+}
+
+/** Loops, corkscrews, drops, slick and hazards. */
+function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: string[], difficulty: number, junctions: [number, number, number][]) {
+  const w = (m: string) => warn.push(`${label}: ${m}`);
+  const sAt = (u: number) => t.paramToS(u);
+  const straightAround = (s0: number, s1: number, what: string) => {
+    const r = minRadiusBetween(t, t.wrap(s0 - STUNT_APPROACH), s1 - s0 + 2 * STUNT_APPROACH);
+    if (r < STUNT_STRAIGHT) w(`${what} not on a straight (radius ${fmt(r)}m)`);
+    for (const o of t.obstacles) if (t.delta(s0 - STUNT_APPROACH, o.s) >= 0 && t.delta(o.s, s1) >= 0) w(`${o.kind} at s=${fmt(o.s)} in ${what}`);
+    for (const j of t.jumps) if (t.delta(s0 - STUNT_APPROACH, j.gapEnd) >= 0 && t.delta(j.rampStart, s1 + STUNT_APPROACH) >= 0) w(`jump in or next to ${what}`);
+    for (const p of t.boostPads) if (t.delta(s0, p.s) >= 0 && t.delta(p.s, s1) >= 0) w(`boost pad in ${what}`);
+  };
+  for (const f of features) {
+    if (f.kind === 'loop') {
+      const s0 = sAt(f.at);
+      const top = Math.max(...t.samples.filter((p) => t.delta(s0, p.s) >= 0 && t.delta(p.s, s0 + f.span) >= 0).map((p) => p.pos.y)) - t.sampleAt(s0).pos.y;
+      console.log(`    loop @${f.at} radius ${f.radius} span ${f.span} shift ${f.shift}: top ${top.toFixed(0)}m up`);
+      if (Math.abs(f.shift) < t.sampleAt(s0).width + 4) w(`loop @${f.at} shift ${f.shift} lets the exit lane run into the entry`);
+      straightAround(s0, s0 + f.span + f.settle, `loop @${f.at}`);
+    }
+    if (f.kind === 'corkscrew') {
+      straightAround(sAt(f.from), sAt(f.to), `corkscrew @${f.from}`);
+      console.log(`    corkscrew @${f.from}..${f.to} ${f.turns} turn(s), ${fmt(sAt(f.to) - sAt(f.from))}m`);
+    }
+    if (f.kind === 'drop') {
+      for (const [a, b, side] of junctions) {
+        if (f.side !== undefined && f.side !== side) continue;
+        if (t.delta(sAt(f.from) - DROP_JUNCTION_CLEAR, b) >= 0 && t.delta(a, sAt(f.to) + DROP_JUNCTION_CLEAR) >= 0) w(`drop ${f.from}..${f.to} next to a junction`);
+      }
+    }
+    if (f.kind === 'hazard') {
+      const d = f.hazard;
+      const h = t.hazards.find((x) => x.def.id === d.id);
+      if (!h) continue;
+      const lane = t.maxXAt(h.s0) - t.minXAt(h.s0);
+      const rookie = difficulty <= ROOKIE;
+      console.log(`    hazard ${d.type} ${d.id} @s=${fmt(h.s0)}${h.s1 !== h.s0 ? `..${fmt(h.s1)}` : ''}`);
+      if (t.isGap(h.s0)) w(`hazard ${d.id} over a chasm`);
+      for (const [a, b] of junctions) if (t.delta(a - 60, h.s0) >= 0 && t.delta(h.s0, b + 60) >= 0) w(`hazard ${d.id} in a junction`);
+      switch (d.type) {
+        case 'sweeper': {
+          const lo = Math.min(d.xFrom, d.xTo);
+          const hi = Math.max(d.xFrom, d.xTo);
+          if (lo > t.minXAt(h.s0) + d.radius && hi < t.maxXAt(h.s0) - d.radius) w(`sweeper ${d.id} never parks off the course`);
+          if (hi < t.minXAt(h.s0) || lo > t.maxXAt(h.s0)) w(`sweeper ${d.id} never reaches the course`);
+          if (Math.abs(d.xFrom) < lane / 2 + d.radius && Math.abs(d.xTo) < lane / 2 + d.radius) w(`sweeper ${d.id}: neither end is off the course`);
+          if (rookie && d.cross < ROOKIE_CROSS) w(`sweeper ${d.id} crosses in ${d.cross}s, rookie tracks need ≥ ${ROOKIE_CROSS}s`);
+          break;
+        }
+        case 'blocker': {
+          if (d.offset - d.opening / 2 < t.minXAt(h.s0) || d.offset + d.opening / 2 > t.maxXAt(h.s0)) w(`blocker ${d.id} opening leaves the course`);
+          if (d.opening < OPEN_LANE) w(`blocker ${d.id} opening ${d.opening}m < ${OPEN_LANE}m`);
+          if (d.warn < HAZARD_WARN) w(`blocker ${d.id} warns only ${d.warn}s`);
+          if (rookie && (d.opening < ROOKIE_OPENING || d.warn < ROOKIE_WARN)) w(`blocker ${d.id} too harsh for a rookie track (opening ${d.opening}, warn ${d.warn})`);
+          break;
+        }
+        case 'dropper': {
+          if (d.warn < HAZARD_WARN) w(`dropper ${d.id} warns only ${d.warn}s`);
+          if (rookie && d.warn < ROOKIE_WARN) w(`dropper ${d.id} warns ${d.warn}s, rookie tracks need ≥ ${ROOKIE_WARN}s`);
+          if (d.count * d.radius * 2 > lane * 0.5) w(`dropper ${d.id} can cover more than half the course at once`);
+          for (let s = h.s0; s <= h.s1; s += t.step) if (t.isGap(s)) { w(`dropper ${d.id} spans a chasm`); break; }
+          break;
+        }
+        case 'gust':
+          if (rookie && Math.abs(d.strength) > ROOKIE_GUST) w(`gust ${d.id} ${d.strength} m/s² too strong for a rookie track`);
+          break;
+      }
+    }
   }
 }
 
@@ -414,13 +531,26 @@ function check(def: TrackDef): string[] {
     if (worst < MIN_CLEARANCE) warn.push(`${label}: comes within ${fmt(worst)}m of the main course's boundary at branch s=${fmt(worstAt)} of ${fmt(r.length)}`);
   }
 
-  // Non-adjacent parts of the main loop.
+  // Non-adjacent parts of the main loop, except where they cross on purpose.
+  const crossed = (a: number, b: number) =>
+    t.crossings.some((c) => {
+      const near = (x: number, y: number) => Math.abs(t.delta(x, y)) < CROSSING_ZONE;
+      return (near(a, c.s) && near(b, c.other)) || (near(a, c.other) && near(b, c.s));
+    });
+  checkCrossings(t, warn);
+  const sided = t.branches.flatMap((b): [number, number, number][] => [
+    [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH, b.side],
+    [b.exitS - BRANCH_JUNCTION_LENGTH, b.exitS, b.side],
+  ]);
+  checkShapes(t, def.features, 'main', warn, def.difficulty, sided);
+  for (const b of t.branches) checkShapes(b.ribbon, b.def.features, `branch ${b.def.id}`, warn, def.difficulty, []);
   const st = 5;
   for (let a = 0; a < t.samples.length; a += st) {
     for (let b = a + st; b < t.samples.length; b += st) {
       const sa = t.samples[a];
       const sb = t.samples[b];
       if (Math.abs(t.delta(sa.s, sb.s)) < ADJACENT_S) continue;
+      if (sa.magnet || sb.magnet || crossed(sa.s, sb.s)) continue;
       const c = clearance(sa, sb);
       if (c < MIN_CLEARANCE) {
         warn.push(`main: s=${fmt(sa.s)} and s=${fmt(sb.s)} boundaries only ${fmt(c)}m apart`);

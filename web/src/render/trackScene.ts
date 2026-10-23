@@ -9,6 +9,7 @@ import { buildDressing } from './track/dressing.ts';
 import { buildRockFeatures } from './track/features.ts';
 import { Ground } from './track/ground.ts';
 import { buildHazards } from './track/hazards.ts';
+import { buildScheduled } from './track/scheduled.ts';
 import { buildJunctions, type SignQuads } from './track/junction.ts';
 import { checkLandmarkClearance, placeLandmarks, updateLandmarks } from './track/landmarks.ts';
 import { makePaint } from './track/paint.ts';
@@ -23,6 +24,7 @@ export { applyEnvironment } from './track/environment.ts';
 
 export interface TrackScene {
   group: THREE.Group;
+  /** `time` is race time: the hazard schedules' clock, shared with the simulation. */
   update(time: number, cameraPos: THREE.Vector3): void;
   /** The player flew through a boost or repair cell: pop it and hide it (branch -1 = main loop). */
   collectCell(item: CellItem, branch: number, cell: number): void;
@@ -126,6 +128,9 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     g.computeBoundingSphere();
     add(g, mats.sign, 'forkSigns');
   }
+  const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
+  const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, glow, bound);
+  for (const o of scheduled.objects) group.add(o);
   add(glow.build(), mats.glow, 'glow');
   const ribbons = corridors.map((c) => c.ribbon);
   const cells = { boost: buildCells(ribbons, 'boost'), repair: buildCells(ribbons, 'repair') };
@@ -141,6 +146,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       const dt = last === null ? 0 : Math.max(0, Math.min(0.1, time - last));
       last = time;
       tex.pad.offset.y = -time * BOOST_SCROLL;
+      scheduled.update(time);
       cells.boost.update(time);
       cells.repair.update(time);
       dressing.update(time, cameraPos);
@@ -165,6 +171,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     },
     dispose() {
       dressing.dispose();
+      scheduled.dispose();
       cells.boost.dispose();
       cells.repair.dispose();
       for (const l of landmarks) l.landmark.dispose();

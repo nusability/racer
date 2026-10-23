@@ -8,6 +8,8 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { Kit } from '../b/kit.ts';
 import type { Motion, V3 } from '../b/motion.ts';
 import { T, ball, beam, box, mix, prism, shade } from '../b/shapes.ts';
+import { bindingOf, withBound } from './hazard.ts';
+import { shipCrossing } from './shipCrossing.ts';
 import { DARK, FOAM, GLASS, RED_LIGHT, WARM_LIGHT, WHITE, finishCoast, hull, smoke, splash, wake, FOAM_Y } from './kit.ts';
 
 const SALT = 0xc205e;
@@ -171,10 +173,13 @@ function plumes(kit: Kit): void {
 }
 
 export function createCruiseliner(opts: LandmarkOptions): Landmark {
+  const bound = bindingOf(opts, 'cruiseliner', ['blocker'] as const);
   const kit = new Kit(opts, SALT);
   shipHull(kit);
   superstructure(kit);
   sunDeck(kit);
   plumes(kit);
-  return finishCoast(kit, RADIUS);
+  const lm = finishCoast(kit, RADIUS);
+  // Bound to a blocker: the whole liner steams across the course's channel and stops across it.
+  return bound ? withBound(lm, shipCrossing(kit, lm, bound, LENGTH)) : lm;
 }

@@ -194,8 +194,9 @@ export class AiDriver {
             clearance,
             blockers,
             stretch: v * AI_OBSTACLE_LEAD_TIME,
-            // A critically damped chase trails a moving target by 2/ω: aim that far ahead.
-            lead: (v * 2) / (LATERAL_RESPONSE * (stats.handling / HANDLING_REF)),
+            // A critically damped chase trails a moving target by 2/ω, and the driver acts a
+            // reaction time late: aim that far ahead.
+            lead: (v * 2) / (LATERAL_RESPONSE * (stats.handling / HANDLING_REF)) + v * this.bySkill(AI_REACTION_LO, AI_REACTION_HI),
             dropMargin: this.bySkill(AI_DROP_MARGIN_LO, AI_DROP_MARGIN_HI),
             maxSlope: (steerRate(stats) * AI_PLAN_RATE_SHARE) / v,
           });

@@ -63,6 +63,7 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
   // lying on the road, is as tall as its barrier.
   const r = d.type === 'sweeper' ? d.radius : d.height / 2;
   const segLen = r * SEG_OVER_BODY;
+  const canSink = d.type === 'sweeper' && (d.xFrom < hazard.minX - r || d.xFrom > hazard.maxX + r);
 
   // Blocker geometry along the course's lateral axis at s0.
   const xB = (side > 0 ? hazard.maxX : hazard.minX) + side * HEAD_OUT;
@@ -204,9 +205,10 @@ export function createBoundBeast(opts: LandmarkOptions): Landmark {
       const t = cycleTime(time, d.period, d.phase);
       const busy = 2 * d.cross + d.hold;
       const rest = d.period - busy;
-      // It sinks out of sight while parked off the course, if the rest is long enough.
+      // It sinks out of sight while parked, if the rest is long enough and the park spot is
+      // truly off the course (the simulation keeps its pillar there).
       let rise = 1;
-      if (rest > COBRA_SINK + COBRA_RISE + 0.5 && t > busy) rise = Math.min(1 - smooth((t - busy) / COBRA_SINK), smooth((t - (d.period - COBRA_RISE)) / COBRA_RISE));
+      if (canSink && rest > COBRA_SINK + COBRA_RISE + 0.5 && t > busy) rise = Math.min(1 - smooth((t - busy) / COBRA_SINK), smooth((t - (d.period - COBRA_RISE)) / COBRA_RISE));
       const lean = THREE.MathUtils.clamp(vel * COBRA_LEAN, -COBRA_LEAN_MAX, COBRA_LEAN_MAX);
       cobraPath(x, rise, lean);
       open = rise * (0.45 + 0.55 * Math.abs(Math.sin(time * 0.9)));

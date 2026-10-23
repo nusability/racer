@@ -34,7 +34,11 @@ const CORNICES = { high: 14, low: 8 } as const;
 const PLUMES = { high: 90, low: 44 } as const;
 const FENCES = { high: 7, low: 4 } as const;
 const TRAIL_RATE = 0.035;
+const BURST = 12;
 const ROCK_BANDS = 0.32;
+const RIBS = { high: 7, low: 4 } as const;
+/** Summits behind the crest: [x × half-width, z past the ridge, height, base radius]. */
+const PEAKS: readonly (readonly [number, number, number, number])[] = [[-0.45, 70, 300, 120], [0.2, 110, 340, 140], [0.75, 60, 260, 100]];
 
 /** Ground height of the face at local (x, z). */
 function faceHeight(x: number, z: number): number {
@@ -90,6 +94,26 @@ export function createAvalancheSlope(opts: LandmarkOptions): Landmark {
       kit.solid.add(quadPts(a, b, c, d), color);
     }
   }
+  // Rock ribs breaking through the snow between the gullies, and summits standing behind the
+  // crest: the dark-and-white silhouette that announces the slope from kilometres out.
+  for (let k = 0; k < ik.q(RIBS.high, RIBS.low); k++) {
+    const x = -HALF_W * 0.8 + (k + 0.3 + rng() * 0.4) * ((HALF_W * 1.6) / ik.q(RIBS.high, RIBS.low));
+    for (let j = 0; j < 4; j++) {
+      const u = 0.3 + j * 0.16 + rng() * 0.08;
+      const z = FOOT_Z + (RIDGE_Z - FOOT_Z) * u;
+      const y = faceHeight(x, z);
+      const g = new THREE.IcosahedronGeometry(1, 0);
+      kit.solid.add(g, vary(rng, rock, 0.1), T(x + (rng() - 0.5) * 10, y - 2, z, (rng() - 0.5) * 0.5, -0.9, 0, [4 + rng() * 4, 4 + rng() * 3, 18 + rng() * 12]));
+    }
+  }
+  PEAKS.forEach(([px, pz, ph, pr], k) => {
+    const x = px * HALF_W;
+    const z = RIDGE_Z + pz;
+    const ry = k * 1.3 + rng();
+    kit.solid.add(new THREE.ConeGeometry(pr, ph, 5, 1).translate(0, ph / 2, 0), vary(rng, rock, 0.06), T(x, 0, z, ry));
+    kit.solid.add(new THREE.ConeGeometry(pr * 0.62, ph * 0.62, 5, 1).translate(0, ph * 0.69 + 0.5, 0), snow, T(x, 0, z, ry));
+    kit.solid.add(new THREE.ConeGeometry(pr * 0.9, ph * 0.25, 5, 1).translate(0, ph * 0.125, 0), mix(snow, ICE, 0.3), T(x, 0, z, ry + 0.4));
+  });
   // Cornices: overhanging lips of snow along the ridge, the blue shadow under each.
   const nC = ik.q(CORNICES.high, CORNICES.low);
   const plumes = kit.particles(false, 0.9);
@@ -103,7 +127,7 @@ export function createAvalancheSlope(opts: LandmarkOptions): Landmark {
   // Spindrift streaming off the crest, lit by the low sun: the slope's signature from afar.
   for (let k = 0; k < 3; k++) {
     const x = (k - 1) * HALF_W * 0.45 + (rng() - 0.5) * 30;
-    smoke(plumes, rng, [x, faceHeight(x, RIDGE_Z) + 4, RIDGE_Z], { count: ik.q(PLUMES.high, PLUMES.low) / 3, color: mix(snow, 0xffffff, 0.5), size: 26, rise: 4, wind: [18, 3, -6], period: 8, spread: 30, grow: 0.5 });
+    smoke(plumes, rng, [x, faceHeight(x, RIDGE_Z) + 4, RIDGE_Z], { count: ik.q(PLUMES.high, PLUMES.low) / 3, color: mix(snow, 0xffffff, 0.5), size: 12, rise: 3, wind: [30, 4, -4], period: 7, spread: 40, grow: 0.35 });
   }
   // Snow fences on the flanks (rows of dark slats) and an avalanche-control hut with beacons.
   for (let k = 0; k < ik.q(FENCES.high, FENCES.low); k++) {
@@ -145,7 +169,7 @@ export function createAvalancheSlope(opts: LandmarkOptions): Landmark {
   const cloud = ik.cloud(ik.q(520, 260), 0, false, 0.75);
   cloud.setFogScale(0.6);
   const powder = brush({ life: 2.6, size0: 5, size1: 22, c0: snow, c1: mix(snow, opts.palette.horizon, 0.5), alpha: 0.85, keep: 0.45, lift: 1 });
-  const burst = brush({ life: 2.2, size0: 6, size1: 26, c0: col(0xffffff), c1: mix(snow, opts.palette.horizon, 0.4), alpha: 0.9, keep: 0.3, lift: 0.5 });
+  const burst = brush({ life: 2.2, size0: 6, size1: 24, c0: col(0xffffff), c1: mix(snow, opts.palette.horizon, 0.4), alpha: 0.6, keep: 0.3, lift: 0.5 });
 
   const h = bound.hazard;
   const items: DropItem[] = [];
@@ -192,7 +216,7 @@ export function createAvalancheSlope(opts: LandmarkOptions): Landmark {
         // Landed: the track scene draws it from here on. Mark the impact with a burst.
         if (b.wasWarn && it.stage === 'down' && dt > 0) {
           road.point(it.x, 0, P);
-          for (let k = 0; k < 18; k++) cloud.emit(burst, P.x, P.y + 1, P.z, (rng() - 0.5) * 24, 4 + rng() * 10, (rng() - 0.5) * 24);
+          for (let k = 0; k < BURST; k++) cloud.emit(burst, P.x, P.y + 1, P.z, (rng() - 0.5) * 24, 4 + rng() * 10, (rng() - 0.5) * 24);
         }
         b.wasWarn = false;
         hide(b.bone);

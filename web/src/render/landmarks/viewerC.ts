@@ -93,6 +93,14 @@ const HAZARDS: Partial<Record<Kind, { z: number; def: HazardDef }>> = {
   airshow: { z: 300, def: { type: 'gust', id: 'jetwash', from: 0, to: 0, strength: 30, on: 4, period: 10, phase: 0 } },
 };
 const sample = hz ? HAZARDS[kind] : undefined;
+// ?hz.offset=0&hz.opening=10 … overrides any numeric field of the sample hazard.
+if (sample) {
+  const def = sample.def as unknown as Record<string, unknown>;
+  for (const key of Object.keys(def)) {
+    const v = params.get(`hz.${key}`);
+    if (v !== null && typeof def[key] === 'number') def[key] = Number(v);
+  }
+}
 if (hz && !sample) throw new Error(`no sample hazard for "${kind}"`);
 const DROP_SPAN = 100;
 const course: CourseHazard | undefined = sample && {
