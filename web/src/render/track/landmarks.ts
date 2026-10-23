@@ -16,6 +16,11 @@ export interface PlacedLandmark {
   radius: number;
   /** Allowed to reach over the boundary; skipped by the clearance check. */
   straddle: boolean;
+  /**
+   * Where its hazard crosses the course, for a bound landmark: its moving parts reach far
+   * past its footprint, so it stays on while that spot is in view.
+   */
+  hazardAt: THREE.Vector3 | null;
 }
 
 /** Landmarks nearer the boundary than this sit flush with the road edge. */
@@ -65,7 +70,8 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.name = `landmark:${p.kind}`;
     g.updateMatrixWorld(true);
     toLocal.copy(g.matrixWorld).invert();
-    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true });
+    const spot = hazard ? track.toWorld((hazard.hazard.s0 + hazard.hazard.s1) / 2, 0, 0) : null;
+    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true, hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
   });
   return placed;
 }
@@ -108,7 +114,7 @@ export function updateLandmarks(placed: PlacedLandmark[], quality: Quality, time
   const view = LANDMARK_VIEW[quality];
   for (const p of placed) {
     // Horizon-sized pieces (a storm front kilometres wide) are always on; fog does the fading.
-    const visible = p.radius > view || p.centre.distanceTo(cameraPos) - p.radius < view;
+    const visible = p.radius > view || p.centre.distanceTo(cameraPos) - p.radius < view || (p.hazardAt !== null && p.hazardAt.distanceTo(cameraPos) < view);
     p.landmark.group.visible = visible;
     if (visible) p.landmark.update(time, dt);
   }

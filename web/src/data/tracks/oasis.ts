@@ -59,6 +59,8 @@ export const oasis: TrackDef = {
   ],
   features: [
     { kind: 'crossing', at: 19.4, other: 40.6, style: 'bridge' },
+    // The bridge is a deck: its sand run-off gives way to a narrow shoulder.
+    { kind: 'runoff', from: 39.4, to: 41.8, amount: 8 },
     { kind: 'boostCells', at: 0.3, lateral: 0, count: 4, spacing: 30 },
     { kind: 'boostPad', at: 3.0, lateral: 0 },
     { kind: 'boostCells', at: 8.4, lateral: -6, count: 5, spacing: 32 },
