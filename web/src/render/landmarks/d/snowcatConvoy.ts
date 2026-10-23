@@ -9,7 +9,7 @@ import type { Landmark, LandmarkOptions } from '../types.ts';
 import { sweeperX } from '../../../core/hazards.ts';
 import { T, box, mix, prism, shade, vary } from '../b/shapes.ts';
 import { addBeam, brush, col, glowBoost } from '../a/kit.ts';
-import { DARK, IceKit, RED_LIGHT, RoadFrame, SAFETY, STEEL, WARM_LIGHT, bindHazard, smooth01, type Def } from './kit.ts';
+import { DARK, INDUSTRIAL, IceKit, RED_LIGHT, RoadFrame, SAFETY, STEEL, WARM_LIGHT, bindHazard, smooth01, type Def } from './kit.ts';
 
 const SALT = 0x5ca75;
 const RADIUS = 160;
@@ -77,7 +77,7 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   }
   // Depot shed (where the convoy goes in) and a tunnel portal in a snow bank (where it comes out).
   kit.solid.add(box(30, 18, 34), mix(STEEL, ik.snow, 0.3), T(ENDS + 8, 0, SERVICE_Z));
-  kit.solid.add(new THREE.CylinderGeometry(17, 17, 30, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.5, 1), accent, T(ENDS + 8, 18, SERVICE_Z));
+  kit.solid.add(new THREE.CylinderGeometry(17, 17, 30, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.5, 1), mix(INDUSTRIAL[2], accent, 0.2), T(ENDS + 8, 18, SERVICE_Z));
   kit.solid.add(box(0.6, 12, 12), DARK, T(ENDS - 7.4, 0, SERVICE_Z));
   kit.lamp(box(0.4, 1.2, 12), [ENDS - 7.6, 12.5, SERVICE_Z], 0xffb040, 0, undefined, { depth: 0.8, freq: 3, phase: 0, sharp: 3 });
   kit.solid.add(new THREE.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), ik.snow, T(-ENDS - 10, 0, SERVICE_Z, 0, 0, 0, [24, 20, 30]));
@@ -85,7 +85,7 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   kit.solid.add(box(1, 9, 16), DARK, T(-ENDS + 11, 0, SERVICE_Z));
   // Fuel tanks, a radio mast and stacked containers by the depot.
   for (let k = 0; k < 3; k++) kit.solid.add(prism(5, 5, 4, 10).rotateZ(Math.PI / 2), k ? 0xe8e4dc : SAFETY, T(ENDS - 20 - k * 12, 5, SERVICE_Z + 30));
-  for (let k = 0; k < 6; k++) kit.solid.add(box(12, 5, 5), kit.festiveColor(), T(ENDS - 50 + (k % 3) * 12.5, Math.floor(k / 3) * 5, SERVICE_Z + 45));
+  for (let k = 0; k < 6; k++) kit.solid.add(box(12, 5, 5), vary(rng, INDUSTRIAL[k % INDUSTRIAL.length], 0.06), T(ENDS - 50 + (k % 3) * 12.5, Math.floor(k / 3) * 5, SERVICE_Z + 45));
   kit.solid.add(prism(0.6, 1, 60, 4), STEEL, T(ENDS - 70, 0, SERVICE_Z + 30));
   kit.lamp(new THREE.OctahedronGeometry(0.9), [ENDS - 70, 60.8, SERVICE_Z + 30], RED_LIGHT, 0, undefined, { depth: 0.95, freq: 2.2, phase: 0, sharp: 7 });
 
@@ -94,7 +94,7 @@ export function createSnowcatConvoy(opts: LandmarkOptions): Landmark {
   const nCats = ik.q(CONVOY.high, CONVOY.low);
   for (let i = 0; i < nCats; i++) {
     const bone = rig.bone();
-    const body = i % 2 ? SAFETY : accent;
+    const body = vary(rng, INDUSTRIAL[i % INDUSTRIAL.length], 0.05);
     const B = { bone };
     for (const z of [-2.6, 2.6]) {
       rig.add(box(9, 2.4, 1.8), DARK, { ...B, m: T(0, 0, z) });

@@ -11,7 +11,7 @@ import { Frame, T, beam, box, dome, mix, prism, shade, vary } from '../b/shapes.
 import type { Motion, V3 } from '../b/motion.ts';
 import { lightCone } from '../c/kit.ts';
 import { addBeam, brush, col } from '../a/kit.ts';
-import { DARK, ICE, IceKit, RED_LIGHT, RoadFrame, SAFETY, STEEL, WARM_LIGHT, bindHazard, smooth01 } from './kit.ts';
+import { DARK, ICE, INDUSTRIAL, IceKit, RED_LIGHT, RoadFrame, SAFETY, STEEL, WARM_LIGHT, bindHazard, smooth01 } from './kit.ts';
 
 const SALT = 0x57a71;
 const RADIUS = 170;
@@ -80,7 +80,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   for (let k = 0; k < 3; k++) kit.solid.add(prism(4, 4, 9, 10), k ? white : orange, T(-60 + k * 10, 0, -50));
   for (let k = 0; k < ik.q(7, 4); k++) {
     const f = new Frame(10 + k * 5.5, 0, -45, 0.15);
-    const c = kit.festiveColor();
+    const c = vary(rng, INDUSTRIAL[k % INDUSTRIAL.length], 0.05);
     kit.solid.add(box(1.8, 1, 3.6), c, f.m(0, 0.4, 0));
     kit.solid.add(box(1.4, 0.7, 1.4), DARK, f.m(0, 1.3, 0.4));
     kit.solid.add(box(2.4, 0.2, 1), DARK, f.m(0, 0.1, -1.6));
@@ -151,7 +151,7 @@ export function createIceStation(opts: LandmarkOptions): Landmark {
   // --- The supply lifter: body, two rotors, a searchlight; flown from the gust ---
   const craft = rig.bone();
   const rotors = [rig.bone(craft, 9, 5.2, 0), rig.bone(craft, -9, 6.2, 0)];
-  rig.add(box(22, 6, 7).translate(0, -3, 0), accent, { bone: craft, m: T(0, 3, 0) });
+  rig.add(box(22, 6, 7).translate(0, -3, 0), mix(INDUSTRIAL[0], accent, 0.2), { bone: craft, m: T(0, 3, 0) });
   rig.add(box(10, 2, 7.2), white, { bone: craft, m: T(4, 3.2, 0) });
   rig.add(box(3, 2.2, 6), DARK, { bone: craft, m: T(10.5, 1.5, 0) });
   rig.add(box(3, 2.5, 2.5), STEEL, { bone: craft, m: T(9, 4, 0) });

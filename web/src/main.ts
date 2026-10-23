@@ -46,7 +46,7 @@ const launchRace: RaceLauncher = (req, onDone) => {
   applyPixelRatio();
   resize();
   session = new RaceSession(
-    { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage) },
+    { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage), store: window.localStorage },
     req,
     (outcome) => {
       session = null;

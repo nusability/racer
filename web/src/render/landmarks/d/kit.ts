@@ -29,7 +29,10 @@ export const STEEL = 0x56616e;
 export const DARK = 0x23272e;
 export const WARM_LIGHT = 0xffd890;
 export const RED_LIGHT = 0xff3030;
-export const SAFETY = 0xff6a1a;
+/** Polar-station orange, weathered rather than toy-bright. */
+export const SAFETY = 0xc85a2a;
+/** Working-vehicle and cargo liveries: oxide red, ochre, slate, olive, navy. */
+export const INDUSTRIAL: readonly number[] = [0x8a2a22, 0xa07a34, 0x4a5560, 0x5e6244, 0x2e4a66];
 
 /** Snow takes a little of the track's snow tint (the palette's `sand`). */
 function snowColor(opts: LandmarkOptions, k = 1): THREE.Color {

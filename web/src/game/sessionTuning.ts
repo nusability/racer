@@ -37,3 +37,6 @@ export const SESSION_WRECK_BANNER_DELAY = 1.6;
 export const SESSION_WRECK_ORBIT_RATE = 0.35;
 /** Start the orbit off to the side, so the first frame shows the craft breaking up side-on. */
 export const SESSION_WRECK_ORBIT_START = 1.1;
+
+/** Exponential smoothing of the debug fps readout per frame. */
+export const SESSION_FPS_SMOOTHING = 0.1;

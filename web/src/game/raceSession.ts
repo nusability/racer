@@ -21,10 +21,14 @@ import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
 import { saveTelemetry, TelemetryRecorder } from './telemetry.ts';
+import type { KeyValueStore } from './save.ts';
+import { loadDebugFlags } from '../ui/debugFlags.ts';
+import { createPerfOverlay, type PerfOverlay } from '../ui/perfOverlay.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
 import type { CrashReason, Hud, InputSource, RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 import {
   SESSION_DUST_RANGE,
+  SESSION_FPS_SMOOTHING,
   SESSION_FINISH_LINGER,
   SESSION_GO_SHOWN,
   SESSION_HARD_LANDING,
@@ -55,6 +59,8 @@ export interface SessionContext {
   uiRoot: HTMLElement;
   audio: GameAudio;
   settings: Settings;
+  /** The app's store, for device-level debug flags (the same object startApp got). */
+  store: KeyValueStore;
 }
 
 interface RacerView {
@@ -124,6 +130,9 @@ export class RaceSession {
   private readonly tmpDir = new THREE.Vector3();
   private readonly frameRight = new THREE.Vector3();
   private telemetry: TelemetryRecorder;
+  /** On-screen fps / draw-call readout, when the debug flag asks for it. */
+  private readonly perf: PerfOverlay | null;
+  private fpsSmoothed = 0;
   /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
   private playerWreck: WreckInfo | null = null;
   private wreckFor = 0;
@@ -176,6 +185,7 @@ export class RaceSession {
     this.hud = createHud(this.hudRoot, () => this.pause());
     this.input = createInput(this.hudRoot, ctx.settings);
     this.minimap = createMinimap(this.hudRoot, this.track);
+    this.perf = loadDebugFlags(ctx.store).perfOverlay ? createPerfOverlay(this.hudRoot) : null;
     this.dotColors = request.entrants.map((e) => `#${racerById(e.racerId).visual.primary.toString(16).padStart(6, '0')}`);
     document.addEventListener('visibilitychange', this.onVisibility);
   }
@@ -512,6 +522,12 @@ export class RaceSession {
       finished: p.finishTime !== null,
     });
     this.ctx.renderer.render(this.scene, this.cam.camera);
+    if (this.perf) {
+      const info = this.ctx.renderer.info.render;
+      const fps = dt > 0 ? 1 / dt : 0;
+      this.fpsSmoothed += (fps - this.fpsSmoothed) * SESSION_FPS_SMOOTHING;
+      this.perf.update({ fps: this.fpsSmoothed, drawCalls: info.calls, triangles: info.triangles });
+    }
   }
 
   /** Slow motion while the player's craft comes apart, easing back to real time. */
@@ -549,6 +565,7 @@ export class RaceSession {
     this.pauseClose?.();
     this.input.dispose();
     this.minimap.dispose();
+    this.perf?.dispose();
     this.hud.dispose();
     this.hudRoot.remove();
     this.speedLines.dispose();

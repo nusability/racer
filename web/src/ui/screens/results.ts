@@ -148,7 +148,10 @@ export function resultsScreen(ctx: AppCtx, report: RaceReport): Screen {
           onTap: () => {
             const log = loadTelemetry()[0];
             if (!log) throw new Error('Results: debug copy with no race log recorded');
-            void copyText(telemetryToText(log), document.body);
+            void copyText(telemetryToText(log), document.body).then((how) => {
+              const label = document.querySelector('#results_copylog_button .btn__label');
+              if (label && how === 'copied') label.textContent = 'COPIED ✓';
+            });
           },
         })
       : null,
