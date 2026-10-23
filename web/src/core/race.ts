@@ -10,6 +10,10 @@ import { junctionBounds, type JunctionBounds } from './junction.ts';
 import {
   AUTOPILOT_SKILL,
   BRANCH_JUNCTION_LENGTH,
+  CATCHUP_EASE,
+  CATCHUP_FULL_GAP,
+  CATCHUP_PUSH,
+  CATCHUP_START_GAP,
   COUNTDOWN_SECONDS,
   FINISH_GRACE,
   GRID_FRONT_GAP,
@@ -122,6 +126,7 @@ export class Race {
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
+    this.catchUp();
     this.vehicles.forEach((v, i) => {
       const from = this.mainS(v.state);
       v.step(inputs[i], this.track.ribbon(v.state.branch), events);
@@ -253,6 +258,22 @@ export class Race {
       Math.abs(sb.x - sa.x) < 2 * RACER_HALF_WIDTH &&
       Math.abs(b.alt - a.alt) < RACER_HEIGHT
     );
+  }
+
+  /** Sets each AI's catch-up pace from its distance gap to the player (see CATCHUP_*). */
+  private catchUp() {
+    const player = this.playerIndex >= 0 ? this.racers[this.playerIndex] : null;
+    const active = player !== null && player.finishTime === null && this.phase === 'racing';
+    const ramp = (gap: number) =>
+      Math.min(1, Math.max(0, (gap - CATCHUP_START_GAP) / (CATCHUP_FULL_GAP - CATCHUP_START_GAP)));
+    this.vehicles.forEach((v, i) => {
+      if (!active || i === this.playerIndex) {
+        v.pace = 1;
+        return;
+      }
+      const gap = v.state.distance - (player as RacerState).distance;
+      v.pace = gap > 0 ? 1 - CATCHUP_EASE * ramp(gap) : 1 + CATCHUP_PUSH * ramp(-gap);
+    });
   }
 
   /** Where on the main loop a racer counts as being: a branch maps linearly onto the stretch it skips. */

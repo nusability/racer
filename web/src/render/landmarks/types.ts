@@ -21,7 +21,18 @@ export type LandmarkKind =
   | 'cliffVillage'
   | 'colossus'
   | 'windfarm'
-  | 'balloons';
+  | 'balloons'
+  // Set C: the coast
+  | 'lighthouse'
+  | 'pier'
+  | 'cruiseliner'
+  | 'regatta'
+  | 'resort'
+  | 'harbor'
+  | 'volcano'
+  | 'whales'
+  | 'beachParty'
+  | 'airshow';
 
 export interface LandmarkOptions {
   /** Seeds every layout choice, so a placement looks the same on every visit. */

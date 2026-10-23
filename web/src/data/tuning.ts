@@ -45,6 +45,19 @@ export const GRID_LANE_OFFSET = 6;
 export const START_BOOST_DURATION = 0.9;
 /** How long the field may keep racing after the player finishes, seconds. */
 export const FINISH_GRACE = 20;
+/**
+ * Catch-up: keeps races close without lying about who is faster. AIs well ahead of the player
+ * ease off, AIs well behind push, as a top-speed factor ramped in by distance gap. Off when
+ * there is no player and once the player has finished.
+ */
+/** Gap (metres along the lap) where the catch-up starts to act. */
+export const CATCHUP_START_GAP = 150;
+/** Gap where it reaches full strength. */
+export const CATCHUP_FULL_GAP = 600;
+/** Top speed an AI far ahead gives up (fraction). */
+export const CATCHUP_EASE = 0.05;
+/** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. */
+export const CATCHUP_PUSH = 0.03;
 /** Skill of the AI that drives the player's racer after the finish (and in headless runs). */
 export const AUTOPILOT_SKILL = 0.85;
 

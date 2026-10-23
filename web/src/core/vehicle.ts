@@ -123,6 +123,8 @@ export class Vehicle {
   respawnDue: boolean;
   /** Race time the current lap started. */
   lapStart: number;
+  /** Top-speed factor the race sets for catch-up (1 = the stats as they are). */
+  pace = 1;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
   /** Per ribbon (branch index, -1 = main): the cells taken this lap. */
@@ -249,7 +251,7 @@ export class Vehicle {
   /** Auto-throttle toward the current top speed; sand caps it lower and drags. */
   private updateSpeed(ribbon: Ribbon, brake: boolean) {
     const st = this.state;
-    let top = currentTopSpeed(this.stats, st, st.boosting);
+    let top = currentTopSpeed(this.stats, st, st.boosting) * this.pace;
     if (this.offroad) top *= SAND_TOP_SPEED;
     let dv: number;
     if (brake) dv = -BRAKE_DECEL;

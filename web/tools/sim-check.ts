@@ -3,17 +3,18 @@
 //   npm run sim                 all tracks
 //   npm run sim -- sunpan       one track (simtest is the synthetic loop)
 //   npm run sim -- --ladder     also race six equal racers at different skills
+//   npm run sim -- --cups x     cup balance study even when filtering to track x
 
 import { TRACKS } from '../src/data/tracks/index.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
-import { AiDriver } from '../src/core/ai.ts';
 import { minJumpSpeed } from '../src/core/jumps.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
 import { simTestTrack } from './sim-test-track.ts';
+import { allCupStudies } from './sim-cups.ts';
 
 // The project has no Node typings (the web build must not see them); this is all we use.
 declare const process: { argv: string[]; exit(code: number): never };
@@ -24,19 +25,8 @@ const SKILL_LO = 0.3;
 const SKILL_HI = 0.95;
 /** A race longer than this many seconds per lap means someone is stuck. */
 const TIMEOUT_PER_LAP = 240;
-/** Cup-1 opponents for the novice bot. */
-const CUP1_SKILL_LO = 0.3;
-const CUP1_SKILL_HI = 0.55;
 const STARTER = 'dustwing';
-/** Novice races per track (different seeds) to average out luck. */
-const NOVICE_RUNS = 5;
-/** The novice sees the road this late, seconds. */
-const NOVICE_DELAY = 0.25;
-/** The novice reads the road like a sloppy AI (wandering line; ignores shortcuts). */
-const NOVICE_SKILL = 0.4;
 const IDLE: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
-/** The novice holds boost from the start, so it gets the launch boost at GO. */
-const HOLD_BOOST: PlayerInput = { ...IDLE, boost: true };
 
 const args = process.argv.slice(2);
 const ladder = args.includes('--ladder');
@@ -156,69 +146,6 @@ function report(track: Track, res: RunResult) {
   console.log(`  events: ${ev}`);
 }
 
-/**
- * A casual player: reacts late, wobbles, holds boost whenever there is any in the tank,
- * never brakes, takes no shortcuts and only collects the cells that happen to be on its line.
- */
-function noviceDriver(race: Race, seed: number): Driver {
-  const index = race.entrants.findIndex((e) => e.isPlayer);
-  const eyes = new AiDriver(NOVICE_SKILL, seed, { shortcuts: false, cellDetours: false });
-  const delay = Math.round(NOVICE_DELAY / SIM_DT);
-  const seen: number[] = [];
-  return (r: Race) => {
-    const v = r.vehicles[index];
-    eyes.drive(v, r.track, r.racers);
-    seen.push(eyes.aimX);
-    // Drag control: the finger puts the target where the player saw the gap, late.
-    const aim = seen.length > delay ? (seen.shift() as number) : v.targetX;
-    return { steer: 0, nudge: aim - v.targetX, brake: false, boost: true };
-  };
-}
-
-function noviceVsCup1(track: Track, laps: number) {
-  const starter = racerById(STARTER);
-  let crashes = 0;
-  const places: number[] = [];
-  const gaps: number[] = [];
-  let boostTime = 0;
-  let cells = 0;
-  let fieldCells = 0;
-  for (let k = 0; k < NOVICE_RUNS; k++) {
-    const seed = SEED + k;
-    const field = [entrant(0, starter, 0, true)];
-    for (let i = 1; i < FIELD; i++) field.push(entrant(i, starter, spread(i - 1, FIELD - 1, CUP1_SKILL_LO, CUP1_SKILL_HI), false));
-    const race = new Race(track, { laps, seed, entrants: field });
-    const drive = noviceDriver(race, seed);
-    const maxSteps = Math.ceil((laps * TIMEOUT_PER_LAP) / SIM_DT);
-    for (let n = 0; race.phase !== 'finished'; n++) {
-      if (n > maxSteps) {
-        fail(`${track.def.id}: novice race timed out`);
-        break;
-      }
-      for (const e of race.step(race.phase === 'countdown' ? HOLD_BOOST : drive(race))) {
-        if (e.type === 'pickup') {
-          if (e.id === race.player().id) cells++;
-          else fieldCells++;
-        }
-      }
-      if (race.player().boosting) boostTime += SIM_DT;
-    }
-    const me = race.player();
-    if (me.finishTime === null) fail(`${track.def.id}: novice never finished`);
-    const c = race.vehicles[0].drive.crashes;
-    crashes += c.destroyed + c.fell + c.obstacle;
-    places.push(me.place);
-    // Novice time against the cup-1 median (positive = slower), placed by distance if unfinished.
-    const others = race.racers.filter((r) => r !== me && r.finishTime !== null).map((r) => r.finishTime as number).sort((a, b) => a - b);
-    if (me.finishTime !== null && others.length > 0) gaps.push(me.finishTime - others[Math.floor(others.length / 2)]);
-  }
-  const meanGap = gaps.length ? gaps.reduce((a, g) => a + g, 0) / gaps.length : NaN;
-  console.log(`  novice bot vs cup-1 (Dustwings, skill ${CUP1_SKILL_LO}-${CUP1_SKILL_HI}): places ${places.join(', ')}, ` +
-      `${(crashes / NOVICE_RUNS).toFixed(1)} crashes/race, ${meanGap >= 0 ? '+' : ''}${meanGap.toFixed(1)} s vs the cup-1 median; ` +
-      `boost ${(boostTime / NOVICE_RUNS).toFixed(0)} s/race, cells/lap ${(cells / NOVICE_RUNS / laps).toFixed(1)} ` +
-      `(cup-1 ${(fieldCells / NOVICE_RUNS / laps / (FIELD - 1)).toFixed(1)})`);
-}
-
 const defs: TrackDef[] = [simTestTrack, ...TRACKS];
 for (const def of defs) {
   if (only.length > 0 && !only.includes(def.id)) continue;
@@ -233,13 +160,15 @@ for (const def of defs) {
   report(track, a);
   const b = run(track, def.laps, SEED, field, null);
   if (a.fingerprint !== b.fingerprint) fail(`${def.id}: two runs with the same seed diverged`);
-  noviceVsCup1(track, def.laps);
   if (ladder) {
     console.log('  skill ladder, six equal Dustwings:');
     const starter = racerById(STARTER);
     report(track, run(track, def.laps, SEED, Array.from({ length: FIELD }, (_, i) => entrant(i, starter, spread(i, FIELD, SKILL_LO, SKILL_HI), false)), null));
   }
 }
+
+// Cup balance: the real rival fields against stand-in players (skipped for single-track runs).
+if (only.length === 0 || args.includes('--cups')) allCupStudies();
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
