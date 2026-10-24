@@ -38,7 +38,7 @@ import { worldEnvironment } from './look/env.ts';
 import { LOOK_FLAGS_ON, resolveLook } from './look/look.ts';
 import { PostFx } from './look/postFx.ts';
 import { createRacerModel, type RacerModel } from './racerModel.ts';
-import { CULL_MARGIN, FOG_FAR } from './track/config.ts';
+import { CULL_MARGIN, atmosphere } from './track/config.ts';
 import { applyEnvironment } from './trackScene.ts';
 import { CITY_NEON, facadeBox, facadeMaterial } from './facade.ts';
 
@@ -174,7 +174,8 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   const palette = def.palette;
   const detail = GRAPHICS_PROFILE.ultra.detail;
   const scene = new THREE.Scene();
-  const env = applyEnvironment(scene, palette, detail);
+  const air = atmosphere(worldOfTrack(def.id).biome, detail);
+  const env = applyEnvironment(scene, palette, air);
   disposers.push(() => env.dispose());
   // Every effect of the world's look, as the ultra level draws it; the debug switches are the
   // owner's A/B on one device and do not change what the device can do.
@@ -231,7 +232,7 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   }
   disposers.push(() => gliders.forEach((g) => g.dispose()));
 
-  const camera = new THREE.PerspectiveCamera(BENCH_FOV, window.innerWidth / window.innerHeight, 0.5, FOG_FAR[detail] + CULL_MARGIN);
+  const camera = new THREE.PerspectiveCamera(BENCH_FOV, window.innerWidth / window.innerHeight, 0.5, air.fog.far + CULL_MARGIN);
   const roadUp = new THREE.Vector3(0, 1, 0);
   const run = BENCH_STREET_LENGTH - 2 * BENCH_START_S;
   const draw = (k: number) => {

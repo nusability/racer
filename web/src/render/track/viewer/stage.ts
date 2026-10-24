@@ -7,7 +7,7 @@ import { GRAPHICS_PROFILE, type GraphicsLevel } from '../../graphicsTuning.ts';
 import { resolveLook, type LookFlags } from '../../look/look.ts';
 import { PostFx } from '../../look/postFx.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../../trackScene.ts';
-import { FOG_FAR } from '../config.ts';
+import { FOG_FAR, atmosphere } from '../config.ts';
 
 // The level viewer's 3D side: one renderer for the page's life, and one track scene at a time
 // that is built, and fully disposed before the next one, the way a race session does it.
@@ -70,9 +70,10 @@ export class Stage {
     const r = this.renderer;
     const quality = GRAPHICS_PROFILE[settings.level].detail;
     r.setPixelRatio(pixelRatioFor(settings.level, window.devicePixelRatio));
-    this.camera.far = FOG_FAR[quality] + FAR_MARGIN;
+    const air = atmosphere(biomeOfTrack(def.id), quality);
+    this.camera.far = air.fog.far + FAR_MARGIN;
     const track = new Track(def);
-    const env = applyEnvironment(this.scene, def.palette, quality);
+    const env = applyEnvironment(this.scene, def.palette, air);
     const look = resolveLook(biomeOfTrack(def.id), settings.level, settings.look, PostFx.supported(r), def.palette);
     // Without a render target the materials tone-map themselves on the way to the canvas.
     r.toneMapping = look && !look.post ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;

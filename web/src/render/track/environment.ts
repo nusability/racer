@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TrackPalette } from '../../core/types.ts';
-import { FOG_FAR, FOG_NEAR, type Quality } from './config.ts';
+import type { Atmosphere } from './config.ts';
 
 // Sky, sun, fog and light. The sky is drawn at infinity (no camera following needed) and its
 // horizon colour equals the fog colour, so fogged terrain melts into it.
@@ -54,12 +54,12 @@ export function sunDirection(palette: TrackPalette): THREE.Vector3 {
 export function applyEnvironment(
   scene: THREE.Scene,
   palette: TrackPalette,
-  quality: Quality,
+  air: Atmosphere,
 ): { sun: THREE.DirectionalLight; dispose(): void } {
   const horizon = new THREE.Color(palette.horizon);
   const dusk = palette.dusk;
   scene.background = horizon.clone();
-  scene.fog = new THREE.Fog(horizon.getHex(), FOG_NEAR[quality], FOG_FAR[quality]);
+  scene.fog = new THREE.Fog(horizon.getHex(), air.fog.near, air.fog.far);
 
   const dir = sunDirection(palette);
   const skyMat = new THREE.ShaderMaterial({
@@ -85,7 +85,7 @@ export function applyEnvironment(
 
   const lerp = (r: [number, number]) => r[0] + (r[1] - r[0]) * dusk;
   const sunCol = new THREE.Color(palette.sun);
-  const sun = new THREE.DirectionalLight(sunCol, lerp(SUN_INTENSITY));
+  const sun = new THREE.DirectionalLight(sunCol, lerp(SUN_INTENSITY) * air.sun);
   sun.position.copy(dir).multiplyScalar(1000);
   sun.target.position.set(0, 0, 0);
   scene.add(sun, sun.target);

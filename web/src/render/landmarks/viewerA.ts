@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { TrackPalette } from '../../core/types.ts';
 import { applyEnvironment } from '../track/environment.ts';
-import { FOG_FAR } from '../track/config.ts';
+import { FOG_FAR, atmosphere } from '../track/config.ts';
 import { LANDMARKS_A } from './setA.ts';
 import type { Landmark, LandmarkOptions } from './types.ts';
 import { HazardOverlay, ROAD_HALF, viewerBinding, viewerHazard, type ViewerHazardType } from './a/viewerHazards.ts';
@@ -66,7 +66,7 @@ renderer.info.autoReset = false;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-applyEnvironment(scene, palette, quality);
+applyEnvironment(scene, palette, atmosphere('desert', quality));
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2),
   new THREE.MeshLambertMaterial({ color: palette.sand }),

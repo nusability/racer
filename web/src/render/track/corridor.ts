@@ -51,6 +51,13 @@ const CONCRETE_LEAN = { base: 0.25, perMetre: 0.03 } as const;
 const WALL_BASE_SHADE = 0.75;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
+/**
+ * A forest trail's edge where its colonnade of trunks stands: the floor rises in a low bank of
+ * roots and moss (height, m, and its crest's distance past the edge, m) and then follows the
+ * forest floor out to the corridor's reach, so the terrain mesh can tuck under it.
+ */
+const BANK_HEIGHT = 0.55;
+const BANK_CREST = 2.5;
 
 export type { BoundaryStyle as Boundary } from '../../data/tracks/scenery.ts';
 
@@ -145,7 +152,8 @@ export class Corridor {
         }
         if (this.profile(k, side).hidden) continue;
         if (sand && k % every === 0) this.scatter.pylons.push({ p: this.profile(k, side).pts[2], out, side, k, view: this.vi });
-        if (!sand && k % lamps === 0) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
+        // A colonnade of trunks marks its own boundary: no lamp posts on it.
+        if (!sand && k % lamps === 0 && !this.bankAt(k)) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
       }
     }
   }
@@ -322,7 +330,7 @@ export class Corridor {
     const hit = this.profiles.get(key);
     if (hit) return hit;
     const run = this.shape.run[sideIndex(side)][kk];
-    const prof = run >= RUNOFF_MIN ? this.lipProfile(kk, side) : this.wallProfile(kk, side);
+    const prof = run >= RUNOFF_MIN ? this.lipProfile(kk, side) : this.bankAt(kk) ? this.bankProfile(kk, side) : this.wallProfile(kk, side);
     // A landmark replaces a run-off lip or a low wall it stands on; canyon walls always stay.
     const probe = this.beside(kk, side, HIDE_PROBE, 0);
     const covered = this.ground.inFootprint(prof.pts[2].x, prof.pts[2].z) || this.ground.inFootprint(probe.x, probe.z);
@@ -362,6 +370,37 @@ export class Corridor {
       cols.push(col);
     }
     return { pts, cols, sand: !rock, hidden: false };
+  }
+
+  /**
+   * A walled side the forest kit bounds with trunks: everywhere but in canyons and tunnels,
+   * whose rock walls stay.
+   */
+  private bankAt(kk: number): boolean {
+    return this.boundary === 'trunks' && this.shape.canyon[this.idx(kk)] === 0 && !this.tunnel(kk);
+  }
+
+  /**
+   * Forest floor at a trunk-bounded edge: a low bank of roots and moss rising from the trail,
+   * then the floor itself out to the corridor's reach. Drawn as ground (sand), never as a wall:
+   * no kerb, no masonry, the trunks the kit stands on it are the boundary.
+   */
+  private bankProfile(kk: number, side: number): Profile {
+    const foot = this.banked(kk, side * this.edge(kk, side), 0);
+    const outer = this.shape.outer[sideIndex(side)][kk] - this.edge(kk, side);
+    const dx = [0, BANK_CREST * 0.4, BANK_CREST, BANK_CREST * 2, outer * 0.3, outer * 0.6, outer];
+    const pts: P3[] = [];
+    const cols: THREE.Color[] = [];
+    for (let i = 0; i < 7; i++) {
+      // The bank's own rise, easing back down into the floor past its crest.
+      const bank = i === 0 ? 0 : i <= 2 ? (BANK_HEIGHT * dx[i]) / BANK_CREST : i === 3 ? BANK_HEIGHT * 0.6 : 0;
+      const ground = i < 3 ? 0 : this.groundAt(kk, side, dx[i], foot.y);
+      const p = this.beside(kk, side, dx[i], foot.y + Math.max(bank, ground + bank));
+      if (i === 0) Object.assign(p, foot);
+      pts.push(p);
+      cols.push(this.ground.color(p.x, p.z, p.y, i === 1 ? 0.5 : 0.15, new THREE.Color()));
+    }
+    return { pts, cols, sand: true, hidden: false };
   }
 
   /** Walled side: a rock wall at the road edge, growing into a full canyon where tall. */

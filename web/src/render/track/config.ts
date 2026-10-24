@@ -1,6 +1,8 @@
 // Track rendering tunables. Kept beside the renderer rather than in data/tuning.ts because
 // nothing here changes how a race plays: only how the course looks and what it costs to draw.
 
+import type { BiomeId } from '../../data/worlds.ts';
+
 export type Quality = 'low' | 'high';
 
 // --- Chunking and culling ---
@@ -15,6 +17,34 @@ export const CULL_MARGIN = 150;
 // --- Fog (also the visible range: nothing past fogFar is drawn) ---
 export const FOG_NEAR = { low: 220, high: 320 } as const;
 export const FOG_FAR = { low: 1500, high: 2600 } as const;
+/**
+ * Under the canopy the woods close in: the trunks fade into green-grey mist a few hundred
+ * metres out, so there is no long sightline to fill and nothing past it is drawn. Low quality
+ * closes it further, which is most of what makes the forest cheaper there.
+ */
+const FOREST_FOG = { low: { near: 20, far: 380 }, high: { near: 30, far: 520 } } as const;
+/**
+ * Share of the sun's direct light that reaches the forest floor through the canopy: the woods
+ * are lit by the green sky light, the sun only in its shafts and the dapples it throws.
+ */
+const FOREST_SUN = 0.3;
+
+export interface FogRange {
+  near: number;
+  far: number;
+}
+
+/** How a world's air and light close round the course. */
+export interface Atmosphere {
+  /** Where the fog starts and where it hides everything (the culling range too). */
+  fog: FogRange;
+  /** Share of the palette's sunlight that reaches the course (1 in the open). */
+  sun: number;
+}
+
+export function atmosphere(biome: BiomeId, quality: Quality): Atmosphere {
+  return biome === 'forest' ? { fog: FOREST_FOG[quality], sun: FOREST_SUN } : { fog: { near: FOG_NEAR[quality], far: FOG_FAR[quality] }, sun: 1 };
+}
 
 // --- Corridor ---
 /** Every n-th sample becomes a cross-section station for walls and shoulders. */

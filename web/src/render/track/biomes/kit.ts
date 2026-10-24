@@ -7,6 +7,7 @@ import type { Masonry } from '../paint.ts';
 import type { DebrisLook } from '../scheduled.ts';
 import type { Scatter } from '../corridor.ts';
 import type { FlatBuilder } from '../builder.ts';
+import type { LandmarkKind } from '../../landmarks/types.ts';
 
 // A biome kit: everything about a world's look that is not the course itself. The corridor,
 // hazards, junctions, pickups and landmarks are shared; the kit supplies the open ground, its
@@ -48,16 +49,28 @@ export interface DressContext {
   lit: THREE.Material;
   unlit: THREE.Material;
   rock: THREE.Material;
+  /** The world's fog far edge: nothing past it shows, so nothing past it need be drawn. */
+  fogFar: number;
+  /** The landmarks beside the course, placed: dressing keeps out of them. */
+  landmarks: LandmarkSpot[];
+}
+
+/** Where a landmark stands: its centre, its footprint's radius, and whether a hazard drives it. */
+export interface LandmarkSpot {
+  kind: LandmarkKind;
+  x: number;
+  z: number;
+  radius: number;
+  /** Bound to a course hazard: its moving parts reach over the course (radius covers them). */
+  bound: boolean;
 }
 
 /**
- * How the course's pillar obstacles look. They are always drawn (features.ts), whatever the kit:
- * the kit only picks rock columns or, in a forest, giant living trunks.
+ * How the course's pillar obstacles look: rock columns (features.ts draws them), or 'kit': the
+ * kit draws every pillar itself, at its collision radius (a forest's trunks, the same trees as
+ * its colonnade).
  */
-export type PillarLook =
-  | { kind: 'rock' }
-  /** Bark and its moss (sRGB); the trunk rises to `height` metres, far above what collides. */
-  | { kind: 'trunk'; bark: number; moss: number; height: number };
+export type PillarLook = { kind: 'rock' } | { kind: 'kit' };
 
 export interface BiomeKit {
   ground: GroundStyle;
