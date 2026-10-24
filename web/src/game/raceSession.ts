@@ -644,7 +644,10 @@ export class RaceSession {
     if (this.post) {
       const up = this.track.ribbon(pv.branch).frameAt(pv.s, this.roadFrame).up;
       this.roadUp.set(up.x, up.y, up.z);
-      this.post.render(this.scene, this.cam.camera, { dt, boosting: p.boosting && !this.playerWreck, speedFrac, roadUp: this.roadUp });
+      const ribbon = this.track.ribbon(pv.branch);
+      const ahead = this.look?.look.wetRoad.curlLookAhead ?? 0;
+      const curling = ribbon.isMagnet(pv.s) || ribbon.isMagnet(pv.branch >= 0 ? Math.min(ribbon.length, pv.s + ahead) : pv.s + ahead);
+      this.post.render(this.scene, this.cam.camera, { dt, boosting: p.boosting && !this.playerWreck, speedFrac, roadUp: this.roadUp, curling });
     } else {
       this.ctx.renderer.render(this.scene, this.cam.camera);
     }

@@ -51,6 +51,19 @@ export interface WetRoadLook {
   smear: number;
   /** Reflections are strongest at the horizon (grazing) and fall to this share at the bottom of the screen. */
   nearShare: number;
+  /**
+   * The mirror line is the horizon of the road under the camera; reflections fade in over this
+   * many screen heights below it instead of stopping dead, so a road that bends across the line
+   * (a loop, a corkscrew, a crest) never shows a hard edge.
+   */
+  horizonFade: number;
+  /**
+   * The mirror is one plane, so where the road curls (loops, corkscrews) it is wrong: mirrored
+   * reflections fade out while the camera's road, or the road this many metres ahead, curls,
+   * easing at `curlResponse` per second. The glow pools carry the halos there.
+   */
+  curlLookAhead: number;
+  curlResponse: number;
   /** Fresnel sheen at grazing angles: strength, Schlick power, and its colour (sRGB). */
   sheen: number;
   sheenPower: number;
@@ -164,7 +177,7 @@ const CITY_LOOK: WorldLook = {
     saturation: 1.06,
   },
   boostBlur: { reach: 0.075, inner: 0.22, outer: 0.75, chroma: 0.008, response: 5, speedFrom: 0.5 },
-  wetRoad: { reflection: 0.9, smear: 0.09, nearShare: 0.3, sheen: 0.06, sheenPower: 5, sheenColor: 0x6c78b0 },
+  wetRoad: { reflection: 0.9, smear: 0.09, nearShare: 0.3, horizonFade: 0.08, curlLookAhead: 160, curlResponse: 4, sheen: 0.06, sheenPower: 5, sheenColor: 0x6c78b0 },
   // About a glider's footprint, centred under the thrusters; bright enough to bloom when boosting,
   // dim enough cruising that the road's lines still read through it.
   glowPool: { length: 11, width: 7, behind: 2, lift: 0.08, intensity: 0.6, boostIntensity: 1.1, fadeHeight: 6 },

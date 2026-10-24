@@ -38,6 +38,8 @@ export interface PostFrame {
   speedFrac: number;
   /** World up of the road under the camera: the plane wet reflections mirror about. */
   roadUp: THREE.Vector3;
+  /** 1 while the road under or just ahead of the camera curls (loop, corkscrew), else 0. */
+  curling: boolean;
 }
 
 function hdrTarget(samples: number, depth: boolean): THREE.WebGLRenderTarget {
@@ -74,6 +76,8 @@ export class PostFx {
   private readonly size = new THREE.Vector2();
   private readonly nv = new THREE.Vector3();
   private boost = 0;
+  /** Eased 1 on flat road, 0 where the road curls: the mirrored reflections fade with it. */
+  private flat = 1;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -124,7 +128,7 @@ export class PostFx {
       const bb = opts.boostBlur;
       Object.assign(uniforms, { uBlurInner: { value: bb.inner }, uBlurOuter: { value: bb.outer }, uChroma: { value: bb.chroma } });
     }
-    if (opts.wet) Object.assign(uniforms, { uSmear: { value: opts.wet.smear }, uNearShare: { value: opts.wet.nearShare } });
+    if (opts.wet) Object.assign(uniforms, { uSmear: { value: opts.wet.smear }, uNearShare: { value: opts.wet.nearShare }, uHorizonFade: { value: opts.wet.horizonFade } });
     this.composite = pass(COMPOSITE_FRAGMENT, uniforms, defines);
     if (opts.aa === 'fxaa') {
       this.ldrRT = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, depthBuffer: false });
@@ -167,7 +171,11 @@ export class PostFx {
       const fast = THREE.MathUtils.smoothstep(f.speedFrac, bb.speedFrom, 1);
       u.uBlur.value = bb.reach * this.boost * fast;
     }
-    if (this.opts.wet) u.uWet.value = this.horizon(camera, f.roadUp) ? this.opts.wet.reflection : 0;
+    const wet = this.opts.wet;
+    if (wet) {
+      this.flat += ((f.curling ? 0 : 1) - this.flat) * (1 - Math.exp(-wet.curlResponse * f.dt));
+      u.uWet.value = this.horizon(camera, f.roadUp) ? wet.reflection * this.flat : 0;
+    }
 
     this.quad.material = this.composite;
     r.setRenderTarget(this.ldrRT);

@@ -90,6 +90,7 @@ uniform vec3 uHorizon;
 uniform float uWet;
 uniform float uSmear;
 uniform float uNearShare;
+uniform float uHorizonFade;
 varying vec2 vUv;
 
 // three.js's ACES filmic fit (tonemapping_pars_fragment), with the exposure passed in.
@@ -155,7 +156,9 @@ void main() {
       refl += texture2D(tBloom, uv).rgb * inside;
     }
     float grazing = mix(uNearShare, 1.0, exp(side * 4.0));
-    c += refl * (wet * uWet * grazing / float(WET_TAPS));
+    // Fade in below the mirror line rather than starting at full strength on it.
+    float edge = smoothstep(0.0, uHorizonFade, -side);
+    c += refl * (wet * uWet * grazing * edge / float(WET_TAPS));
   }
 #endif
 

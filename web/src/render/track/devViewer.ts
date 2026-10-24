@@ -63,7 +63,7 @@ const roadUp = new THREE.Vector3();
 function drawScene(dt: number) {
   if (!post) return renderer.render(scene, camera);
   const up = ribbon.frameAt(s).up;
-  post.render(scene, camera, { dt, boosting: false, speedFrac: 0, roadUp: roadUp.set(up.x, up.y, up.z) });
+  post.render(scene, camera, { dt, boosting: false, speedFrac: 0, roadUp: roadUp.set(up.x, up.y, up.z), curling: ribbon.isMagnet(s) });
 }
 const ts = buildTrackScene(track, quality, worldLook);
 scene.add(ts.group);
