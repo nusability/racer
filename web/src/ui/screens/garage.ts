@@ -50,6 +50,8 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
   if (index < 0) throw new Error(`Garage: unknown racer "${initialRacer}"`);
 
   const root = h('div', 'screen screen--garage');
+  /** The racer index on screen, so a re-render can tell a purchase from a change of glider. */
+  let shownIndex = -1;
 
   function render(): void {
     const racer = RACERS[index];
@@ -136,10 +138,15 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
     const upgrades = panel(owned ? 'UPGRADES' : 'UPGRADES · BUY TO UNLOCK', h('div', `upgs${owned ? '' : ' is-locked'}`, ...rows));
 
     const back = button({ id: 'garage_back_button', label: '‹', aria: 'Back', variant: 'icon', onTap: () => ctx.go({ screen: 'menu' }) });
+    // A purchase re-renders the whole screen; keep the player where they were scrolled to (which
+    // container scrolls depends on the orientation), unless they moved to another glider.
+    const scrolled = index === shownIndex ? scrollPositions(root) : null;
+    shownIndex = index;
     root.replaceChildren(
       h('header', 'hdr hdr--garage', back, h('h2', 'hdr__title', 'GARAGE'), creditsChip(credits)),
       h('div', 'garage__body', info, h('div', 'garage__stage', carousel), h('div', 'garage__upgrades', upgrades)),
     );
+    if (scrolled) restoreScroll(root, scrolled);
   }
 
   function step(d: number): void {
@@ -149,4 +156,21 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
 
   render();
   return { el: root, backdrop: 'showroom', dispose: () => ctx.showroom.hide() };
+}
+
+/** Scroll offsets of every scrolled element under `root` (root included), in document order. */
+function scrollPositions(root: HTMLElement): number[] {
+  return [root, ...root.querySelectorAll<HTMLElement>('*')].map((el) => el.scrollTop);
+}
+
+/**
+ * Puts scroll offsets back after a re-render. The screen rebuilds the same structure for the same
+ * glider, so elements line up by document order.
+ */
+function restoreScroll(root: HTMLElement, positions: number[]) {
+  const els = [root, ...root.querySelectorAll<HTMLElement>('*')];
+  els.forEach((el, i) => {
+    const top = positions[i];
+    if (top) el.scrollTop = top;
+  });
 }
