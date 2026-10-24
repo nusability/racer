@@ -7,6 +7,7 @@ import { Corridor, type Scatter } from './track/corridor.ts';
 import { buildCells, type CellItem } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
 import { buildRockFeatures } from './track/features.ts';
+import { buildGameplayBoulders } from './track/instanced.ts';
 import { buildRoughGround } from './track/rough.ts';
 import { Ground } from './track/ground.ts';
 import { buildHazards } from './track/hazards.ts';
@@ -135,6 +136,10 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   for (const o of scheduled.objects) group.add(o);
   add(props.build(), mats.plain, 'props');
   for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
+  for (const c of corridors) {
+    const boulders = buildGameplayBoulders(c, quality, mats.plain, def.seed);
+    if (boulders) group.add(boulders);
+  }
   add(boostPads(corridors.map((c) => c.ribbon)), mats.pad, 'boostPads');
   const beacons = buildPadBeacons(corridors.map((c) => c.ribbon));
   if (beacons.mesh) group.add(beacons.mesh);

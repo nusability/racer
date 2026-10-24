@@ -67,11 +67,11 @@ export const seastacks: TrackDef = {
     { kind: 'boostPad', at: 12.5, lateral: 0 },
     { kind: 'boostPad', at: 12.54, lateral: 0 },
     { kind: 'boostPad', at: 9.4, lateral: 0 },
-    // A freighter steams out of the harbour channel across the causeway: only the far end of
-    // the water run-off stays open while her hull is across.
+    // A freighter steams out of the harbour channel across the causeway: only the seaward half
+    // of the road stays open while her hull is across.
     {
       kind: 'hazard',
-      hazard: { type: 'blocker', id: 'freighter', at: 9.95, opening: 22, offset: 52, height: 12, warn: 6, up: 5, period: 22, phase: 4 },
+      hazard: { type: 'blocker', id: 'freighter', at: 9.95, opening: 24, offset: 12, height: 12, warn: 6, up: 5, period: 22, phase: 4 },
     },
   ],
   branches: [

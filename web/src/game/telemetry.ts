@@ -20,6 +20,8 @@ export interface TelemetrySample {
   t: number;
   lap: number;
   place: number;
+  /** Distance along the racer's ribbon, m: where on the course this sample is. */
+  s: number;
   /** Speed, km/h. */
   kmh: number;
   /** Lateral position and the ribbon (-1 main loop). */
@@ -150,6 +152,7 @@ export class TelemetryRecorder {
       t: round(race.time, 2),
       lap: p.lap,
       place: p.place,
+      s: Math.round(p.s),
       kmh: Math.round(p.speed * 3.6),
       x: round(p.x, 1),
       branch: p.branch,
@@ -211,7 +214,7 @@ export class TelemetryRecorder {
 function eventDetail(ev: RaceEvent): string | undefined {
   switch (ev.type) {
     case 'hit':
-      return `${ev.kind} ${round(ev.intensity, 2)}`;
+      return `${ev.kind}${ev.hazard ? ` ${ev.hazard}` : ''} ${round(ev.intensity, 2)}`;
     case 'crash':
       return ev.reason;
     case 'pickup':

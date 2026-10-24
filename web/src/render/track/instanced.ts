@@ -62,14 +62,20 @@ function scatterSpots(cor: Corridor, count: number, rng: Rng, minOut: number, sp
   return out;
 }
 
-export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
-  const rng = mulberry32(seed ^ 0x1ce);
-  const track = cor.ribbon;
-  const meshes: THREE.InstancedMesh[] = [];
-  const keep = quality === 'high' ? 1 : LOW_SCATTER;
-  const scatterCount = Math.round((scenery.scatterPerKm * track.length * keep) / 1000);
+function rockGeometry(quality: Quality): THREE.BufferGeometry {
+  const ico = new THREE.IcosahedronGeometry(1, quality === 'high' ? 1 : 0);
+  ico.setAttribute('color', new THREE.Float32BufferAttribute(new Array(ico.attributes.position.count * 3).fill(1), 3));
+  return ico;
+}
 
-  // Boulders: the gameplay ones on the road, plus loose rocks off it when the theme is rocks.
+/**
+ * The boulders racers collide with, on any ribbon in any world. They live here rather than in
+ * a biome kit so no kit can leave a collidable boulder undrawn: one did, and players were
+ * wrecked by rocks they could not see.
+ */
+export function buildGameplayBoulders(cor: Corridor, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh | null {
+  const rng = mulberry32(seed ^ 0xb01d);
+  const track = cor.ribbon;
   const rocks: Placement[] = [];
   const rockCol = new THREE.Color();
   for (const o of track.obstacles) {
@@ -78,15 +84,27 @@ export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Q
     const pos = track.toWorld(o.s, o.x, o.height / 2 - o.radius * 0.1);
     rocks.push({ pos, yaw: rng() * 6.3, scale: { x: r, y: o.height * 0.62, z: r }, color: cor.paint.strata(pos.y + rng() * 9, 0.9, rockCol).clone() });
   }
+  if (rocks.length === 0) return null;
+  return instanced(rockGeometry(quality), mat, rocks, `boulders${cor.vi}`);
+}
+
+export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
+  const rng = mulberry32(seed ^ 0x1ce);
+  const track = cor.ribbon;
+  const meshes: THREE.InstancedMesh[] = [];
+  const keep = quality === 'high' ? 1 : LOW_SCATTER;
+  const scatterCount = Math.round((scenery.scatterPerKm * track.length * keep) / 1000);
+
+  // Loose rocks off the road when the theme is rocks (gameplay boulders: buildGameplayBoulders).
+  const rocks: Placement[] = [];
+  const rockCol = new THREE.Color();
   if (scenery.scatter === 'rocks') {
     for (const spot of scatterSpots(cor, scatterCount, rng, SCATTER_CLEAR, SCATTER_SPREAD)) {
       const r = range(rng, 1.5, 9) * (rng() < 0.1 ? 2.2 : 1);
       rocks.push({ pos: { ...spot.pos, y: spot.pos.y + r * 0.2 }, yaw: rng() * 6.3, scale: { x: r, y: r * range(rng, 0.5, 0.9), z: r * range(rng, 0.8, 1.3) }, color: cor.paint.strata(spot.pos.y + rng() * 9, 0.9, rockCol).clone() });
     }
   }
-  const ico = new THREE.IcosahedronGeometry(1, quality === 'high' ? 1 : 0);
-  ico.setAttribute('color', new THREE.Float32BufferAttribute(new Array(ico.attributes.position.count * 3).fill(1), 3));
-  const rockMesh = instanced(ico, mat, rocks, 'boulders');
+  const rockMesh = rocks.length === 0 ? null : instanced(rockGeometry(quality), mat, rocks, 'scatterRocks');
   if (rockMesh) meshes.push(rockMesh);
 
   if (scenery.scatter !== 'rocks') {

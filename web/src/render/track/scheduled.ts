@@ -198,7 +198,9 @@ export function buildScheduled(
   const items: DropItem[] = [];
 
   // --- Barriers and stand-in sweeper bodies ---
-  const barSlots = blockers.filter((b) => !bound.has(b.h.def.id));
+  // Every blocker shows its barrier, bound or not: it is exactly what racers collide with, and a
+  // landmark's own animation (a ship, a beast) need not cover the whole blocked width.
+  const barSlots = blockers;
   const bars = inst(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: BAR_COLOUR, emissive: BAR_COLOUR.clone().multiplyScalar(0.25) }), barSlots.length * 2, 'hazardBars');
   const bodySlots = sweepers.filter((b) => !bound.has(b.h.def.id));
   const bodies = inst(new THREE.CylinderGeometry(1, 1.15, 1, 14), new THREE.MeshLambertMaterial({ color: BODY_COLOUR, flatShading: true }), bodySlots.length, 'hazardBodies');

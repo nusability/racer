@@ -441,6 +441,13 @@ function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: s
         case 'blocker': {
           if (d.offset - d.opening / 2 < t.minXAt(h.s0) || d.offset + d.opening / 2 > t.maxXAt(h.s0)) w(`blocker ${d.id} opening leaves the course`);
           if (d.opening < OPEN_LANE) w(`blocker ${d.id} opening ${d.opening}m < ${OPEN_LANE}m`);
+          {
+            // The way through must be on the paved road: an opening out on the run-off reads as
+            // a wall across the course, and the whole field dies on it.
+            const half = t.widthAt(h.s0) / 2;
+            const paved = Math.min(half, d.offset + d.opening / 2) - Math.max(-half, d.offset - d.opening / 2);
+            if (paved < OPEN_LANE) w(`blocker ${d.id} opening has only ${paved.toFixed(0)}m on the road (< ${OPEN_LANE}m)`);
+          }
           if (d.warn < HAZARD_WARN) w(`blocker ${d.id} warns only ${d.warn}s`);
           if (rookie && (d.opening < ROOKIE_OPENING || d.warn < ROOKIE_WARN)) w(`blocker ${d.id} too harsh for a rookie track (opening ${d.opening}, warn ${d.warn})`);
           break;

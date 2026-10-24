@@ -9,7 +9,7 @@ export interface WreckCopy {
 export function wreckCopy(w: WreckInfo): WreckCopy {
   switch (w.reason) {
     case 'destroyed':
-      return { title: 'WRECKED', sub: 'Hull destroyed' };
+      return { title: 'WRECKED', sub: w.cause ? `Hull destroyed · last hit: ${w.cause}` : 'Hull destroyed' };
     case 'fell':
       return { title: 'FELL', sub: 'Missed the landing' };
     case 'offEdge':

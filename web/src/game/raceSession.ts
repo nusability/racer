@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Race } from '../core/race.ts';
 import { Track } from '../core/track.ts';
-import type { PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
+import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
 import { sceneryById, trackById } from '../data/tracks/index.ts';
@@ -75,8 +75,8 @@ interface RacerView {
   offroad: boolean;
   /** Shattered: the debris flies on its own, so the pose is no longer written. */
   wrecked: boolean;
-  /** What this racer last hit, for the wreck banner. */
-  lastHit: Extract<RaceEvent, { type: 'hit' }>['kind'] | null;
+  /** Player-facing name of what this racer last hit, for the wreck banner. */
+  lastHit: string | null;
 }
 
 /** Player-facing name of what wrecked a racer, by the kind of the last thing it hit. */
@@ -86,6 +86,14 @@ const HIT_CAUSE: Partial<Record<Extract<RaceEvent, { type: 'hit' }>['kind'], str
   boulder: 'a boulder',
   racer: 'a rival',
   ceiling: 'the ceiling',
+};
+
+/** Player-facing name of a hazard, by what it does on the course. */
+const HAZARD_CAUSE: Record<HazardDef['type'], string> = {
+  blocker: 'a barrier',
+  sweeper: 'cross traffic',
+  dropper: 'falling debris',
+  gust: 'a gust',
 };
 
 const WRECK_KIND: Record<CrashReason, WreckKind> = {
@@ -366,7 +374,7 @@ export class RaceSession {
         return;
       }
       case 'hit':
-        this.views[this.indexOf(ev.id)].lastHit = ev.kind;
+        this.views[this.indexOf(ev.id)].lastHit = this.hitCause(ev);
         if (ev.id === pid) {
           audio.oneShot('hit', ev.intensity);
           this.cam.addShake(SESSION_SHAKE_HIT * ev.intensity);
@@ -384,7 +392,8 @@ export class RaceSession {
         if (kind !== 'fall') this.effects.wreck(root.position, this.tmpVel, racerById(this.request.entrants[i].racerId).visual.glow);
         v.wrecked = true;
         if (ev.id === pid) {
-          const cause = ev.reason === 'obstacle' || ev.reason === 'hazard' ? (v.lastHit ? (HIT_CAUSE[v.lastHit] ?? null) : null) : null;
+          // A hull worn out by many knocks still names the last one: it is what the player saw.
+          const cause = ev.reason === 'obstacle' || ev.reason === 'hazard' || ev.reason === 'destroyed' ? v.lastHit : null;
           this.playerWreck = { reason: ev.reason, cause };
           this.wreckAt.copy(root.position);
           this.wreckDir.copy(this.tmpVel).setY(0);
@@ -462,6 +471,14 @@ export class RaceSession {
         }
         return;
     }
+  }
+
+  private hitCause(ev: Extract<RaceEvent, { type: 'hit' }>): string | null {
+    if (ev.kind !== 'hazard') return HIT_CAUSE[ev.kind] ?? null;
+    const id = ev.hazard;
+    const h = [this.track, ...this.track.branches.map((b) => b.ribbon)].flatMap((r) => r.hazards).find((x) => x.def.id === id);
+    if (!h) throw new Error(`raceSession: hit by unknown hazard "${id}"`);
+    return HAZARD_CAUSE[h.def.type];
   }
 
   private indexOf(id: string): number {

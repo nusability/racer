@@ -99,7 +99,7 @@ export const glacier: TrackDef = {
     { kind: 'slick', from: 2.0, to: 6.0, grip: 0.7 },
     {
       kind: 'hazard',
-      hazard: { type: 'blocker', id: 'calving', at: 7.0, opening: 24, offset: 28, height: 12, warn: 3, up: 4, period: 16, phase: 0 },
+      hazard: { type: 'blocker', id: 'calving', at: 7.0, opening: 24, offset: 20, height: 12, warn: 3, up: 4, period: 16, phase: 0 },
     },
     { kind: 'boostPad', at: 14.6, lateral: 0 },
     { kind: 'repairCells', at: 28.5, lateral: 10, count: 3, spacing: 28 },

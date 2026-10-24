@@ -450,14 +450,14 @@ export class Vehicle {
     if (this.touching !== key) {
       const pace = Math.min(1, st.speed / this.stats.topSpeed);
       if (offset < OBSTACLE_WRECK_OFFSET && pace > OBSTACLE_WRECK_SPEED_FRACTION) {
-        events.push({ type: 'hit', id: st.id, kind: o.kind, intensity: 1 });
+        events.push({ type: 'hit', id: st.id, kind: o.kind, intensity: 1, hazard: o.hazardId });
         this.crash(o.kind === 'hazard' ? 'hazard' : 'obstacle', events);
         return true;
       }
       const centrality = 1 - offset;
       st.speed *= 1 - OBSTACLE_SPEED_LOSS * centrality;
       this.damage(OBSTACLE_DAMAGE * centrality * pace);
-      events.push({ type: 'hit', id: st.id, kind: o.kind, intensity: centrality * pace });
+      events.push({ type: 'hit', id: st.id, kind: o.kind, intensity: centrality * pace, hazard: o.hazardId });
       if (st.damage >= 1) {
         this.crash('destroyed', events);
         return true;

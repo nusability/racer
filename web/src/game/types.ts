@@ -9,7 +9,7 @@ export type CrashReason = Extract<RaceEvent, { type: 'crash' }>['reason'];
 /** How the player's race ended in a wreck, for the HUD banner and the results headline. */
 export interface WreckInfo {
   reason: CrashReason;
-  /** What hit them, player-facing, for 'obstacle' and 'hazard' (e.g. "A BOULDER", "SABLE ROOK"). */
+  /** What hit them last, player-facing, for 'obstacle', 'hazard' and 'destroyed' (e.g. "a boulder", "a barrier"). */
   cause: string | null;
 }
 

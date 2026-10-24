@@ -430,7 +430,8 @@ export type RaceEvent =
   | { type: 'draft'; id: string; on: boolean }
   /** Pulled out of a full draft: the slipstream's speed lingers a moment for the pass. */
   | { type: 'slingshot'; id: string }
-  | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number }
+  /** `hazard`: the HazardDef id, when kind is 'hazard' (so a wreck can name what caused it). */
+  | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number; hazard?: string }
   /**
    * A wreck: the racer is out of this race (no respawn). destroyed = hull gone, fell = into a
    * chasm, offEdge = off an open edge, loopStall = too slow at the top of a loop, obstacle /
