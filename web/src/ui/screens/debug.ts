@@ -1,6 +1,7 @@
 // The hidden debug menu (long-press the title logo, or tap the build label in Settings 7
 // times): progress cheats through Career's debug methods, per-device debug flags, the build
-// stamp, the graphics benchmark, the world-look switches, and the last race logs to copy or share.
+// stamp, the level viewer, the graphics benchmark, the world-look switches, and the last race
+// logs to copy or share.
 import type { UpgradeId } from '../../core/types.ts';
 import { racerById, RACERS } from '../../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES } from '../../data/upgrades.ts';
@@ -32,6 +33,24 @@ export function debugScreen(ctx: AppCtx): Screen {
       h('div', 'debug__build', __BUILD__),
       row('DEBUG MODE', onOff('debug_mode', 'Debug mode', flags.enabled, (v) => saveDebugFlags(ctx.store, { ...loadDebugFlags(ctx.store), enabled: v }))),
       row('PERF READOUT', onOff('debug_perf', 'Race performance readout', flags.perfOverlay, (v) => saveDebugFlags(ctx.store, { ...loadDebugFlags(ctx.store), perfOverlay: v }))),
+    );
+  }
+
+  /**
+   * Opens the level viewer in this tab: a home-screen web app on iOS would hand a new tab to
+   * Safari, outside the app. It opens at this device's graphics level; its BACK returns here.
+   */
+  function toolsPanel(): HTMLElement {
+    return panel(
+      'TOOLS',
+      h('p', 'note', 'Fly round every level, jump to its spots and fire its hazards.'),
+      button({
+        id: 'debug_levelviewer_button',
+        label: 'LEVEL VIEWER',
+        aria: 'Open the level viewer',
+        variant: 'primary',
+        onTap: () => location.assign(`./track-viewer.html?level=${graphicsLevel(career.save.settings)}`),
+      }),
     );
   }
 
@@ -197,7 +216,7 @@ export function debugScreen(ctx: AppCtx): Screen {
     const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
-      h('div', 'debug__body list-scroll', flagsPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
+      h('div', 'debug__body list-scroll', flagsPanel(), toolsPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
       note.el,
     );
     root.querySelector('.debug__body')?.scrollTo(0, scroll);

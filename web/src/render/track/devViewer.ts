@@ -1,238 +1,272 @@
 import * as THREE from 'three';
-import { Track, type Ribbon } from '../../core/track.ts';
+import '../../ui/styles.css';
+import './viewer/viewer.css';
 import { TRACKS, trackById } from '../../data/tracks/index.ts';
-import { applyEnvironment, buildTrackScene } from '../trackScene.ts';
-import { FOG_FAR, type Quality } from './config.ts';
-import { worldOfTrack } from '../../data/worlds.ts';
-import { LOOK_FLAGS_ON, resolveLook, type LookFlags } from '../look/look.ts';
-import { PostFx } from '../look/postFx.ts';
-import { isGraphicsLevel, pixelRatioFor } from '../graphics.ts';
-import { GRAPHICS_LEVELS, GRAPHICS_PROFILE, type GraphicsLevel } from '../graphicsTuning.ts';
+import type { TrackDef } from '../../core/types.ts';
+import { LOOK_FLAGS_ON, type LookFlags } from '../look/look.ts';
+import { isGraphicsLevel } from '../graphics.ts';
+import { GRAPHICS_LEVELS, type GraphicsLevel } from '../graphicsTuning.ts';
+import { h, toast } from '../../ui/kit.ts';
+import { CameraRig, isViewMode, VIEW_MODES, type ViewMode } from './viewer/cameraRig.ts';
+import { flyPad } from './viewer/flyPad.ts';
+import { MiniMap } from './viewer/miniMap.ts';
+import { buildUi, type DisplaySettings, type RaceClock, type ViewerApi, type ViewerState } from './viewer/panel.ts';
+import { trackHazards, trackSpots, triggerTime, type ViewerHazard } from './viewer/spots.ts';
+import { Stage } from './viewer/stage.ts';
 
-// Developer-only fly-through of a track (track-viewer.html, never linked from the game).
-// Query: ?track=id&level=low|medium|high|ultra&s=metres&speed=m/s&view=fly|orbit|top&pause=1&look=0|1&off=bloom,wet&aa=msaa
+// The level viewer (track-viewer.html): every level, one at a time, to fly round, jump to its
+// points of interest and fire its hazards. Opened from the hidden debug menu; works on a phone
+// and on a desktop, and needs no save. Tools and agents drive it by URL and window.viewer:
+// ?track=id&level=low|medium|high|ultra&s=metres&x=metres&branch=n&speed=m/s&view=fly|orbit|top|free
+// &pause=1&look=0|1&off=bloom,wet&aa=level|fxaa|msaa|off&time=seconds (pins the race clock)
+// &ui=0 (start with the UI hidden) &panel=0 (start with the panel closed)
 // (look: the world's look pass as a race draws it, every effect on; 0 draws it without. off and aa
 // switch single effects as the debug menu's WORLD LOOK switches do).
 
 const params = new URLSearchParams(location.search);
 // quality= is the name from before graphics levels; its low|high are levels too.
 const levelParam = params.get('level') ?? params.get('quality') ?? 'high';
-if (!isGraphicsLevel(levelParam)) throw new Error(`track viewer: level=${levelParam} is not ${GRAPHICS_LEVELS.join(', ')}`);
-const level: GraphicsLevel = levelParam;
-const quality: Quality = GRAPHICS_PROFILE[level].detail;
-const def = trackById(params.get('track') ?? TRACKS[0].id);
-const RACER_HEIGHT = 2.2;
-/** Chase-cam offset behind and above the racer position. */
-const CAM_BACK = 9;
-const CAM_UP = 3.6;
-const LOOK_AHEAD = 60;
-const MAP_SIZE = 180;
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(pixelRatioFor(level, window.devicePixelRatio));
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.5, FOG_FAR[quality] + 300);
-const t0 = performance.now();
-const track = new Track(def);
-applyEnvironment(scene, def.palette, quality);
-/** Terrain more than this above the road or run-off counts as a sand bank you fly through. */
-const GROUND_RISE_MAX = 0.5;
+if (!isGraphicsLevel(levelParam)) throw new Error(`level viewer: level=${levelParam} is not ${GRAPHICS_LEVELS.join(', ')}`);
+const viewParam = params.get('view') ?? 'fly';
+if (!isViewMode(viewParam)) throw new Error(`level viewer: view=${viewParam} is not ${VIEW_MODES.join(', ')}`);
 const lookFlags: LookFlags = { ...LOOK_FLAGS_ON, world: params.get('look') !== '0' };
 for (const k of (params.get('off') ?? '').split(',').filter((x) => x)) {
-  if (!(k in lookFlags) || k === 'aa') throw new Error(`track viewer: unknown look switch "${k}" in off=`);
+  if (!(k in lookFlags) || k === 'aa') throw new Error(`level viewer: unknown look switch "${k}" in off=`);
   lookFlags[k as Exclude<keyof LookFlags, 'aa'>] = false;
 }
 const aa = params.get('aa');
 if (aa !== null) {
-  if (aa !== 'level' && aa !== 'fxaa' && aa !== 'msaa' && aa !== 'off') throw new Error(`track viewer: aa=${aa} is not level, fxaa, msaa or off`);
+  if (aa !== 'level' && aa !== 'fxaa' && aa !== 'msaa' && aa !== 'off') throw new Error(`level viewer: aa=${aa} is not level, fxaa, msaa or off`);
   lookFlags.aa = aa;
 }
-const worldLook = resolveLook(worldOfTrack(def.id).biome, level, lookFlags, PostFx.supported(renderer), def.palette);
-if (worldLook && !worldLook.post) {
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = worldLook.look.grade.materialExposure;
-}
-const post = worldLook?.post
-  ? new PostFx(renderer, {
-      bloom: worldLook.bloom ? worldLook.look.bloom : null,
-      bloomShift: worldLook.bloomShift,
-      grade: worldLook.look.grade,
-      boostBlur: null,
-      wet: worldLook.wetReflections ? worldLook.look.wetRoad : null,
-      haze: worldLook.heatHaze ? worldLook.look.heatHaze : null,
-      aa: worldLook.aa,
-    })
-  : null;
-const roadUp = new THREE.Vector3();
-/** One frame through the look's post pipeline when there is one; `dt` eases its effects. */
-function drawScene(dt: number) {
-  if (!post) return renderer.render(scene, camera);
-  const up = ribbon.frameAt(s).up;
-  post.render(scene, camera, { dt, boosting: false, speedFrac: 0, roadUp: roadUp.set(up.x, up.y, up.z), curling: ribbon.isMagnet(s) });
-}
-const ts = buildTrackScene(track, quality, worldLook);
-scene.add(ts.group);
-const buildMs = performance.now() - t0;
-// Ground audit: terrain must never stand in the drivable width (a craft would fly through it).
-const groundHits = ts.auditGround(GROUND_RISE_MAX);
-if (groundHits.length > 0) {
-  const h = groundHits[0];
-  console.error(`ground audit: ${groundHits.length} spots stand over ${GROUND_RISE_MAX}m above the drivable surface, first at branch ${h.branch} s=${h.s.toFixed(0)} x=${h.x} (+${h.rise.toFixed(1)}m)`);
-}
 
-let s = Number(params.get('s') ?? 0);
-let speed = Number(params.get('speed') ?? 150);
-let paused = params.get('pause') === '1';
-/** Pins the race clock (hazard schedules) for screenshots; null runs it from the wall clock. */
-let raceTime: number | null = null;
-let view = params.get('view') ?? 'fly';
-let lateral = Number(params.get('x') ?? 0);
-/** Which ribbon the camera flies: -1 the main loop, else a shortcut. */
-let ribbon: Ribbon = track.ribbon(Number(params.get('branch') ?? -1));
-const orbit = { yaw: 0.6, pitch: 0.35, dist: 140 };
+/** Speed and lateral steps of the arrow keys (m/s, m). */
+const KEY_SPEED_STEP = 25;
+const KEY_LATERAL_STEP = 2;
+/** Orbit yaw step of the A and D keys, radians. */
+const KEY_YAW_STEP = 0.1;
+/** Readouts, stats and the map refresh every this many frames: often enough to read, cheap. */
+const READOUT_EVERY = 10;
+/** fps readout smoothing per frame. */
+const FPS_EASE = 0.05;
+/** Longest frame step the camera and clock take (s), so a stall or tab switch does not teleport them. */
+const MAX_DT = 0.1;
+const KMH_PER_MS = 3.6;
+/** Jumping to a spot in chase view stops this far before it (m), so the spot is in front. */
+const GO_APPROACH = 40;
 
-const hud = document.createElement('div');
-hud.style.cssText = 'position:fixed;left:8px;top:8px;color:#fff;font:12px/1.35 monospace;background:rgba(0,0,0,.55);padding:6px 8px;border-radius:4px;pointer-events:none;white-space:pre';
-document.body.appendChild(hud);
-const map = document.createElement('canvas');
-map.width = map.height = MAP_SIZE;
-map.style.cssText = 'position:fixed;right:8px;top:8px;background:rgba(0,0,0,.4);border-radius:4px';
-document.body.appendChild(map);
-const picker = document.createElement('select');
-picker.style.cssText = 'position:fixed;left:8px;bottom:8px';
-for (const t of TRACKS) picker.add(new Option(t.name, t.id, false, t.id === def.id));
-picker.onchange = () => {
-  params.set('track', picker.value);
-  location.search = params.toString();
+const stage = new Stage(document.body);
+const display: DisplaySettings = { level: levelParam, look: lookFlags.world, stats: true, map: true };
+const state: ViewerState = {
+  branch: Number(params.get('branch') ?? -1),
+  s: Number(params.get('s') ?? 0),
+  speed: Number(params.get('speed') ?? 150),
+  paused: params.get('pause') === '1',
+  lateral: Number(params.get('x') ?? 0),
 };
-document.body.appendChild(picker);
+const timeParam = params.get('time');
+const clock: RaceClock = { time: timeParam === null ? 0 : Number(timeParam), paused: timeParam !== null, rate: 1 };
+const rig = new CameraRig(stage.camera, viewParam);
 
-const xs = track.samples.map((p) => p.pos.x);
-const zs = track.samples.map((p) => p.pos.z);
-const mx0 = Math.min(...xs);
-const mz0 = Math.min(...zs);
-const mScale = (MAP_SIZE - 16) / Math.max(Math.max(...xs) - mx0, Math.max(...zs) - mz0);
-function drawMap() {
-  const ctx = map.getContext('2d');
-  if (!ctx) throw new Error('2D canvas unavailable for the minimap');
-  ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
-  ctx.lineWidth = 2;
-  for (let k = 0; k < track.samples.length; k += 4) {
-    const p = track.samples[k];
-    ctx.fillStyle = p.gap ? '#f33' : Number.isFinite(p.ceiling) ? '#222' : p.wallHeight > 0 ? '#c84' : '#fff';
-    ctx.fillRect(8 + (p.pos.x - mx0) * mScale, 8 + (p.pos.z - mz0) * mScale, 2, 2);
-  }
-  ctx.fillStyle = '#e6c';
-  for (const b of track.branches) {
-    for (let k = 0; k < b.ribbon.samples.length; k += 4) {
-      const p = b.ribbon.samples[k].pos;
-      ctx.fillRect(8 + (p.x - mx0) * mScale, 8 + (p.z - mz0) * mScale, 2, 2);
-    }
-  }
-  const me = ribbon.toWorld(s, 0, 0);
-  ctx.fillStyle = '#0f0';
-  ctx.beginPath();
-  ctx.arc(8 + (me.x - mx0) * mScale, 8 + (me.z - mz0) * mScale, 4, 0, Math.PI * 2);
-  ctx.fill();
+const ribbon = () => stage.track.ribbon(state.branch);
+const stats = h('div', 'vw-stats');
+const map = new MiniMap((hit) => api.goTo(hit.branch, hit.s));
+const fly = flyPad(rig.stick);
+const building = h('div', 'vw-building');
+building.hidden = true;
+const note = toast();
+note.el.classList.add('vw-toast');
+const showUi = h('button', 'vw-show');
+showUi.id = 'viewer_showui_button';
+showUi.setAttribute('aria-label', 'Show the controls');
+showUi.hidden = true;
+
+function build(def: TrackDef): void {
+  stage.build(def, { level: display.level, look: { ...lookFlags, world: display.look } });
+  state.s = ribbon().wrap(state.s);
+  map.setTrack(stage.track);
 }
 
-let dragging = false;
-renderer.domElement.addEventListener('pointerdown', () => (dragging = true));
-window.addEventListener('pointerup', () => (dragging = false));
-window.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  view = 'orbit';
-  orbit.yaw -= e.movementX * 0.005;
-  orbit.pitch = Math.max(-0.2, Math.min(1.5, orbit.pitch + e.movementY * 0.005));
-});
-window.addEventListener('wheel', (e) => (orbit.dist = Math.max(10, Math.min(3000, orbit.dist * (1 + e.deltaY * 0.001)))));
-window.addEventListener('keydown', (e) => {
-  if (e.key === ' ') paused = !paused;
-  if (e.key === 'f') view = 'fly';
-  if (e.key === 'o') view = 'orbit';
-  if (e.key === 't') view = 'top';
-  if (e.key === 'ArrowUp') speed += 25;
-  if (e.key === 'ArrowDown') speed = Math.max(0, speed - 25);
-  if (e.key === 'ArrowLeft') lateral -= 2;
-  if (e.key === 'ArrowRight') lateral += 2;
-  if (e.key === 'a') orbit.yaw += 0.1;
-  if (e.key === 'd') orbit.yaw -= 0.1;
-});
+/** Rebuilds after the "building" note has painted: a big track takes a moment on a phone. */
+function rebuild(def: TrackDef): Promise<void> {
+  building.textContent = `BUILDING ${def.name.toUpperCase()}…`;
+  building.hidden = false;
+  return new Promise((resolve) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        build(def);
+        ui.setTrack();
+        building.hidden = true;
+        syncUrl();
+        resolve();
+      }),
+    ),
+  );
+}
+
+/** Keeps the address on what is shown, so a reload or a shared link opens the same level. */
+function syncUrl(): void {
+  params.set('track', stage.track.def.id);
+  params.delete('quality');
+  params.set('level', display.level);
+  params.set('look', display.look ? '1' : '0');
+  history.replaceState(null, '', `?${params.toString()}`);
+}
+
+let uiHidden = params.get('ui') === '0';
+
+const api: ViewerApi = {
+  state,
+  clock,
+  display,
+  track: () => stage.track,
+  ribbon,
+  view: () => rig.view,
+  setView: (v) => rig.setView(v),
+  loadTrack: (id) => {
+    state.branch = -1;
+    state.s = 0;
+    state.lateral = 0;
+    void rebuild(trackById(id));
+  },
+  setBranch: (b) => {
+    state.branch = b;
+    state.s = ribbon().wrap(state.s);
+  },
+  goTo: (branch, s) => {
+    state.branch = branch;
+    if (rig.view === 'free') rig.setView('orbit');
+    state.s = ribbon().wrap(s - (rig.view === 'fly' ? GO_APPROACH : 0));
+    state.paused = true;
+  },
+  trigger: (hz: ViewerHazard) => {
+    clock.time = triggerTime(hz.hazard, clock.time);
+    clock.paused = false;
+  },
+  setLevel: (level: GraphicsLevel) => {
+    display.level = level;
+    void rebuild(stage.track.def);
+  },
+  setLook: (on) => {
+    display.look = on;
+    void rebuild(stage.track.def);
+  },
+  setStats: (on) => {
+    display.stats = on;
+    stats.hidden = !on;
+  },
+  setMap: (on) => {
+    display.map = on;
+    map.el.hidden = !on;
+  },
+  setUiHidden: (hidden) => {
+    uiHidden = hidden;
+    ui.root.hidden = hidden;
+    showUi.hidden = !hidden;
+    if (hidden) note.say('Tap the top-right corner to bring the controls back', true);
+    measureInset();
+  },
+  setPanelOpen: (open) => {
+    ui.setPanelOpen(open);
+    measureInset();
+  },
+};
+
+build(trackById(params.get('track') ?? TRACKS[0].id));
+const ui = buildUi(api, [stats, map.el, fly]);
+document.body.append(ui.root, building, showUi, note.el);
+ui.setTrack();
+showUi.addEventListener('click', () => api.setUiHidden(false));
+rig.attach(stage.renderer.domElement);
+rig.onViewChange = (v) => (fly.hidden = v !== 'free');
+fly.hidden = rig.view !== 'free';
+api.setUiHidden(uiHidden);
+ui.setPanelOpen(params.get('panel') !== '0');
+// iOS ignores user-scalable=no: block its pinch-zoom gesture so a pinch only zooms the camera.
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+/**
+ * Where the panel sits (bottom in portrait, right in landscape) and how much it covers: the
+ * view centres on the clear part, and overlays keep out of the panel's way.
+ */
+function measureInset(): void {
+  const r = ui.panel.getBoundingClientRect();
+  const open = !uiHidden && !ui.panel.hidden && r.width > 0 && r.height > 0;
+  const atBottom = r.width >= window.innerWidth - 1;
+  const right = open && !atBottom ? window.innerWidth - r.left : 0;
+  const bottom = open && atBottom ? window.innerHeight - r.top : 0;
+  stage.setInset(right, bottom);
+  document.documentElement.style.setProperty('--inset-r', `${right}px`);
+  document.documentElement.style.setProperty('--inset-b', `${bottom}px`);
+}
+new ResizeObserver(measureInset).observe(ui.panel);
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  post?.resize();
+  stage.resize();
+  measureInset();
+});
+measureInset();
+
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  if (e.key === ' ') state.paused = !state.paused;
+  if (e.key === 'f') rig.setView('fly');
+  if (e.key === 'o') rig.setView('orbit');
+  if (e.key === 't') rig.setView('top');
+  if (e.key === 'v') rig.setView('free');
+  if (e.key === 'h') api.setUiHidden(!uiHidden);
+  if (e.key === 'ArrowUp') state.speed += KEY_SPEED_STEP;
+  if (e.key === 'ArrowDown') state.speed = Math.max(0, state.speed - KEY_SPEED_STEP);
+  if (e.key === 'ArrowLeft') state.lateral -= KEY_LATERAL_STEP;
+  if (e.key === 'ArrowRight') state.lateral += KEY_LATERAL_STEP;
+  if (rig.view !== 'free' && e.key === 'a') rig.orbit.yaw += KEY_YAW_STEP;
+  if (rig.view !== 'free' && e.key === 'd') rig.orbit.yaw -= KEY_YAW_STEP;
 });
 
-const look = new THREE.Vector3();
-function placeCamera() {
-  const at = ribbon.toWorld(s, lateral, RACER_HEIGHT);
-  if (view === 'fly') {
-    const p = ribbon.toWorld(s - CAM_BACK, lateral, CAM_UP);
-    camera.position.set(p.x, p.y, p.z);
-    const l = ribbon.toWorld(s + LOOK_AHEAD, lateral * 0.5, RACER_HEIGHT);
-    look.set(l.x, l.y, l.z);
-    const up = ribbon.frameAt(s).up;
-    camera.up.set(up.x, up.y, up.z);
-  } else if (view === 'top') {
-    camera.position.set(at.x, at.y + orbit.dist * 4, at.z + 1);
-    look.set(at.x, at.y, at.z);
-    camera.up.set(0, 1, 0);
-  } else {
-    const d = orbit.dist;
-    camera.position.set(
-      at.x + Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * d,
-      at.y + Math.sin(orbit.pitch) * d,
-      at.z + Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * d,
-    );
-    look.set(at.x, at.y, at.z);
-    camera.up.set(0, 1, 0);
-  }
-  camera.lookAt(look);
+function readouts(fps: number): void {
+  const me = rig.view === 'free' ? stage.camera.position : ribbon().toWorld(state.s, state.lateral, 0);
+  if (display.map) map.draw(me);
+  ui.tick();
+  if (!display.stats) return;
+  const i = stage.renderer.info.render;
+  const t = stage.track;
+  stats.textContent =
+    `${t.def.name} (${display.level})  ${t.length.toFixed(0)} m  build ${stage.buildMs.toFixed(0)} ms\n` +
+    `s ${state.s.toFixed(0)}  ${(state.speed * KMH_PER_MS).toFixed(0)} km/h  view ${rig.view}  fps ${fps.toFixed(0)}\n` +
+    `draw calls ${i.calls}  triangles ${(i.triangles / 1000).toFixed(1)}k  clock ${clock.time.toFixed(1)} s`;
 }
 
 let last = performance.now();
 let fps = 60;
 let frames = 0;
 function frame(now: number) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  // The first frame's timestamp can predate `last` (taken after the build): never step backwards.
+  const dt = Math.max(0, Math.min(MAX_DT, (now - last) / 1000));
   last = now;
-  fps += (1 / Math.max(1e-3, dt) - fps) * 0.05;
-  if (!paused) {
-    s += speed * dt;
+  fps += (1 / Math.max(1e-3, dt) - fps) * FPS_EASE;
+  if (!state.paused) {
+    state.s += state.speed * dt;
+    const r = ribbon();
     // A shortcut ends: rejoin the main loop where it does.
-    if (!ribbon.closed && s >= ribbon.length) {
-      const b = track.branches.find((x) => x.ribbon === ribbon);
-      s = b ? b.exitS : 0;
-      ribbon = track;
+    if (!r.closed && state.s >= r.length) {
+      state.s = stage.track.branches[state.branch].exitS;
+      state.branch = -1;
     }
-    s = ribbon.wrap(s);
+    state.s = ribbon().wrap(state.s);
   }
-  placeCamera();
-  ts.update(raceTime ?? now / 1000, camera.position);
-  drawScene(dt);
-  if (frames++ % 10 === 0) {
-    const i = renderer.info.render;
-    hud.textContent =
-      `${def.name} (${level})  ${track.length.toFixed(0)} m  build ${buildMs.toFixed(0)} ms\n` +
-      `s ${s.toFixed(0)}  ${(speed * 3.6).toFixed(0)} km/h  view ${view}  fps ${fps.toFixed(0)}\n` +
-      `draw calls ${i.calls}  triangles ${(i.triangles / 1000).toFixed(1)}k\n` +
-      `space pause · f/o/t views · arrows speed/lateral · drag orbit`;
-    drawMap();
-  }
+  if (!clock.paused) clock.time += dt * clock.rate;
+  rig.place(ribbon(), state.s, state.lateral, dt);
+  stage.trackScene.update(clock.time, stage.camera.position);
+  stage.draw(dt, ribbon(), state.s);
+  if (frames++ % READOUT_EVERY === 0) readouts(fps);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-/** Hooks for automated screenshots. */
+/** Hooks for automated screenshots and agents. */
 function totals() {
   let tris = 0;
   let meshes = 0;
-  ts.group.traverse((o) => {
+  stage.trackScene.group.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     meshes++;
     const g = o.geometry;
@@ -241,38 +275,62 @@ function totals() {
   });
   return { meshes, tris };
 }
-Object.assign(window, {
-  viewer: {
-    set(next: { branch?: number; s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number; time?: number }) {
-      if (next.time !== undefined) raceTime = next.time;
-      if (next.branch !== undefined) ribbon = track.ribbon(next.branch);
-      if (next.s !== undefined) s = ribbon.wrap(next.s);
-      if (next.view) view = next.view;
-      if (next.speed !== undefined) speed = next.speed;
-      if (next.paused !== undefined) paused = next.paused;
-      if (next.x !== undefined) lateral = next.x;
-      if (next.yaw !== undefined) orbit.yaw = next.yaw;
-      if (next.pitch !== undefined) orbit.pitch = next.pitch;
-      if (next.dist !== undefined) orbit.dist = next.dist;
-      placeCamera();
-      ts.update(raceTime ?? performance.now() / 1000, camera.position);
-      drawScene(0);
-    },
-    collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => ts.collectCell(item, branch, cell),
-    resetCells: () => ts.resetCells(),
-    auditGround: (maxRise = 0.5) => ts.auditGround(maxRise),
-    landmarks: () =>
-      ts.group.children
-        .filter((o) => o.name.startsWith('landmark:'))
-        .map((o) => {
-          const size = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
-          let meshes = 0;
-          o.traverse((m) => {
-            if (m instanceof THREE.Mesh || m instanceof THREE.Points || m instanceof THREE.LineSegments) meshes++;
-          });
-          return `${o.name} ${size.x.toFixed(0)}x${size.y.toFixed(0)}x${size.z.toFixed(0)} ${meshes} draws ${o.visible ? 'on' : 'off'}`;
-        }),
-    stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, buildMs, length: track.length, ...totals() }),
-    track,
+const viewer = {
+  set(next: { branch?: number; s?: number; view?: string; speed?: number; paused?: boolean; x?: number; yaw?: number; pitch?: number; dist?: number; time?: number; clockPaused?: boolean; clockRate?: number }) {
+    // A time pins the race clock (hazard schedules) for screenshots, as it always has.
+    if (next.time !== undefined) (clock.time = next.time), (clock.paused = true);
+    if (next.clockPaused !== undefined) clock.paused = next.clockPaused;
+    if (next.clockRate !== undefined) clock.rate = next.clockRate;
+    if (next.branch !== undefined) state.branch = next.branch;
+    if (next.s !== undefined) state.s = ribbon().wrap(next.s);
+    if (next.view) {
+      if (!isViewMode(next.view)) throw new Error(`viewer.set: view ${next.view} is not ${VIEW_MODES.join(', ')}`);
+      rig.setView(next.view as ViewMode);
+    }
+    if (next.speed !== undefined) state.speed = next.speed;
+    if (next.paused !== undefined) state.paused = next.paused;
+    if (next.x !== undefined) state.lateral = next.x;
+    if (next.yaw !== undefined) rig.orbit.yaw = next.yaw;
+    if (next.pitch !== undefined) rig.orbit.pitch = next.pitch;
+    if (next.dist !== undefined) rig.orbit.dist = next.dist;
+    rig.place(ribbon(), state.s, state.lateral, 0);
+    stage.trackScene.update(clock.time, stage.camera.position);
+    stage.draw(0, ribbon(), state.s);
   },
-});
+  /** Builds another level in place (the old one is disposed first); resolves once it is drawn. */
+  load: (id: string) => {
+    state.branch = -1;
+    state.s = 0;
+    return rebuild(trackById(id));
+  },
+  /** Sets the race clock to just before the hazard with this id fires, and runs it. */
+  trigger(id: string) {
+    const hz = trackHazards(stage.track).find((x) => x.hazard.def.id === id);
+    if (!hz) throw new Error(`viewer.trigger: no hazard "${id}" on ${stage.track.def.id}`);
+    api.trigger(hz);
+    return clock.time;
+  },
+  spots: () => trackSpots(stage.track),
+  hazards: () => trackHazards(stage.track).map((x) => ({ id: x.hazard.def.id, type: x.hazard.def.type, branch: x.branch, s: x.s, landmark: x.landmark })),
+  clock,
+  collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => stage.trackScene.collectCell(item, branch, cell),
+  resetCells: () => stage.trackScene.resetCells(),
+  auditGround: (maxRise = 0.5) => stage.trackScene.auditGround(maxRise),
+  landmarks: () =>
+    stage.trackScene.group.children
+      .filter((o) => o.name.startsWith('landmark:'))
+      .map((o) => {
+        const size = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+        let meshes = 0;
+        o.traverse((m) => {
+          if (m instanceof THREE.Mesh || m instanceof THREE.Points || m instanceof THREE.LineSegments) meshes++;
+        });
+        return `${o.name} ${size.x.toFixed(0)}x${size.y.toFixed(0)}x${size.z.toFixed(0)} ${meshes} draws ${o.visible ? 'on' : 'off'}`;
+      }),
+  stats: () => ({ calls: stage.renderer.info.render.calls, triangles: stage.renderer.info.render.triangles, buildMs: stage.buildMs, length: stage.track.length, memory: { ...stage.renderer.info.memory }, ...totals() }),
+  /** The level being shown: changes when another is loaded. */
+  get track() {
+    return stage.track;
+  },
+};
+Object.assign(window, { viewer });

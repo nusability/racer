@@ -1,0 +1,55 @@
+import type { LandmarkKind } from '../../landmarks/types.ts';
+
+// Display names for the level viewer's lists. A Record over every kind, so a new landmark
+// without a name fails the type check instead of showing its id.
+const NAMES: Record<LandmarkKind, string> = {
+  spaceport: 'Spaceport',
+  invasion: 'Strider invasion',
+  wreck: 'Starship wreck',
+  skyfleet: 'Sky fleet',
+  mine: 'Strip mine',
+  stormwall: 'Storm wall',
+  sandbeast: 'Sand beast',
+  bazaar: 'Bazaar',
+  fair: 'Fair',
+  grandstand: 'Grandstand',
+  oasisTown: 'Oasis town',
+  cliffVillage: 'Cliff village',
+  colossus: 'Colossus',
+  windfarm: 'Wind farm',
+  balloons: 'Balloons',
+  lighthouse: 'Lighthouse',
+  pier: 'Pier',
+  cruiseliner: 'Cruise liner',
+  regatta: 'Regatta',
+  resort: 'Resort',
+  harbor: 'Harbour',
+  volcano: 'Volcano',
+  whales: 'Whales',
+  beachParty: 'Beach party',
+  airshow: 'Air show',
+  icebreaker: 'Icebreaker',
+  avalancheSlope: 'Avalanche slope',
+  glacierWall: 'Glacier wall',
+  mammothHerd: 'Mammoth herd',
+  iceStation: 'Ice station',
+  skiJump: 'Ski jump',
+  icePalace: 'Ice palace',
+  frozenFalls: 'Frozen falls',
+  auroraSky: 'Aurora',
+  snowcatConvoy: 'Snowcat convoy',
+  maglev: 'Maglev',
+  crane: 'Tower crane',
+  demolition: 'Demolition',
+  cargoAirship: 'Cargo airship',
+  skyscrapers: 'Skyscrapers',
+  neonBillboards: 'Neon billboards',
+  stadium: 'Stadium',
+  hologramDragon: 'Hologram dragon',
+  suspensionBridge: 'Suspension bridge',
+  skyTram: 'Sky tram',
+};
+
+export function landmarkName(kind: LandmarkKind): string {
+  return NAMES[kind];
+}

@@ -6,8 +6,8 @@ import { defineConfig } from 'vite';
 const sha = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
 const BUILD = `${sha} ${new Date().toISOString().slice(0, 16)}Z`;
 
-// Relative base so the build works under the GitHub Pages project path. track-viewer.html is a
-// developer tool (fly-through of a track), built alongside the game but never linked from it.
+// Relative base so the build works under the GitHub Pages project path. track-viewer.html is the
+// level viewer, a developer tool built alongside the game and opened from its hidden debug menu.
 export default defineConfig({
   base: './',
   define: { __BUILD__: JSON.stringify(BUILD) },

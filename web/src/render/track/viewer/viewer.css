@@ -1,0 +1,248 @@
+/* The level viewer: the game's tokens and kit over a full-window 3D view. The panel sits at the
+   bottom in portrait and on the right in landscape; --inset-r / --inset-b (set from its measured
+   size) keep the overlays on the clear part of the view. */
+
+:root {
+  --inset-r: 0px;
+  --inset-b: 0px;
+  /* Overlays float this far from the safe edges and from each other. */
+  --vw-gap: 8px;
+  /* The map shrinks on a narrow or short screen so it never crowds the stats or the fly pad. */
+  --vw-map: min(180px, 30vw, 32vh);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+body > canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+
+.vw-ui,
+.vw-building,
+.vw-show,
+.vw-toast {
+  font-family: var(--font);
+  color: var(--sand);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* The layer passes touches through to the canvas; only its controls take them. */
+.vw-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; touch-action: manipulation; }
+.vw-ui > * { pointer-events: auto; }
+.vw-ui[hidden],
+.vw-ui [hidden] { display: none !important; }
+
+/* --- Top bar ------------------------------------------------------------------- */
+.vw-top {
+  position: absolute;
+  top: var(--safe-t);
+  left: var(--safe-l);
+  right: calc(var(--safe-r) + var(--inset-r));
+  display: flex;
+  gap: var(--vw-gap);
+  align-items: center;
+}
+.vw-back { text-decoration: none; flex: none; }
+.vw-top .btn--icon { flex: none; font-size: 24px; }
+.vw-top .btn--icon.is-on { background: var(--sand); color: var(--ink); }
+.vw-picker {
+  flex: 1;
+  min-width: 0;
+  height: var(--tap);
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 2px solid var(--panel-edge);
+  background: var(--panel);
+  color: var(--sand);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* --- Overlays on the view ------------------------------------------------------------- */
+.vw-stats {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--tap) + var(--vw-gap));
+  left: var(--safe-l);
+  max-width: calc(100% - var(--safe-l) - var(--safe-r) - var(--inset-r) - var(--vw-map) - 2 * var(--vw-gap));
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font: 11px/1.35 ui-monospace, monospace;
+  white-space: pre-wrap;
+  pointer-events: none !important;
+}
+.vw-map {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--tap) + var(--vw-gap));
+  right: calc(var(--safe-r) + var(--inset-r));
+  width: var(--vw-map);
+  height: var(--vw-map);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: crosshair;
+}
+
+/* --- Free-fly pad ---------------------------------------------------------------------- */
+.vw-fly {
+  position: absolute;
+  left: var(--safe-l);
+  right: calc(var(--safe-r) + var(--inset-r));
+  bottom: calc(var(--safe-b) + var(--inset-b));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none !important;
+}
+.vw-fly > * { pointer-events: auto; }
+.vw-stick {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: rgba(20, 8, 2, 0.45);
+  border: 2px solid rgba(248, 227, 192, 0.3);
+  touch-action: none;
+}
+.vw-stick__knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--tap);
+  height: var(--tap);
+  margin: calc(var(--tap) / -2) 0 0 calc(var(--tap) / -2);
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 3px 0 var(--orange-lo);
+  pointer-events: none;
+}
+.vw-fly__right { display: flex; flex-direction: column; gap: var(--vw-gap); align-items: center; }
+.vw-fly__right .btn { touch-action: none; }
+
+/* --- Panel ---------------------------------------------------------------------------- */
+.vw-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--vw-gap);
+  padding: var(--vw-gap) var(--safe-r) var(--safe-b) var(--safe-l);
+  box-sizing: border-box;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-edge);
+  backdrop-filter: blur(6px);
+}
+@media (orientation: landscape) {
+  .vw-panel {
+    left: auto;
+    top: 0;
+    height: auto;
+    width: min(380px, 48vw);
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) 12px;
+    border-top: 0;
+    border-left: 1px solid var(--panel-edge);
+  }
+}
+.vw-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: none; }
+.vw-tabs .btn { min-width: 0; padding: 4px 6px; font-size: 16px; }
+.vw-body { flex: 1; min-height: 0; }
+.vw-tab { display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px; }
+.vw-row { display: flex; flex-direction: column; gap: 6px; }
+.vw-row .seg,
+.vw-seg .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.vw-row .seg .btn,
+.vw-seg .seg .btn { flex: 1 1 auto; min-width: 64px; padding: 4px 10px; font-size: 16px; }
+.vw-inline { display: flex; gap: var(--vw-gap); align-items: flex-end; }
+.vw-inline > .vw-slider,
+.vw-inline > .vw-clock { flex: 1; min-width: 0; }
+.vw-inline > .btn { flex: none; }
+.vw-clock { display: flex; flex-direction: column; gap: 2px; }
+.vw-readout { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--sand); }
+.vw-readout--big { font-size: 24px; }
+
+.vw-slider { display: flex; flex-direction: column; gap: 2px; }
+.vw-slider__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+/* A full tap-height strip with a big thumb: easy to grab, and it never scrolls the panel. */
+.vw-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: var(--tap);
+  margin: 0;
+  background: transparent;
+  touch-action: none;
+}
+.vw-range::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: rgba(248, 227, 192, 0.2); }
+.vw-range::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(248, 227, 192, 0.2); }
+.vw-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 36px;
+  height: 36px;
+  margin-top: -14px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--orange);
+  box-shadow: 0 3px 0 var(--orange-lo);
+}
+.vw-range::-moz-range-thumb { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--orange); box-shadow: 0 3px 0 var(--orange-lo); }
+
+.vw-list { display: flex; flex-direction: column; gap: 6px; }
+.vw-spot.btn { align-items: flex-start; text-align: left; font-size: 17px; letter-spacing: 0.02em; padding: 6px 12px; }
+.vw-spot .btn__sub { color: var(--orange-hi); letter-spacing: 0.1em; }
+.vw-spot--hazard .btn__sub { color: var(--red); }
+.vw-spot--landmark .btn__sub { color: var(--cyan); }
+
+.vw-hazard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(248, 227, 192, 0.06);
+  border: 1px solid var(--panel-edge);
+}
+.vw-hazard__title { font-size: 19px; font-weight: 800; }
+.vw-hazard__sub { font-size: 14px; color: var(--sand-dim); }
+.vw-hazard__state { font-size: 15px; font-weight: 700; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.vw-hazard .vw-inline .btn { flex: 1; }
+
+/* --- Building note, hidden-UI hotspot, toast -------------------------------------------------- */
+.vw-building {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 4, 2, 0.6);
+  font-size: 28px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.08em;
+}
+.vw-building[hidden] { display: none; }
+.vw-show {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 20;
+  width: calc(var(--tap) + var(--safe-r));
+  height: calc(var(--tap) + var(--safe-t));
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.vw-show[hidden] { display: none; }
+.vw-toast { position: fixed; top: calc(var(--safe-t) + var(--tap) + var(--vw-gap)); bottom: auto; }
