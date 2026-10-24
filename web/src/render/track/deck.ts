@@ -35,9 +35,13 @@ export function deckStrip(cor: Corridor, c: Chunk, a: number, b: number): void {
   const down = (k: number): P3 => ({ x: -up(k).x, y: -up(k).y, z: -up(k).z });
   const L = (k: number) => -cor.edge(k, -1) - RAIL_WIDTH;
   const R = (k: number) => cor.edge(k, 1) + RAIL_WIDTH;
-  // Underside.
-  quadFacing(c.rock, cor.banked(a, L(a), -DECK_DEPTH), cor.banked(a, R(a), -DECK_DEPTH), cor.banked(b, R(b), -DECK_DEPTH), cor.banked(b, L(b), -DECK_DEPTH), down(a), STEEL_DARK);
+  // Underside: plain steel, left to the light to darken. A loop or corkscrew turns it to face
+  // the racers coming in, so a colour with the shade baked in reads as a black hole there.
+  quadFacing(c.rock, cor.banked(a, L(a), -DECK_DEPTH), cor.banked(a, R(a), -DECK_DEPTH), cor.banked(b, R(b), -DECK_DEPTH), cor.banked(b, L(b), -DECK_DEPTH), down(a), STEEL);
   const block = Math.floor((((a + b) / 2) * cor.ribbon.step) / KERB_BLOCK) % 2 === 0;
+  // Seen from outside, a stunt deck is traced by its rails: their outer faces carry the kerb
+  // paint too, so the ribbon's two edges read against its underside from any side.
+  const stunt = cor.shape.magnet[cor.idx(a)] === 1 && cor.shape.magnet[cor.idx(b)] === 1;
   for (const side of [-1, 1]) {
     const inner = (k: number) => side * cor.edge(k, side);
     const outer = (k: number) => (side < 0 ? L(k) : R(k));
@@ -48,7 +52,12 @@ export function deckStrip(cor: Corridor, c: Chunk, a: number, b: number): void {
     quadFacing(cor.glow, cor.banked(a, inner(a), 0), cor.banked(b, inner(b), 0), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(a, inner(a), RAIL_HEIGHT), inward, block ? cor.paint.accent : cor.paint.white);
     // Rail top and the outer face down to the bottom of the deck.
     quadFacing(c.rock, cor.banked(a, inner(a), RAIL_HEIGHT), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(b, outer(b), RAIL_HEIGHT), cor.banked(a, outer(a), RAIL_HEIGHT), up(a), STEEL);
-    quadFacing(c.rock, cor.banked(a, outer(a), -DECK_DEPTH), cor.banked(b, outer(b), -DECK_DEPTH), cor.banked(b, outer(b), RAIL_HEIGHT), cor.banked(a, outer(a), RAIL_HEIGHT), out, STEEL_DARK, STEEL);
+    if (stunt) {
+      quadFacing(c.rock, cor.banked(a, outer(a), -DECK_DEPTH), cor.banked(b, outer(b), -DECK_DEPTH), cor.banked(b, outer(b), 0), cor.banked(a, outer(a), 0), out, STEEL_DARK, STEEL);
+      quadFacing(cor.glow, cor.banked(a, outer(a), 0), cor.banked(b, outer(b), 0), cor.banked(b, outer(b), RAIL_HEIGHT), cor.banked(a, outer(a), RAIL_HEIGHT), out, block ? cor.paint.accent : cor.paint.white);
+    } else {
+      quadFacing(c.rock, cor.banked(a, outer(a), -DECK_DEPTH), cor.banked(b, outer(b), -DECK_DEPTH), cor.banked(b, outer(b), RAIL_HEIGHT), cor.banked(a, outer(a), RAIL_HEIGHT), out, STEEL_DARK, STEEL);
+    }
   }
 }
 
@@ -82,12 +91,14 @@ export function buildSupports(cor: Corridor): void {
   for (const f of cor.view.features) {
     if (f.kind === 'loop') {
       const s0 = r.paramToS(f.at);
-      for (const t of LOOP_FRAMES) frame(cor, Math.round((s0 + f.span * t) / r.step), Math.abs(f.shift));
+      const sweep = [Math.ceil(s0 / r.step), Math.floor((s0 + f.span) / r.step)] as const;
+      for (const t of LOOP_FRAMES) frame(cor, Math.round((s0 + f.span * t) / r.step), f.shift, sweep);
     }
     if (f.kind === 'corkscrew') {
       const s0 = r.paramToS(f.from);
       const s1 = r.paramToS(f.to);
-      for (let s = s0 + SCREW_FRAME_SPACING / 2; s < s1; s += SCREW_FRAME_SPACING) frame(cor, Math.round(s / r.step), 0);
+      const sweep = [Math.ceil(s0 / r.step), Math.floor(s1 / r.step)] as const;
+      for (let s = s0 + SCREW_FRAME_SPACING / 2; s < s1; s += SCREW_FRAME_SPACING) frame(cor, Math.round(s / r.step), 0, sweep);
     }
   }
 }
@@ -111,26 +122,35 @@ function pier(cor: Corridor, k: number) {
 
 /**
  * A gantry the road runs through: two columns outside everything the road sweeps (the loop's
- * sideways shift included) and a beam over the top of the road's highest point at that station.
+ * sideways shift included, to whichever side it goes) and a beam over the top of every part of
+ * the stunt that passes under it. A loop's crown and a corkscrew's rolled edges pass the frame's
+ * plane away from the station it stands at, so the beam clears the whole `sweep` of samples.
  */
-function frame(cor: Corridor, k: number, shift: number) {
+function frame(cor: Corridor, k: number, shift: number, sweep: readonly [number, number]) {
   const kk = cor.idx(k);
   const smp = cor.ribbon.samples[kk];
   const c = cor.chunkAt(smp.s);
   const rx = cor.shape.rx[kk];
   const rz = cor.shape.rz[kk];
-  const reach = Math.max(cor.edge(kk, -1), cor.edge(kk, 1)) + RAIL_WIDTH + FRAME_CLEAR + shift;
-  // The highest point of the cross-section at this station (road or its back, rails included).
+  const reach = Math.max(cor.edge(kk, -1), cor.edge(kk, 1)) + RAIL_WIDTH + FRAME_CLEAR + Math.abs(shift);
+  // Centred between the entry and the shifted exit, on the ground the stunt stands on.
+  const centre = { x: cor.shape.gx[kk] + rx * (shift / 2), z: cor.shape.gz[kk] + rz * (shift / 2) };
+  // The highest point (road, its back or a rail top) within reach of the beam's plane.
   let topY = -Infinity;
-  for (const x of [-reach, 0, reach]) for (const y of [-DECK_DEPTH, RAIL_HEIGHT]) topY = Math.max(topY, cor.banked(kk, Math.max(-smp.width / 2, Math.min(smp.width / 2, x)), y).y);
+  for (let q = sweep[0]; q <= sweep[1]; q++) {
+    for (const x of [-cor.edge(q, -1) - RAIL_WIDTH, 0, cor.edge(q, 1) + RAIL_WIDTH]) {
+      for (const y of [-DECK_DEPTH, RAIL_HEIGHT]) {
+        const p = cor.banked(q, x, y);
+        const along = (p.x - centre.x) * -rz + (p.z - centre.z) * rx;
+        if (Math.abs(along) < FRAME_BEAM / 2 + FRAME_CLEAR) topY = Math.max(topY, p.y);
+      }
+    }
+  }
   topY += FRAME_CLEAR * 0.5;
-  const mid = { x: cor.shape.gx[kk], z: cor.shape.gz[kk] };
-  // For a loop the sideways shift is to the right of the entry centreline.
-  const centre = shift > 0 ? { x: mid.x + rx * (shift / 2), z: mid.z + rz * (shift / 2) } : { x: smp.pos.x, z: smp.pos.z };
   const legs: P3[] = [];
   for (const side of [-1, 1]) {
-    const x = centre.x + rx * side * (reach - shift / 2);
-    const z = centre.z + rz * side * (reach - shift / 2);
+    const x = centre.x + rx * side * (reach - Math.abs(shift) / 2);
+    const z = centre.z + rz * side * (reach - Math.abs(shift) / 2);
     const g = cor.ground.height(x, z) - 2;
     column(c.rock, x, z, g, topY, FRAME_BEAM, rx, rz);
     legs.push({ x, y: topY, z });

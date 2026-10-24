@@ -356,6 +356,16 @@ const FLAT_LEVEL = 1.5;
 /** A loop or corkscrew sits on a straight: no corner tighter than this around it. */
 const STUNT_STRAIGHT = 600;
 const STUNT_APPROACH = 150;
+/**
+ * Where a loop's descent passes its climb, the road edges stay this far apart sideways: room
+ * for both guard rails and daylight between them.
+ */
+const LOOP_PASS_GAP = 3;
+/**
+ * Two stretches of a loop closer than this side-on are passing each other: the deck stands
+ * 1.3 m of rail above the road and 1.6 m of structure under it, plus clearance.
+ */
+const LOOP_PASS_NEAR = 4;
 /** Drops keep this far from a junction (racers cross there). */
 const DROP_JUNCTION_CLEAR = 120;
 /** Rookie hazards (difficulty ≤ ROOKIE): long warnings, wide openings, gentle gusts. */
@@ -390,6 +400,34 @@ function checkCrossings(t: Track, warn: string[]) {
   }
 }
 
+/**
+ * Narrowest sideways gap between the road edges of a loop's first and second half wherever
+ * the two pass each other side-on (within LOOP_PASS_NEAR), measured on the built samples.
+ */
+function loopPassGap(t: Ribbon, s0: number, span: number): number {
+  const entry = t.sampleAt(s0);
+  const l = Math.hypot(entry.right.x, entry.right.z);
+  const rx = entry.right.x / l;
+  const rz = entry.right.z / l;
+  const half = (from: number, to: number) => t.samples.filter((p) => t.delta(s0 + from, p.s) >= 0 && t.delta(p.s, s0 + to) >= 0);
+  const climb = half(0, span / 2);
+  const descent = half(span / 2, span);
+  let gap = Infinity;
+  for (const a of climb) {
+    for (const b of descent) {
+      // Over the top the two halves are one stretch of road curving: only far-apart parts pass.
+      if (t.delta(a.s, b.s) < span / 4) continue;
+      const dx = b.pos.x - a.pos.x;
+      const dy = b.pos.y - a.pos.y;
+      const dz = b.pos.z - a.pos.z;
+      const side = Math.abs(dx * rx + dz * rz);
+      if (dx * dx + dy * dy + dz * dz - side * side > LOOP_PASS_NEAR ** 2) continue;
+      gap = Math.min(gap, side - (a.width + b.width) / 2);
+    }
+  }
+  return gap;
+}
+
 /** Loops, corkscrews, drops, slick and hazards. */
 function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: string[], difficulty: number, junctions: [number, number, number][]) {
   const w = (m: string) => warn.push(`${label}: ${m}`);
@@ -406,7 +444,8 @@ function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: s
       const s0 = sAt(f.at);
       const top = Math.max(...t.samples.filter((p) => t.delta(s0, p.s) >= 0 && t.delta(p.s, s0 + f.span) >= 0).map((p) => p.pos.y)) - t.sampleAt(s0).pos.y;
       console.log(`    loop @${f.at} radius ${f.radius} span ${f.span} shift ${f.shift}: top ${top.toFixed(0)}m up`);
-      if (Math.abs(f.shift) < t.sampleAt(s0).width + 4) w(`loop @${f.at} shift ${f.shift} lets the exit lane run into the entry`);
+      const gap = loopPassGap(t, s0, f.span);
+      if (gap < LOOP_PASS_GAP) w(`loop @${f.at} shift ${f.shift}: the exit passes ${gap.toFixed(1)}m beside the entry (< ${LOOP_PASS_GAP}m), its deck runs into the climb`);
       straightAround(s0, s0 + f.span + f.settle, `loop @${f.at}`);
     }
     if (f.kind === 'corkscrew') {

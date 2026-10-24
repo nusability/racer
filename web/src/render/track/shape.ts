@@ -151,7 +151,7 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
     gy[k] = p.pos.y;
     gz[k] = p.pos.z;
   }
-  for (const f of features) if (f.kind === 'loop') loopBaseline(r, f.at, f.span, loop, gx, gy, gz);
+  for (const f of features) if (f.kind === 'loop') loopBaseline(r, f.at, f.span, loop, gx, gy, gz, rx, rz);
   for (let k = 0; k < n; k++) {
     const smp = r.samples[k];
     const half = smp.width / 2;
@@ -173,9 +173,12 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
             : WALL_OUTER + (CANYON_OUTER - WALL_OUTER) * canyon[k];
       outer[i][k] = half + reach;
     }
+    // A loop's samples keep the axis of the baseline they stand on (set by loopBaseline): their
+    // own right vector twists with the sideways shift over the top.
+    if (loop[k]) continue;
     // A corkscrew rolls the right vector up to vertical; the tangent still gives the side.
     const l = Math.hypot(smp.right.x, smp.right.z);
-    const flip = smp.up.y < 0 && !loop[k] ? -1 : 1;
+    const flip = smp.up.y < 0 ? -1 : 1;
     if (l > HORIZONTAL_MIN) {
       rx[k] = (smp.right.x / l) * flip;
       rz[k] = (smp.right.z / l) * flip;
@@ -235,7 +238,8 @@ function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: numbe
       const p = r.samples[k].pos;
       const near = distanceTo(r, low, p.x, p.z);
       const half = r.samples[k].width / 2;
-      if (near.d < reachOf(near.k) + half + BRIDGE_MARGIN) {
+      // A loop or corkscrew is a deck already, and a loop's ground is its own baseline.
+      if (near.d < reachOf(near.k) + half + BRIDGE_MARGIN && !sh.magnet[k]) {
         sh.deck[k] = 1;
         sh.bridge[k] = 1;
       }
@@ -259,8 +263,11 @@ function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: numbe
   }
 }
 
-/** Inside a loop the ground follows the straight line from the sample before it to the one after. */
-function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array, gx: Float32Array, gy: Float32Array, gz: Float32Array) {
+/**
+ * Inside a loop the ground follows the straight line from the sample before it to the one after,
+ * and the side of the course is the entry's: the axis the loop turns about.
+ */
+function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array, gx: Float32Array, gy: Float32Array, gz: Float32Array, rx: Float32Array, rz: Float32Array) {
   const s0 = r.paramToS(at);
   const k0 = Math.ceil(s0 / r.step);
   const k1 = Math.floor((s0 + span) / r.step);
@@ -268,6 +275,8 @@ function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array,
   const wrap = (k: number) => ((k % n) + n) % n;
   const a = r.samples[wrap(k0 - 1)].pos;
   const b = r.samples[wrap(k1 + 1)].pos;
+  const side = r.samples[wrap(k0 - 1)].right;
+  const l = Math.hypot(side.x, side.z);
   for (let k = k0; k <= k1; k++) {
     const t = (k - k0 + 1) / (k1 - k0 + 2);
     const q = wrap(k);
@@ -275,5 +284,7 @@ function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array,
     gx[q] = a.x + (b.x - a.x) * t;
     gy[q] = a.y + (b.y - a.y) * t;
     gz[q] = a.z + (b.z - a.z) * t;
+    rx[q] = side.x / l;
+    rz[q] = side.z / l;
   }
 }

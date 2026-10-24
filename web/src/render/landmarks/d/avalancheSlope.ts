@@ -39,6 +39,8 @@ const ROCK_BANDS = 0.32;
 const RIBS = { high: 7, low: 4 } as const;
 /** Summits behind the crest: [x × half-width, z past the ridge, height, base radius]. */
 const PEAKS: readonly (readonly [number, number, number, number])[] = [[-0.45, 70, 300, 120], [0.2, 110, 340, 140], [0.75, 60, 260, 100]];
+/** A summit is snow above this share of its height, rock below. */
+const PEAK_SNOWLINE = 0.38;
 
 /** Ground height of the face at local (x, z). */
 function faceHeight(x: number, z: number): number {
@@ -110,8 +112,12 @@ export function createAvalancheSlope(opts: LandmarkOptions): Landmark {
     const x = px * HALF_W;
     const z = RIDGE_Z + pz;
     const ry = k * 1.3 + rng();
-    kit.solid.add(new THREE.ConeGeometry(pr, ph, 5, 1).translate(0, ph / 2, 0), vary(rng, rock, 0.06), T(x, 0, z, ry));
-    kit.solid.add(new THREE.ConeGeometry(pr * 0.62, ph * 0.62, 5, 1).translate(0, ph * 0.69 + 0.5, 0), snow, T(x, 0, z, ry));
+    // One cone in two bands that meet edge to edge at the snowline. A snow cone laid over a rock
+    // one would sit in the same planes and fight it for depth at the distances summits are seen.
+    const line = ph * PEAK_SNOWLINE;
+    const rLine = pr * (1 - PEAK_SNOWLINE);
+    kit.solid.add(new THREE.CylinderGeometry(rLine, pr, line, 5, 1, true).translate(0, line / 2, 0), vary(rng, rock, 0.06), T(x, 0, z, ry));
+    kit.solid.add(new THREE.ConeGeometry(rLine, ph - line, 5, 1, true).translate(0, line + (ph - line) / 2, 0), snow, T(x, 0, z, ry));
     kit.solid.add(new THREE.ConeGeometry(pr * 0.9, ph * 0.25, 5, 1).translate(0, ph * 0.125, 0), mix(snow, ICE, 0.3), T(x, 0, z, ry + 0.4));
   });
   // Cornices: overhanging lips of snow along the ridge, the blue shadow under each.

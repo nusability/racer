@@ -128,11 +128,16 @@ function applyLoop(
   const r0 = normalize(cross(t0, up));
   const base = pos.map((p) => ({ ...p }));
   const touched: number[] = [];
+  // Seen side-on the loop crosses itself: the climb passes the descent at the same height and
+  // distance along. The exit only clears the entry if the whole sideways shift is in place by
+  // then, so the road moves across over the top, between the two passes, and runs straight
+  // through both of them.
+  const pass = loopCrossing(f.radius, f.span);
   h.forRange(s0, s0 + f.span, (k, t) => {
     const th = 2 * Math.PI * t;
     const fwd = f.radius * Math.sin(th);
     const lift = f.radius * (1 - Math.cos(th));
-    const side = f.shift * t;
+    const side = f.shift * smoothstep((t - pass) / (1 - 2 * pass));
     pos[k] = vec3(
       base[k].x + t0.x * fwd + up.x * lift + r0.x * side,
       base[k].y + lift,
@@ -155,4 +160,25 @@ function applyLoop(
     const param = Math.hypot(bq.x - bp.x, bq.y - bp.y, bq.z - bp.z);
     shape.stretch[k] = Math.max(1, world / param);
   }
+}
+
+/** Bisection steps for the crossing: 2^-40 of the span is far below a sample. */
+const CROSSING_ITERATIONS = 40;
+
+/**
+ * Where a loop crosses itself, seen side-on: the fraction t of the span at which the climb
+ * meets the descent (the descent passes there at 1 - t). The road runs forward
+ * radius·sin(2πt) + span·t at height radius·(1 - cos(2πt)); the two passes share a height at
+ * t and 1 - t and meet where 2·radius·sin(2πt) = span·(1 - 2t). That difference is concave on
+ * [0, ½], negative at 0 and zero again only at ½, so its one sign change is the crossing.
+ */
+export function loopCrossing(radius: number, span: number): number {
+  let lo = 0;
+  let hi = 0.5;
+  for (let i = 0; i < CROSSING_ITERATIONS; i++) {
+    const t = (lo + hi) / 2;
+    if (2 * radius * Math.sin(2 * Math.PI * t) < span * (1 - 2 * t)) lo = t;
+    else hi = t;
+  }
+  return (lo + hi) / 2;
 }
