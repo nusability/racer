@@ -9,6 +9,7 @@ export const snowfield: TrackDef = {
   name: 'Snowfield',
   blurb: 'Wide open snow, a herd of frostbacks crossing the road, and a frozen lake to skate.',
   difficulty: 1,
+  course: 'circuit',
   laps: 3,
   seed: 2101,
   width: 52,
@@ -85,9 +86,11 @@ export const snowfield: TrackDef = {
     { kind: 'boostPad', at: 2.0, lateral: 0 },
     { kind: 'boostPad', at: 2.04, lateral: 0 },
     { kind: 'kicker', at: 3.6, length: 40, height: 2 },
+    // The frostback herd plods out of the snow on the left, across the road at an elephant's
+    // amble (about 5 m/s, 7 at most) to the far run-off, turns, and plods home again.
     {
       kind: 'hazard',
-      hazard: { type: 'sweeper', id: 'herd', at: 6.2, radius: 7, height: 10, xFrom: -112, xTo: 112, cross: 4.5, hold: 1, period: 20, phase: 0 },
+      hazard: { type: 'sweeper', id: 'herd', at: 6.2, radius: 7, height: 10, xFrom: -106, xTo: 34, cross: 30, hold: 4, period: 74, phase: 0 },
     },
     { kind: 'dunes', from: 14.0, to: 16.4, amplitude: 1.5, wavelength: 240 },
     { kind: 'boostPad', at: 17.2, lateral: 0 },
@@ -100,6 +103,7 @@ export const snowfield: TrackDef = {
   branches: [
     {
       id: 'icelake',
+      kind: 'shortcut',
       name: 'Ice Lake Cut',
       side: 1,
       from: 26.6,

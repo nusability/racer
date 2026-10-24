@@ -67,6 +67,9 @@ export function iceKit(scenery: IceScenery, palette: TrackPalette): BiomeKit {
     road: { surface: 'packed', runoff: 'sand' },
     roadLight: 0,
     masonry: 'sandstone',
+    pillar: { kind: 'rock' },
+    ownPosts: false,
+    cornerStands: true,
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];

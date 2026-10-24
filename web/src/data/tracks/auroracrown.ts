@@ -10,6 +10,7 @@ export const auroracrown: TrackDef = {
   name: 'Aurora Crown',
   blurb: 'Night under the aurora: an open crossroads, a loop, and a cliff road in the rotor wash.',
   difficulty: 5,
+  course: 'circuit',
   laps: 3,
   seed: 2606,
   width: 42,
@@ -112,7 +113,7 @@ export const auroracrown: TrackDef = {
     { kind: 'boostPad', at: 32.04, lateral: 0 },
     { kind: 'narrow', from: 42.7, to: 44.9, width: 26, blend: 70 },
     { kind: 'runoff', from: 42.8, to: 44.8, amount: 0 },
-    { kind: 'loop', at: 43.2, radius: 28, span: 124, shift: 32, settle: 140 },
+    { kind: 'loop', at: 43.2, radius: 80, span: 124, shift: 32, settle: 140 },
     { kind: 'repairCells', at: 45.4, lateral: 12, count: 3, spacing: 28 },
     { kind: 'slick', from: 46.4, to: 48.6, grip: 0.6 },
     {
@@ -124,6 +125,7 @@ export const auroracrown: TrackDef = {
   branches: [
     {
       id: 'crowngap',
+      kind: 'shortcut',
       name: 'Crown Gap',
       side: -1,
       from: 12.4,

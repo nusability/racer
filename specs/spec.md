@@ -49,16 +49,22 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 ## Core Game Loop
 
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
-   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian; more to come) has six to
+   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian, Elderwood; more to come) has six to
    eight tracks and three cups, rookie → pro → elite. Winning a world's rookie cup opens the
-   next world. Every world mixes track archetypes: a forgiving rookie loop, a technical track
+   next world. Every circuit world mixes track archetypes: a forgiving rookie loop, a technical track
    of switchbacks, a speed track with a 2–2.7 km straight, and a gimmick track (vertical loop,
    corkscrew, cliff roads with open edges); several are figure-8s or knots that cross
    themselves on bridges or at flat X junctions with live cross-traffic. Neon Meridian
    is the stunt world: walled city roads where every track has at least two loops or
    corkscrews and the pro and elite tracks four or more (double loops, a loop straight into a
    corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover).
-2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
+   Elderwood is the sprint world, a forest of giant trees: four point-to-point sprints down
+   winding, undulating trails 26–34 m wide, each forking two or three times (three on the
+   elite ones), plus two circuits with crowds, the lumber town's street circuit and the
+   lantern fair at the forest edge. Every cup mixes sprints and circuits.
+2. **Race**: six racers, 2–3 laps of a circuit, or one run of a point-to-point sprint: start
+   line to finish line, counted in four sectors, then a run-out where everyone glides to a
+   stop on the air brake. Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
    buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
    glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
@@ -67,12 +73,16 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    and green repair cells restore some. The landmarks are part of the course: scheduled
    hazards the player can read and dodge (a sand beast arching over and slamming across the
    road, a digger dropping ore, ships and rotor wash pushing racers sideways, whales and
-   freighters blocking a causeway, avalanches, calving glaciers, herds crossing, a maglev train crossing the avenue, a crane dropping
+   freighters blocking a causeway, avalanches, calving glaciers, herds crossing, a maglev train crossing the avenue, giant trees falling across the trail (jump the log off a kicker or take the gap), logs rolling down a slide, wind roaring through a gap, a crane dropping
    girders, a collapsing facade, a cargo airship's downdraft). Every track
    has a walled shortcut that is a trade-off, not a free cut: rough ground (marked by hazard
    kerbs and wall stripes) batters the hull at speed, mixed with squeezes, boulders or drops.
    Flat out it saves 1.5–3.5 s for about a third of a stock hull; lifted through, it saves
-   much less and costs almost nothing. A WRECK ENDS THE RACE: hull
+   much less and costs almost nothing. Some courses fork instead: the road splits into two or
+   three parallel routes of their own character (a rooty trail, a log causeway, a riverbed)
+   that rejoin later. They race within ±0.6 s of each other for a skilled driver, so the pick
+   is style and risk, not a free gain; the route's name flashes on entering it, and rivals
+   spread over the routes by their own call, aces favouring the harder way. A WRECK ENDS THE RACE: hull
    gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
    a loop. The craft disintegrates in slow motion, then the results show a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
@@ -105,7 +115,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Walls | Impact damage above 8 m/s sideways; grinding 3% hull/s | Never slows a racer below 65% top speed |
 | Racer contact | Shoved apart by closing speed, split by armour; 0.002 hull per m/s above 8 m/s | One hit per pair per second |
 | Repair cell | +25% hull | Once per racer per lap |
-| Loop | Below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews |
+| Loop | Radius ≥ 80 m (160 m tall, ~510 m of road, crown no tighter than half the radius); below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews; flat out the starter tops a loop at ~137 m/s, so only braking up the climb stalls. A corkscrew rolls at most once per 200 m |
 | Shortcuts | 1–2 per track, 18–22 m wide, walled | Stock glider, measured (track-check): flat out saves 1.5–3.5 s for 25–45% hull; lifting saves 0.2–2 s for ≤ 10%, and at least 0.8 s less than flat out |
 | Rough ground | Hull/s = 0.2 × amount × ((v/top − 0.7)/0.3)^1.5 ÷ armour above 70% of top speed; jolts up to 7 m/s sideways (seeded) | Lifting to 70% is free; boosting through costs ~2.5× flat out. AIs lift by skill (0.9 → 0.73 of top), skip shortcuts above 80–50% hull, and rookies sometimes charge through |
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | Launch boost only for a press within 0.3 s after GO |
@@ -113,15 +123,18 @@ world. Winning a world's elite cup makes you that world's champion.
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
-| Laps | 2–3 per track, 8.9–10 km | Lap times 54–65 s on the starter racer |
+| Laps | 2–3 per circuit, 8.9–11 km (each loop adds ~390 m of road to the ground plan) | Lap times 54–70 s on the starter racer |
+| Sprint | Raced once, 14–24 km start to finish (track-check; Elderwood's run 15.3, 18.0, 20.5 and 22.1 km, about 1:40–2:20 on the starter); 120 m grid apron behind the start, 750 m run-out past the finish | Finishers are held on the air brake, no boost, and stop well before the run-out's end wall; a sprint pays like a full race, its best time is the "best run" |
+| Forks | 2–3 routes over one stretch (left, main, right); each within ±0.6 s of the main road's way for a skilled stock driver, none both quickest by 0.25 s and no dearer on hull (track-check) | Each AI draws its route every pass, tilted ±0.25 toward the harder way by skill (difficulty = rough metres × amount + 40 m per obstacle); a hull past its shortcut limit takes the gentlest |
+| Mild rough ground | AIs ride rough stretches peaking under 0.4 amount (root bumps) at pace | Flat out over such ground costs a few % hull, less than lifting costs in time |
 | Rival parity | Every rival lifted to ≥ 98% of the player's performance index (topSpeed × (1 + 0.045 × boostPower × boostTank)) | Upgrades are a feel choice; they never trivialise a cup |
 | Cup rival fields | Skill bands per tier, shared by every world: rookie 0.44–0.32, pro 0.48–0.36, elite 0.58–0.49 (eased skill²·⁸, 0.3 s reaction delay at skill 0) | Machines at parity with the player; the cup roster is the floor, and a cup whose floor out-paces the player's glider says so ("Field is N% faster than your …") on its card and screen |
 | Catch-up | Rivals behind push up to +5% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes; slipstream carries most of the catching up, visibly |
 | Slipstream | 4–40 m behind another racer, inside a wake 2.5 m wide close up narrowing to 1.2 m: up to +6% top speed and +0.02/s tank; pulling out after 0.8 s of full draft keeps the bonus 0.6 s (slingshot) | Everyone drafts; AIs tuck in on straights and pull out to pass |
 | Championship pay | 1400/1050/770/560/350/210 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
 | Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s; Neon Meridian's two: 202 / 212 m/s | Halo Comet ~28% faster than the starter; each city glider another ~5% |
-| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 56 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132) |
-| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
+| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 60 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132); Elderwood's pay (4.8k / 7.3k / 10.5k a race by cup) then buys the Orbis Gyre's full upgrade set by race 160, and nothing is left to buy |
+| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6, Elderwood 5.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 
 ## Platforms & Scope

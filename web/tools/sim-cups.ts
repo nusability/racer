@@ -50,7 +50,7 @@ export const SKILLED: PlayerBot = { name: 'skilled', eyes: 0.9, delay: 0.1, hold
 /** The bot's eyes are an AI driver; what it does with them is the bot's. */
 export function botDriver(race: Race, seed: number, bot: PlayerBot): (r: Race) => PlayerInput {
   const index = race.entrants.findIndex((e) => e.isPlayer);
-  const eyes = new AiDriver(bot.eyes, seed, { shortcuts: bot.shortcuts, cellDetours: bot.cells });
+  const eyes = new AiDriver(bot.eyes, seed, { branches: bot.shortcuts, cellDetours: bot.cells });
   const delay = Math.round(bot.delay / SIM_DT);
   const seen: number[] = [];
   return (r: Race) => {
@@ -126,7 +126,7 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     if (me.finishTime !== null && rivalEta === Infinity) {
       for (const r of race.racers) {
         if (r === me || r.crashed > 0) continue;
-        const eta = r.finishTime ?? race.time + (track.length * track.def.laps - r.distance) / (r.distance / race.time);
+        const eta = r.finishTime ?? race.time + (track.raceLength * track.def.laps - r.distance) / (r.distance / race.time);
         rivalEta = Math.min(rivalEta, eta);
       }
     }
@@ -138,7 +138,8 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const points = new Map(race.results().map((r) => [r.id, CUP_POINTS[r.place - 1]]));
   const rivals = race.racers.filter((r) => r !== me);
   const winner = Math.min(...race.racers.map((r) => r.finishTime ?? Infinity));
-  const lapped = me.finishTime !== null && rivals.some((r) => r.crashed <= 0 && r.distance < me.distance - track.length);
+  // Only a circuit laps: a sprint is one run.
+  const lapped = track.course === 'circuit' && me.finishTime !== null && rivals.some((r) => r.crashed <= 0 && r.distance < me.distance - track.length);
   return {
     place: me.place,
     gap: me.finishTime === null ? Infinity : me.finishTime - winner,

@@ -1,12 +1,13 @@
-// Builds uniformly sampled ribbons (the closed main loop and open shortcut branches) and
-// answers track-space queries. The simulation lives entirely in track space (s, x, y); only
-// presentation calls toWorld.
+// Builds uniformly sampled ribbons (the main road, closed on a circuit and open on a sprint,
+// and the open branches: shortcuts and the routes of forks) and answers track-space queries.
+// The simulation lives entirely in track space (s, x, y); only presentation calls toWorld.
 
 import type {
   Arch,
   BoostCell,
   BoostPad,
   BranchDef,
+  CourseKind,
   Jump,
   Obstacle,
   TrackControlPoint,
@@ -16,10 +17,11 @@ import type {
   Vec3,
 } from './types.ts';
 import { catmullRom, cross, makeFrame, normalize, smoothstep, vec3, type Frame } from './geom.ts';
-import { shapeCourse } from './courseShapes.ts';
+import { layLoops, shapeCourse, type LoopSpan } from './courseShapes.ts';
 import { compileHazards, type CourseHazard } from './hazards.ts';
 import { mulberry32, range } from './rng.ts';
 import {
+  AI_ROUTE_OBSTACLE_METRES,
   ARCH_LEG_MIN_RADIUS,
   BANK_PER_CURVATURE,
   BOOST_PAD_LENGTH,
@@ -32,6 +34,8 @@ import {
   MAX_BANK,
   OBSTACLE_BUCKET,
   PILLAR_HEIGHT,
+  SPRINT_GRID_APRON,
+  SPRINT_RUNOUT,
   TRACK_SAMPLE_STEP,
   TRACK_SMOOTH_RADIUS,
   TRACK_SPLINE_SUBDIVISIONS,
@@ -39,10 +43,15 @@ import {
 
 export { makeFrame, vec3, type Frame } from './geom.ts';
 
-/** What a ribbon is built from: the main loop's def or a branch's derived one. */
+/** What a ribbon is built from: the main road's def or a branch's derived one. */
 export interface RibbonSpec {
   id: string;
   closed: boolean;
+  /**
+   * The control point the features' param 0 names: 0, except on a sprint, whose builder puts
+   * the grid apron's point first (so the author's point 0, the start line, is control point 1).
+   */
+  paramOffset: number;
   seed: number;
   width: number;
   runoff: number;
@@ -81,8 +90,14 @@ export class Ribbon {
   /** Scheduled hazards on this ribbon (see core/hazards.ts). */
   readonly hazards: CourseHazard[];
   readonly jumps: Jump[] = [];
-  /** Arc length at each control point (for a closed loop, plus the full length at the end). */
+  /** Vertical loops, in s along the finished road (see layLoops). */
+  readonly loops: LoopSpan[];
+  /** Authored arc length at each control point (for a closed loop, plus the full length at the end). */
   private readonly pointS: number[];
+  /** Matching knots of authored arc length and s on the finished road (see baseToS). */
+  private readonly baseKnots: number[];
+  private readonly sKnots: number[];
+  private readonly paramOffset: number;
   private readonly buckets: Obstacle[][];
   /** Number of resampled intervals; samples.length is count (closed) or count + 1 (open). */
   private readonly count: number;
@@ -90,6 +105,7 @@ export class Ribbon {
   constructor(spec: RibbonSpec, edgeOverrides: EdgeOverride[] = []) {
     this.id = spec.id;
     this.closed = spec.closed;
+    this.paramOffset = spec.paramOffset;
     const n = spec.points.length;
     if (n < 4) throw new Error(`Ribbon ${spec.id}: needs at least 4 control points, has ${n}`);
 
@@ -122,15 +138,27 @@ export class Ribbon {
     }
     dense.push(this.closed ? { ...dense[0] } : { ...ctrl[n - 1] });
     denseW.push(this.closed ? denseW[0] : widths[n - 1]);
-    const cum = [0];
-    for (let i = 1; i < dense.length; i++) {
-      const a = dense[i - 1];
-      const b = dense[i];
-      cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
-    }
+    const arcLength = (pts: Vec3[]) => {
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
+      }
+      return cum;
+    };
+    const baseCum = arcLength(dense);
+    this.pointS = segStart.map((d) => baseCum[d]);
+    this.pointS.push(baseCum[baseCum.length - 1]);
+
+    // Loops go in before the resample: they add road, and s must be true road length for the
+    // simulation, the camera and the mesh alike (a sample every TRACK_SAMPLE_STEP of real road).
+    const line = layLoops(spec.features, dense, denseW, baseCum, (u) => this.baseParamToS(u));
+    const cum = arcLength(line.pts);
     const total = cum[cum.length - 1];
-    this.pointS = segStart.map((d) => cum[d]);
-    this.pointS.push(total);
+    this.baseKnots = line.base;
+    this.sKnots = cum;
+    this.loops = line.loops.map((l) => ({ at: l.at, s0: this.baseToS(l.b0), s1: this.baseToS(l.b1), settled: this.baseToS(l.settled), shift: l.shift, right: l.right }));
 
     // 2. Uniform resample.
     const count = Math.round(total / TRACK_SAMPLE_STEP);
@@ -140,23 +168,30 @@ export class Ribbon {
     const ns = this.closed ? count : count + 1;
     const pos: Vec3[] = [];
     const width: number[] = [];
+    const drift: Vec3[] = [];
     let j = 0;
     for (let k = 0; k < ns; k++) {
       const s = Math.min(total, k * this.step);
       while (j < cum.length - 2 && cum[j + 1] < s) j++;
       const w = (s - cum[j]) / (cum[j + 1] - cum[j]);
-      const a = dense[j];
-      const b = dense[j + 1];
+      const a = line.pts[j];
+      const b = line.pts[j + 1];
       pos.push(vec3(a.x + (b.x - a.x) * w, a.y + (b.y - a.y) * w, a.z + (b.z - a.z) * w));
-      width.push(denseW[j] + (denseW[j + 1] - denseW[j]) * w);
+      width.push(line.widths[j] + (line.widths[j + 1] - line.widths[j]) * w);
+      const da = line.drift[j];
+      const db = line.drift[j + 1];
+      drift.push(vec3(da.x + (db.x - da.x) * w, 0, da.z + (db.z - da.z) * w));
     }
 
-    // 3. Horizontal curvature from heading change, smoothed.
+    // 3. Horizontal curvature from heading change, smoothed. A loop's settle is left out: the
+    // road eases sideways back onto its line there, and racers ride it as the straight it was.
     const heading: number[] = [];
     for (let k = 0; k < ns; k++) {
-      const a = pos[this.nb(k, -1)];
-      const b = pos[this.nb(k, 1)];
-      heading.push(Math.atan2(b.x - a.x, -(b.z - a.z)));
+      const ka = this.nb(k, -1);
+      const kb = this.nb(k, 1);
+      const a = pos[ka];
+      const b = pos[kb];
+      heading.push(Math.atan2(b.x - drift[kb].x - (a.x - drift[ka].x), -(b.z - drift[kb].z - (a.z - drift[ka].z))));
     }
     const rawCurv: number[] = [];
     for (let k = 0; k < ns; k++) {
@@ -167,6 +202,8 @@ export class Ribbon {
       while (dh < -Math.PI) dh += 2 * Math.PI;
       rawCurv.push(dh / ((b - a === 0 ? 1 : this.closed ? 2 : b - a) * this.step));
     }
+    // A loop turns in the vertical plane: its heading flips over the top, which is no corner.
+    for (const l of this.loops) this.forRange(l.s0, l.s1, (k) => (rawCurv[k] = 0));
     const curvature = this.smooth(rawCurv);
 
     // 4. Features that shape elevation, width, edges and the sky above.
@@ -179,14 +216,7 @@ export class Ribbon {
     const rng = mulberry32(spec.seed);
     for (const f of spec.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight, runL, runR);
     for (let k = 0; k < ns; k++) pos[k].y = elev[k];
-    const shape = shapeCourse(
-      { paramToS: (u) => this.paramToS(u), forRange: (a, b, fn) => this.forRange(a, b, fn), nb: (k, d) => this.nb(k, d) },
-      spec.features,
-      pos,
-      runL,
-      runR,
-    );
-    for (let k = 0; k < ns; k++) elev[k] = pos[k].y;
+    const shape = shapeCourse({ paramToS: (u) => this.paramToS(u), forRange: (a, b, fn) => this.forRange(a, b, fn) }, spec.features, this.loops, ns, runL, runR);
     const edgeL = width.map((w, k) => w / 2 + runL[k]);
     const edgeR = width.map((w, k) => w / 2 + runR[k]);
     for (const o of edgeOverrides) {
@@ -262,7 +292,6 @@ export class Ribbon {
         magnet: shape.magnet[k],
         grip: shape.grip[k],
         rough: shape.rough[k],
-        stretch: shape.stretch[k],
       });
     }
 
@@ -293,12 +322,36 @@ export class Ribbon {
   }
 
   /** Arc length of a control-point parameter (see TrackParam). */
-  paramToS(u: number): number {
+  paramToS(param: number): number {
+    return this.baseToS(this.baseParamToS(param));
+  }
+
+  /** Arc length of a control-point parameter along the line as authored, before loops were laid in. */
+  private baseParamToS(param: number): number {
     const segments = this.pointS.length - 1;
-    if (u < 0 || u > segments) throw new Error(`Ribbon ${this.id}: feature param ${u} outside 0..${segments}`);
+    const u = param + this.paramOffset;
+    if (u < 0 || u > segments) throw new Error(`Ribbon ${this.id}: feature param ${param} outside ${-this.paramOffset}..${segments - this.paramOffset}`);
     const i = Math.min(segments - 1, Math.floor(u));
     const f = u - i;
     return this.pointS[i] + (this.pointS[i + 1] - this.pointS[i]) * f;
+  }
+
+  /**
+   * s on the finished road of an authored arc length. Past a loop it moves on by the loop's
+   * extra road; inside one it spreads evenly over the loop, like the authored straight it replaced.
+   */
+  private baseToS(b: number): number {
+    const base = this.baseKnots;
+    let lo = 0;
+    let hi = base.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (base[mid] <= b) lo = mid;
+      else hi = mid;
+    }
+    const span = base[hi] - base[lo];
+    const w = span > 0 ? Math.min(1, Math.max(0, (b - base[lo]) / span)) : 0;
+    return this.sKnots[lo] + (this.sKnots[hi] - this.sKnots[lo]) * w;
   }
 
   /** A closed loop wraps s; an open ribbon clamps it to its ends. */
@@ -386,9 +439,6 @@ export class Ribbon {
     return this.sampleAt(s).rough;
   }
   /** World metres per metre of s (inside a loop > 1). */
-  stretchAt(s: number): number {
-    return this.sampleAt(s).stretch;
-  }
   /** True when leaving the course on that side (−1 left, 1 right) means falling off. */
   dropAt(s: number, side: -1 | 1): boolean {
     const smp = this.sampleAt(s);
@@ -595,6 +645,7 @@ export class Ribbon {
       case 'rough':
       case 'hazard':
       case 'crossing':
+      case 'route':
         break;
     }
   }
@@ -651,12 +702,14 @@ export class Ribbon {
   }
 }
 
-/** A shortcut ribbon and where it meets the main loop. */
+/** A branch ribbon (shortcut or route) and where it meets the main road. */
 export interface Branch {
   index: number;
   def: BranchDef;
   ribbon: Ribbon;
   side: -1 | 1;
+  /** The fork this branch is a route of; null for a shortcut. */
+  fork: Fork | null;
   /** Main-loop s where the branch leaves (start of the entry junction) and rejoins (end of the exit junction). */
   entryS: number;
   exitS: number;
@@ -667,13 +720,41 @@ export interface Branch {
   junctionOffset: number;
 }
 
-/** The main loop plus its branches. Existing code treats a Track as its main ribbon. */
+/**
+ * Where the road splits into parallel routes and rejoins: the main road's own way (named by
+ * its 'route' feature) and one or two route branches beside it, left and right.
+ */
+export interface Fork {
+  index: number;
+  /** The main road's route name. */
+  name: string;
+  /** Main-road s where the routes leave (start of the entry junctions) and rejoin (end of the exit junctions). */
+  entryS: number;
+  exitS: number;
+  /** Indices into Track.branches of its route branches. */
+  routes: number[];
+  /**
+   * Every way through, as a ribbon index (-1 = the main road, else the branch), gentlest
+   * first: by metres of rough ground times its amount, plus AI_ROUTE_OBSTACLE_METRES for each
+   * obstacle and hazard. Ties keep left, centre, right order.
+   */
+  byDifficulty: number[];
+}
+
+/** The main road plus its branches. Existing code treats a Track as its main ribbon. */
 export class Track extends Ribbon {
   readonly def: TrackDef;
+  readonly course: CourseKind;
+  /** Main-road s of the start line: 0 on a circuit, the end of the grid apron on a sprint. */
+  readonly startS: number;
+  /** Start line to finish line: one lap of a circuit, the whole of a sprint. */
+  readonly raceLength: number;
   readonly branches: Branch[];
+  readonly forks: Fork[];
 
   constructor(def: TrackDef) {
-    // The main loop's edge on a branch's side opens up at the junctions so racers can move
+    validateCourse(def);
+    // The main road's edge on a branch's side opens up at the junctions so racers can move
     // across, and closes into a divider wall between them.
     const probe = new Ribbon(mainSpec(def));
     const overrides: EdgeOverride[] = [];
@@ -682,6 +763,9 @@ export class Track extends Ribbon {
       const exitS = probe.paramToS(b.to);
       if (exitS - entryS < 4 * BRANCH_JUNCTION_LENGTH) {
         throw new Error(`Track ${def.id}: branch ${b.id} must leave and rejoin in order and be longer than its junctions`);
+      }
+      if (def.course === 'sprint' && (b.from < 0 || b.to > def.points.length - 1)) {
+        throw new Error(`Track ${def.id}: branch ${b.id} must leave and rejoin between the start and the finish`);
       }
       const fadeIn = Math.max(0, entryS - BRANCH_EDGE_FADE);
       overrides.push({ s0: fadeIn, s1: entryS, side: b.side, extra: b.width, fade: 'in' });
@@ -692,28 +776,100 @@ export class Track extends Ribbon {
     }
     super(mainSpec(def), overrides);
     this.def = def;
+    this.course = def.course;
+    this.startS = def.course === 'circuit' ? 0 : this.paramToS(0);
+    this.raceLength = def.course === 'circuit' ? this.length : this.paramToS(def.points.length - 1) - this.startS;
     this.branches = def.branches.map((b, index) => buildBranch(this, b, index));
+    this.forks = buildForks(this);
   }
 
-  /** The ribbon a racer is on: -1 = this loop, else a branch. */
+  /** The ribbon a racer is on: -1 = the main road, else a branch. */
   ribbon(branch: number): Ribbon {
     if (branch < 0) return this;
     const b = this.branches[branch];
     if (!b) throw new Error(`Track ${this.def.id}: no branch ${branch}`);
     return b.ribbon;
   }
+
+  /**
+   * The named way a racer at (branch, s) is on, or null: a branch's name anywhere on it, the
+   * main road's route name once it is past a fork's entry junctions (it has stayed on the main
+   * road's way), null elsewhere on the main road.
+   */
+  pathNameAt(branch: number, s: number): string | null {
+    if (branch >= 0) return this.branches[branch].def.name;
+    for (const f of this.forks) {
+      if (s > f.entryS + BRANCH_JUNCTION_LENGTH && s < f.exitS - BRANCH_JUNCTION_LENGTH) return f.name;
+    }
+    return null;
+  }
+}
+
+/** The course kind's rules a def must keep before anything is built from it. */
+function validateCourse(def: TrackDef) {
+  if (def.course === 'sprint' && def.laps !== 1) throw new Error(`Track ${def.id}: a sprint is raced once, laps must be 1 (has ${def.laps})`);
+  if (!(Number.isInteger(def.laps) && def.laps >= 1)) throw new Error(`Track ${def.id}: laps ${def.laps} must be a whole number of at least 1`);
+  for (const f of def.branches.flatMap((b) => b.features)) {
+    if (f.kind === 'route') throw new Error(`Track ${def.id}: a 'route' feature names the main road's way through a fork; it belongs on the main road`);
+  }
+  // Two branches on one side over the same stretch would share the main road's opened edge.
+  for (const a of def.branches) {
+    for (const b of def.branches) {
+      if (a !== b && a.side === b.side && a.from < b.to && b.from < a.to) {
+        throw new Error(`Track ${def.id}: branches ${a.id} and ${b.id} leave the same side over overlapping stretches`);
+      }
+    }
+  }
 }
 
 function mainSpec(def: TrackDef): RibbonSpec {
-  return {
-    id: def.id,
-    closed: true,
-    seed: def.seed,
-    width: def.width,
-    runoff: def.runoff,
-    points: def.points,
-    features: def.features,
-  };
+  const base = { id: def.id, seed: def.seed, width: def.width, runoff: def.runoff, features: def.features };
+  if (def.course === 'circuit') return { ...base, closed: true, paramOffset: 0, points: def.points };
+  const p = def.points;
+  const n = p.length;
+  if (n < 2) throw new Error(`Track ${def.id}: a sprint needs a start and a finish point`);
+  // Straight on from each end: the grid stands on the apron, finishers glide out on the run-out.
+  return { ...base, closed: false, paramOffset: 1, points: [beyond(p[0], p[1], SPRINT_GRID_APRON), ...p, beyond(p[n - 1], p[n - 2], SPRINT_RUNOUT)] };
+}
+
+/** A control point `length` metres past `end`, straight on from `inner` toward it, level with `end`. */
+function beyond(end: TrackControlPoint, inner: TrackControlPoint, length: number): TrackControlPoint {
+  const dx = end.x - inner.x;
+  const dz = end.z - inner.z;
+  const d = Math.hypot(dx, dz);
+  if (d === 0) throw new Error('Track: a sprint\'s end point sits on its neighbour');
+  return { x: end.x + (dx / d) * length, z: end.z + (dz / d) * length, y: end.y, width: end.width };
+}
+
+/** Groups route branches into forks with their main-road route names (see Fork). */
+function buildForks(main: Track): Fork[] {
+  const named = main.def.features.flatMap((f) => (f.kind === 'route' ? [f] : []));
+  const forks = named.map((f, index): Fork => {
+    const routes = main.branches.filter((b) => b.def.kind === 'route' && b.def.from === f.from && b.def.to === f.to);
+    if (routes.length === 0) throw new Error(`Track ${main.def.id}: route "${f.name}" names a fork with no route branch over ${f.from}..${f.to}`);
+    const entryS = main.paramToS(f.from);
+    const exitS = main.paramToS(f.to);
+    const difficulty = new Map<number, number>([[-1, ribbonDifficulty(main, entryS, exitS)], ...routes.map((b): [number, number] => [b.index, ribbonDifficulty(b.ribbon, 0, b.ribbon.length)])]);
+    // Left, centre, right: the order ties keep.
+    const ways = [...routes.filter((b) => b.side < 0).map((b) => b.index), -1, ...routes.filter((b) => b.side > 0).map((b) => b.index)];
+    const byDifficulty = ways.map((w, i) => ({ w, i })).sort((a, b) => (difficulty.get(a.w) as number) - (difficulty.get(b.w) as number) || a.i - b.i).map((x) => x.w);
+    return { index, name: f.name, entryS, exitS, routes: routes.map((b) => b.index), byDifficulty };
+  });
+  for (const b of main.branches) {
+    if (b.def.kind !== 'route') continue;
+    const fork = forks.find((f) => f.routes.includes(b.index));
+    if (!fork) throw new Error(`Track ${main.def.id}: route branch ${b.def.id} has no main-road 'route' feature over ${b.def.from}..${b.def.to} naming the main way`);
+    b.fork = fork;
+  }
+  return forks;
+}
+
+/** Metres of rough ground times its amount between s0 and s1, plus AI_ROUTE_OBSTACLE_METRES per obstacle and hazard there. */
+function ribbonDifficulty(r: Ribbon, s0: number, s1: number): number {
+  let rough = 0;
+  for (const smp of r.samples) if (smp.s >= s0 && smp.s <= s1) rough += smp.rough * r.step;
+  const things = r.obstacles.filter((o) => o.s >= s0 && o.s <= s1).length + r.hazards.filter((h) => h.s0 >= s0 && h.s0 <= s1).length;
+  return rough + things * AI_ROUTE_OBSTACLE_METRES;
 }
 
 function buildBranch(main: Track, b: BranchDef, index: number): Branch {
@@ -734,6 +890,7 @@ function buildBranch(main: Track, b: BranchDef, index: number): Branch {
   const spec: RibbonSpec = {
     id: `${main.def.id}/${b.id}`,
     closed: false,
+    paramOffset: 0,
     seed: main.def.seed + index + 1,
     width: b.width,
     runoff: b.runoff,
@@ -749,5 +906,5 @@ function buildBranch(main: Track, b: BranchDef, index: number): Branch {
       { s0: 0, s1: endJ, side: towardMain, extra: main.widthAt(entryS) },
       { s0: startExitJ, s1: ribbonProbe.length, side: towardMain, extra: main.widthAt(exitS) },
   ]);
-  return { index, def: b, ribbon, side: b.side, entryS, exitS, junctionOffset: offset(entryS) };
+  return { index, def: b, ribbon, side: b.side, fork: null, entryS, exitS, junctionOffset: offset(entryS) };
 }

@@ -55,7 +55,18 @@ export type LandmarkKind =
   | 'stadium'
   | 'hologramDragon'
   | 'suspensionBridge'
-  | 'skyTram';
+  | 'skyTram'
+  // Set F: the forest
+  | 'fallingTree'
+  | 'herd'
+  | 'logSlide'
+  | 'windRoar'
+  | 'treeVillage'
+  | 'lumberTown'
+  | 'waterfall'
+  | 'ruins'
+  | 'glowGrove'
+  | 'ropeBridge';
 
 /**
  * A landmark that IS part of the course (the sand beast that crosses the road, the digger
@@ -66,6 +77,12 @@ export interface HazardBinding {
   hazard: CourseHazard;
   /** Track space (main-loop s, x, height y above the road) → this landmark's local space. */
   toLocal(s: number, x: number, y: number, out: THREE.Vector3): THREE.Vector3;
+  /**
+   * Height of the canyon walls' rim over the road edge at s, metres (0 where the road is open),
+   * for a landmark that stands beside the road. Absent on a viewer's virtual road, which has
+   * no walls.
+   */
+  wallAt?(s: number): number;
 }
 
 export interface LandmarkOptions {

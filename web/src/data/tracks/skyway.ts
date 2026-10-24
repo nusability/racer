@@ -10,6 +10,7 @@ export const skyway: TrackDef = {
   name: 'Skyway',
   blurb: 'The elevated ring road: a double loop, two corkscrews and edges with nothing past them.',
   difficulty: 4,
+  course: 'circuit',
   laps: 3,
   seed: 3505,
   width: 42,
@@ -107,8 +108,8 @@ export const skyway: TrackDef = {
     { kind: 'boostCells', at: 32.38, lateral: -16, count: 1, spacing: 30 },
     { kind: 'narrow', from: 1.08, to: 4.48, width: 32, blend: 80 },
     { kind: 'runoff', from: 1.17, to: 4.39, amount: 0 },
-    { kind: 'loop', at: 1.68, radius: 28, span: 124, shift: 36, settle: 140 },
-    { kind: 'loop', at: 2.9, radius: 28, span: 124, shift: -36, settle: 140 },
+    { kind: 'loop', at: 1.68, radius: 80, span: 124, shift: 36, settle: 140 },
+    { kind: 'loop', at: 2.9, radius: 80, span: 124, shift: -36, settle: 140 },
     { kind: 'narrow', from: 5.05, to: 7.35, width: 34, blend: 70 },
     { kind: 'runoff', from: 5.14, to: 7.26, amount: 0 },
     { kind: 'corkscrew', from: 5.6, to: 6.8, turns: 1 },
@@ -122,7 +123,7 @@ export const skyway: TrackDef = {
     { kind: 'repairCells', at: 16.09, lateral: 10, count: 3, spacing: 28 },
     { kind: 'narrow', from: 25.13, to: 27.76, width: 32, blend: 80 },
     { kind: 'runoff', from: 25.26, to: 27.66, amount: 0 },
-    { kind: 'loop', at: 25.99, radius: 28, span: 124, shift: -36, settle: 140 },
+    { kind: 'loop', at: 25.99, radius: 80, span: 124, shift: -36, settle: 140 },
     { kind: 'narrow', from: 28.72, to: 30.95, width: 34, blend: 70 },
     { kind: 'drop', from: 28.92, to: 30.7 },
     {
@@ -140,6 +141,7 @@ export const skyway: TrackDef = {
   branches: [
     {
       id: 'gantry',
+      kind: 'shortcut',
       name: 'Gantry Cut',
       side: 1,
       from: 38.15,

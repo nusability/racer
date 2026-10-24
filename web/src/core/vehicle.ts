@@ -200,10 +200,9 @@ export class Vehicle {
     st.vx = clamp(st.vx + (w * w * (this.targetX - st.x) - 2 * zeta * w * st.vx) * dt, -maxLat, maxLat);
 
     // Sideways motion borrows from forward motion (weaving is not free), but never all of it.
-    // Inside a loop the road is longer than its s span, so s advances by speed / stretch.
     st.yaw = clamp(Math.atan2(st.vx, Math.max(st.speed, 1)), -MAX_VISUAL_YAW, MAX_VISUAL_YAW);
     const forward = st.speed * Math.cos(st.yaw);
-    const sdot = forward / Math.max(FRENET_MIN_DENOM, 1 - curvature * st.x) / ribbon.stretchAt(sOld);
+    const sdot = forward / Math.max(FRENET_MIN_DENOM, 1 - curvature * st.x);
     st.s = ribbon.wrap(sOld + sdot * dt);
     st.x += st.vx * dt;
 

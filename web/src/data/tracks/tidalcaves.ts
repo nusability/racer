@@ -10,6 +10,7 @@ export const tidalcaves: TrackDef = {
   name: 'Tidal Caves',
   blurb: 'A figure of eight through an open crossroads, a sea cave and the rockfall in the Boiling Gorge.',
   difficulty: 4,
+  course: 'circuit',
   laps: 3,
   seed: 1505,
   width: 44,
@@ -106,6 +107,7 @@ export const tidalcaves: TrackDef = {
   branches: [
     {
       id: 'smuggler',
+      kind: 'shortcut',
       name: "Smuggler's Cave",
       side: -1,
       from: 13.3,

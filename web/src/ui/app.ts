@@ -30,6 +30,8 @@ export interface AppDeps {
   store: KeyValueStore;
   /** The automatic graphics level's benchmark and the GPU it is recorded against. */
   graphics: GraphicsDeps;
+  /** The first screen: the title, unless a dev entry opens straight onto another. */
+  start: Nav;
 }
 
 function build(ctx: AppCtx, nav: Nav): Screen {
@@ -117,7 +119,7 @@ export function startApp(deps: AppDeps): void {
   }
 
   const ctx: AppCtx = { career, store: deps.store, audio: deps.audio, showroom: deps.showroom, graphics, go, race };
-  go({ screen: 'title' });
+  go(deps.start);
   // While the title waits for its tap: the measurement draws on a canvas that is never shown.
   graphics.ensure();
 }

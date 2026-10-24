@@ -255,6 +255,7 @@ export class Career {
   quickRaceRequest(trackId: string, laps: number): RaceRequest {
     const track = trackById(trackId);
     if (!Number.isInteger(laps) || laps < MIN_QUICK_LAPS || laps > MAX_QUICK_LAPS) throw new Error(`Bad lap count ${laps}`);
+    if (track.course === 'sprint' && laps !== track.laps) throw new Error(`Sprint ${track.id} is raced once, not ${laps} laps`);
     const raceId = this.nextRaceId();
     return {
       raceId,
@@ -293,7 +294,8 @@ export class Career {
     this.save.credits += payout.total;
 
     const rec = (this.save.records[track.id] ??= { bestLap: null, bestRace: {} });
-    const newBestLap = me.bestLap !== null && (rec.bestLap === null || me.bestLap < rec.bestLap);
+    // A sprint's one run is its race time, kept as its best race ("best run"), never as a lap.
+    const newBestLap = track.course === 'circuit' && me.bestLap !== null && (rec.bestLap === null || me.bestLap < rec.bestLap);
     if (newBestLap) rec.bestLap = me.bestLap;
     const prevRace = rec.bestRace[String(req.laps)];
     const newBestRace = me.time !== null && (prevRace === undefined || me.time < prevRace);

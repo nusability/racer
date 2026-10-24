@@ -3,6 +3,8 @@
 /** Inner padding so the outline never touches the edge. */
 export const MINIMAP_PAD = 8;
 export const MINIMAP_LINE = 3;
+/** A fork's route: road like the main line, drawn a little thinner so the main way still reads. */
+export const MINIMAP_ROUTE_LINE = 2;
 export const MINIMAP_BRANCH_DASH = 4;
 export const MINIMAP_DOT = 3.5;
 export const MINIMAP_PLAYER_DOT = 5.5;

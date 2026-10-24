@@ -10,6 +10,7 @@ export const icefalls: TrackDef = {
   name: 'Icefalls',
   blurb: 'Four switchbacks down the frozen falls, an avalanche slope and the crevasse leaps home.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 2404,
   width: 40,
@@ -112,6 +113,7 @@ export const icefalls: TrackDef = {
   branches: [
     {
       id: 'icechute',
+      kind: 'shortcut',
       name: 'Ice Chute',
       side: -1,
       from: 27.0,

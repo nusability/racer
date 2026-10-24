@@ -5,7 +5,8 @@
 // reloads pages while other files are being edited. Output: public/thumbs/<id>.webp plus
 // public/thumbs/thumbs.json (which s each image used).
 //
-// `node tools/thumbs.mjs --explore <dir> [--track id] [--candidates file.json]` instead renders
+// `node tools/thumbs.mjs --track a,b` renders only those tracks into the existing manifest.
+// `node tools/thumbs.mjs --explore <dir> [--track a,b] [--candidates file.json]` instead renders
 // evenly spaced spots (or the given candidate shots) into one contact sheet per track, for
 // choosing the SHOTS below.
 import { spawn, spawnSync } from 'node:child_process';
@@ -72,6 +73,12 @@ const SHOTS = {
   undercity: { at: 19.5, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the viaduct over the old town' },
   skyway: { at: 1.68, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the double loop on the ring road' },
   zenithtower: { at: 12.67, ds: -60, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 120, why: 'the double loop off the west flyover' },
+  mossway: { at: 11.73, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'herdeast', why: 'the herd crossing the mossy trail' },
+  timberton: { at: 51.13, view: 'orbit', yaw: -0.5, pitch: 0.25, dist: 120, why: 'the grandstand along the town street' },
+  glowmere: { at: 16.47, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'herdnorth', why: 'the herd crossing at dusk' },
+  lanternfair: { at: 39.29, ds: -130, why: 'the glow groves at sunset off the west road' },
+  deeproot: { at: 12.85, ds: -90, hazard: 'deadfall', why: 'a dead giant down across the trail, the kicker to jump it' },
+  thunderfall: { at: 38.86, ds: -90, hazard: 'deadfall', why: 'a falling giant across the trail at dusk' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
@@ -251,10 +258,22 @@ async function trackIds(page) {
   return page.$$eval('select option', (os) => os.map((o) => o.value));
 }
 
+/** `--track a,b`: render only those tracks and keep every other entry of the manifest. */
+function onlyTracks() {
+  const i = process.argv.indexOf('--track');
+  if (i < 0) return null;
+  const ids = process.argv[i + 1];
+  if (!ids) throw new Error('--track needs a comma-separated list of track ids');
+  return ids.split(',');
+}
+
 async function renderAll(page) {
   mkdirSync(OUT_DIR, { recursive: true });
-  const manifest = {};
-  for (const id of await trackIds(page)) {
+  const only = onlyTracks();
+  const manifest = only ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {};
+  const ids = await trackIds(page);
+  for (const id of only ?? []) if (!ids.includes(id)) throw new Error(`--track: no track "${id}" in the viewer`);
+  for (const id of only ?? ids) {
     const shot = SHOTS[id];
     if (!shot) throw new Error(`No thumbnail shot for track "${id}": add it to SHOTS (pick one with --explore)`);
     const { s, png } = await shoot(page, id, shot);
@@ -264,16 +283,18 @@ async function renderAll(page) {
     manifest[id] = { image: `thumbs/${id}.webp`, s: Math.round(s), x: shot.x ?? 0, branch: shot.branch ?? -1, view: shot.view ?? 'fly', subject: shot.why, ...(await outline(page)) };
     console.log(`${id}: s=${Math.round(s)} ${(webp.length / 1024).toFixed(1)} KB (${shot.why})`);
   }
-  writeFileSync(MANIFEST, `${JSON.stringify(manifest)}\n`);
+  // Manifest order follows the viewer's track list, whichever tracks this run rendered.
+  const ordered = Object.fromEntries(ids.filter((id) => id in manifest).map((id) => [id, manifest[id]]));
+  writeFileSync(MANIFEST, `${JSON.stringify(ordered)}\n`);
 }
 
 async function explore(page, dir) {
   mkdirSync(dir, { recursive: true });
-  const only = process.argv.includes('--track') ? process.argv[process.argv.indexOf('--track') + 1] : null;
+  const only = onlyTracks();
   // --candidates <file.json>: { trackId: [shot, ...] } to compare specific framings.
   const candidates = process.argv.includes('--candidates') ? JSON.parse(readFileSync(process.argv[process.argv.indexOf('--candidates') + 1], 'utf8')) : null;
   for (const id of await trackIds(page)) {
-    if (only && id !== only) continue;
+    if (only && !only.includes(id)) continue;
     const tiles = [];
     const shots = candidates ? (candidates[id] ?? []) : Array.from({ length: EXPLORE_SPOTS }, (_, k) => ({ u: k / EXPLORE_SPOTS }));
     for (const [k, shot] of shots.entries()) {

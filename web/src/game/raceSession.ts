@@ -7,7 +7,7 @@ import { makeFrame, Track } from '../core/track.ts';
 import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
-import { sceneryById, trackById } from '../data/tracks/index.ts';
+import { biomeOfTrack, sceneryById, trackById } from '../data/tracks/index.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import type { AudioRival, GameAudio } from '../audio/audio.ts';
 import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
@@ -21,7 +21,6 @@ import { describeLook, resolveLook, type ActiveLook } from '../render/look/look.
 import { worldEnvironment } from '../render/look/env.ts';
 import { PostFx } from '../render/look/postFx.ts';
 import { GlowPools } from '../render/look/glowPools.ts';
-import { worldOfTrack } from '../data/worlds.ts';
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
@@ -30,7 +29,7 @@ import type { KeyValueStore } from './save.ts';
 import { loadDebugFlags } from '../ui/debugFlags.ts';
 import { createPerfOverlay, type PerfOverlay } from '../ui/perfOverlay.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
-import type { CrashReason, Hud, InputSource, RaceOutcome, RacePerf, RaceRequest, Settings, WreckInfo } from './types.ts';
+import type { CrashReason, Hud, HudView, InputSource, RaceOutcome, RacePerf, RaceRequest, Settings, WreckInfo } from './types.ts';
 import { graphicsLevel } from './graphics.ts';
 import { SlowFrameWatch } from './slowFrameWatch.ts';
 import { GRAPHICS_PROFILE } from '../render/graphicsTuning.ts';
@@ -61,6 +60,7 @@ import {
   SESSION_JOLT_IMPACT,
   SESSION_SHAKE_LAND,
   SESSION_SHAKE_SCRAPE,
+  SPRINT_SECTORS,
 } from './sessionTuning.ts';
 
 const MS_TO_KMH = 3.6;
@@ -140,7 +140,10 @@ export class RaceSession {
   private scrapeLevel = 0;
   /** How hard rough ground battered the player this frame, for the rumble loop. */
   private roughLevel = 0;
-  private shownBranch = -1;
+  /** The named way (shortcut, route) last flashed for the player; null on plain main road. */
+  private shownPath: string | null = null;
+  /** The sprint sector last shown (sprints count sectors where circuits count laps). */
+  private shownSector = 1;
   private readonly minimap: Minimap;
   private readonly dotColors: string[];
   private finishedFor = 0;
@@ -192,7 +195,7 @@ export class RaceSession {
     const renderer = ctx.renderer;
     const level = graphicsLevel(ctx.settings);
     const detail = GRAPHICS_PROFILE[level].detail;
-    this.look = resolveLook(worldOfTrack(def.id).biome, level, loadDebugFlags(ctx.store).look, PostFx.supported(renderer), def.palette);
+    this.look = resolveLook(biomeOfTrack(def.id), level, loadDebugFlags(ctx.store).look, PostFx.supported(renderer), def.palette);
     this.toneMappingBefore = { mapping: renderer.toneMapping, exposure: renderer.toneMappingExposure };
     const look = this.look;
     if (look && !look.post) {
@@ -316,7 +319,8 @@ export class RaceSession {
     this.acc = 0;
     this.finishedFor = 0;
     this.countdown = null;
-    this.shownBranch = -1;
+    this.shownPath = null;
+    this.shownSector = 1;
     this.cam.reset();
     this.trackScene.resetCells();
     this.playerWreck = null;
@@ -609,9 +613,19 @@ export class RaceSession {
     if (this.playerWreck) this.wreckCamera();
     // The camera follows the interpolated pose, not the raw step, or it judders.
     else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
-    if (pv.branch !== this.shownBranch) {
-      if (pv.branch >= 0) this.hud.flash(this.track.branches[pv.branch].def.name.toUpperCase());
-      this.shownBranch = pv.branch;
+    // Entering a shortcut or a fork's route (the main road's own route included) names it.
+    const path = this.track.pathNameAt(pv.branch, pv.s);
+    if (path !== this.shownPath) {
+      if (path !== null) this.hud.flash(path.toUpperCase());
+      this.shownPath = path;
+    }
+    const stage = this.stage(p);
+    if (stage.kind === 'sector' && stage.n !== this.shownSector) {
+      this.shownSector = stage.n;
+      if (p.finishTime === null) {
+        this.ctx.audio.oneShot('lap');
+        this.hud.flash(stage.n === stage.of ? 'FINAL SECTOR' : `SECTOR ${stage.n}`);
+      }
     }
     this.minimap.update(this.race.racers, pi, this.dotColors);
     this.speedLines.update(dt, Math.max(0, Math.min(1, (speedFrac - 0.45) * 1.6)) + (p.boosting ? 0.35 : 0));
@@ -640,10 +654,9 @@ export class RaceSession {
       speedKmh: Math.round(p.speed * MS_TO_KMH),
       place: p.place,
       racers: this.race.racers.length,
-      lap: Math.min(this.request.laps, p.lap + 1),
-      laps: this.request.laps,
+      stage,
       time: this.race.time,
-      bestLap: p.bestLap,
+      bestLap: this.track.course === 'sprint' ? null : p.bestLap,
       boost: p.boost,
       damage: p.damage,
       boosting: p.boosting,
@@ -667,6 +680,13 @@ export class RaceSession {
       this.fpsSmoothed += (fps - this.fpsSmoothed) * SESSION_FPS_SMOOTHING;
       this.perf.update({ fps: this.fpsSmoothed, drawCalls: info.calls, triangles: info.triangles, look: describeLook(this.look) });
     }
+  }
+
+  /** Lap of a circuit, or sector of a sprint: SPRINT_SECTORS equal shares of its distance. */
+  private stage(p: RacerState): HudView['stage'] {
+    if (this.track.course === 'circuit') return { kind: 'lap', n: Math.min(this.request.laps, p.lap + 1), of: this.request.laps };
+    const done = p.finishTime !== null ? 1 : Math.max(0, p.distance) / this.track.raceLength;
+    return { kind: 'sector', n: Math.min(SPRINT_SECTORS, Math.floor(done * SPRINT_SECTORS) + 1), of: SPRINT_SECTORS };
   }
 
   /** Slow motion while the player's craft comes apart, easing back to real time. */

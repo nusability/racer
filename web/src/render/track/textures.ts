@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mulberry32, type Rng } from '../../core/rng.ts';
 import type { TrackPalette } from '../../core/types.ts';
-import { ANISOTROPY, KERB_BLOCK, ROAD_TEXTURE_LENGTH, ROCK_TILE, type Quality, TEXTURE_SIZE } from './config.ts';
+import { KERB_BLOCK, ROAD_TEXTURE_LENGTH, ROCK_TILE, type Quality, TEXTURE_SIZE } from './config.ts';
+import { canvas, css, finish, periodicNoise, rgb, wrapStroke } from './canvasPaint.ts';
+import { forestRoad, litterRunoff } from './forestTextures.ts';
 
 // Procedural canvas textures, painted once per scene from the track's palette. Detail maps
 // (sand, rock) are near-white multipliers over the vertex colours, so geometry keeps its tint
@@ -20,62 +22,10 @@ const CITY_LANES = [1 / 3, 2 / 3];
 const CONCRETE = 0xb4b2ae;
 const CONCRETE_JOINT = 4;
 
-function rgb(hex: number, k = 1): [number, number, number] {
-  const ch = (shift: number) => Math.min(255, ((hex >> shift) & 255) * k);
-  return [ch(16), ch(8), ch(0)];
-}
-
-function css(hex: number, k = 1, a = 1): string {
-  const [r, g, b] = rgb(hex, k);
-  return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
-}
-
-function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const cv = document.createElement('canvas');
-  cv.width = w;
-  cv.height = h;
-  const ctx = cv.getContext('2d');
-  if (!ctx) throw new Error('2D canvas unavailable for track textures');
-  return [cv, ctx];
-}
-
-function finish(cv: HTMLCanvasElement, wrapS: THREE.Wrapping): THREE.CanvasTexture {
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = wrapS;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = ANISOTROPY;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  return tex;
-}
-
-/** Tileable value noise on a `period`-cell lattice, sampled at (x, y) in cells. */
-function periodicNoise(rng: Rng, period: number): (x: number, y: number) => number {
-  const v = new Float32Array(period * period).map(() => rng() * 2 - 1);
-  const at = (i: number, j: number) => v[(((j % period) + period) % period) * period + (((i % period) + period) % period)];
-  return (x, y) => {
-    const i = Math.floor(x);
-    const j = Math.floor(y);
-    const fx = x - i;
-    const fy = y - j;
-    const sx = fx * fx * (3 - 2 * fx);
-    const sy = fy * fy * (3 - 2 * fy);
-    const a = at(i, j) + (at(i + 1, j) - at(i, j)) * sx;
-    const b = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * sx;
-    return a + (b - a) * sy;
-  };
-}
-
-/** Draws a stroke and its copies one tile up and down, so it wraps seamlessly along v. */
-function wrapStroke(h: number, draw: (dy: number) => void) {
-  for (const dy of [-h, 0, h]) draw(dy);
-}
-
 /** What the paved road and its run-off strip are made of. */
 export interface RoadStyle {
-  surface: 'packed' | 'causeway' | 'boardwalk' | 'asphalt';
-  runoff: 'sand' | 'wetsand' | 'concrete';
+  surface: 'packed' | 'causeway' | 'boardwalk' | 'asphalt' | 'trail' | 'logging';
+  runoff: 'sand' | 'wetsand' | 'concrete' | 'litter';
 }
 
 /** Boardwalk plank depth along the road, metres, and the gap between planks. */
@@ -107,6 +57,8 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
       ctx.fillRect(0, y, R, Math.max(1, PLANK_GAP * pxPerM));
       for (let x = 0.12; x < 1; x += 0.25) ctx.fillRect(x * R, y + (PLANK * pxPerM) / 2, 2, 2);
     }
+  } else if (style.surface === 'trail' || style.surface === 'logging') {
+    forestRoad(ctx, palette, style.surface, rng, R, H, pxPerM);
   } else if (style.surface === 'causeway') {
     // Concrete slabs with sand blown across them.
     for (let y = 0; y < H; y += 4 * pxPerM) {
@@ -172,9 +124,10 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     }
     ctx.stroke();
   }
-  // Seams across the road.
+  // Seams across the road (a forest road's roots do their work).
+  const forest = style.surface === 'trail' || style.surface === 'logging';
   ctx.fillStyle = 'rgba(30,15,5,0.2)';
-  for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += SEAM_SPACING) ctx.fillRect(0, m * pxPerM, R, 2);
+  if (!forest) for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += SEAM_SPACING) ctx.fillRect(0, m * pxPerM, R, 2);
   // Paint: worn dashed centre line, edge lines, kerbs.
   const paint = (x: number, y: number, w: number, h: number, color: string) => {
     ctx.fillStyle = color;
@@ -183,8 +136,9 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     ctx.fillStyle = css(palette.road, 0.95, 0.55);
     for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
   };
-  // A city street is laned: two dashed lane lines instead of one centre line.
-  const lanes = style.surface === 'asphalt' ? CITY_LANES : [0.5];
+  // A city street is laned: two dashed lane lines instead of one centre line. A forest trail
+  // has no paint down its middle; its ruts mark the lines.
+  const lanes = style.surface === 'asphalt' ? CITY_LANES : style.surface === 'trail' ? [] : [0.5];
   for (const lane of lanes) {
     for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
       paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
@@ -203,6 +157,7 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
   }
 
   if (style.runoff === 'concrete') concreteRunoff(ctx, palette, rng, R, W, H, pxPerM);
+  else if (style.runoff === 'litter') litterRunoff(ctx, palette, rng, R, W, H, pxPerM);
   else sandRunoff(ctx, palette, style.runoff === 'wetsand', rng, R, W, H);
   return finish(cv, THREE.ClampToEdgeWrapping);
 }

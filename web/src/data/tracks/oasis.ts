@@ -9,6 +9,7 @@ export const oasis: TrackDef = {
   name: 'Oasis Loop',
   blurb: 'A figure of eight: under the bridge, round the lakes, and back over it in the airships\' wash.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 303,
   width: 50,
@@ -95,6 +96,7 @@ export const oasis: TrackDef = {
   branches: [
     {
       id: 'bazaar',
+      kind: 'shortcut',
       name: 'Bazaar Run',
       side: -1,
       from: 5.3,

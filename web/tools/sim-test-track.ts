@@ -11,6 +11,7 @@ export const simTestTrack: TrackDef = {
   name: 'Sim Test Loop',
   blurb: 'Synthetic loop for the headless simulation check.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 4242,
   width: 40,
@@ -44,7 +45,7 @@ export const simTestTrack: TrackDef = {
     { kind: 'kicker', at: 5.3, length: 40, height: 2.5 },
     { kind: 'arch', at: 7.5, opening: 16, offset: 4, height: 24 },
     { kind: 'walls', from: 8.2, to: 8.8 },
-    { kind: 'loop', at: 0.62, radius: 26, span: 60, shift: 9, settle: 80 },
+    { kind: 'loop', at: 0.62, radius: 80, span: 100, shift: 44, settle: 80 },
     { kind: 'corkscrew', from: 4.05, to: 4.2, turns: 1 },
     { kind: 'drop', from: 7.0, to: 7.4, side: 1 },
     { kind: 'slick', from: 6.7, to: 6.95, grip: 0.5 },
@@ -57,6 +58,7 @@ export const simTestTrack: TrackDef = {
   branches: [
     {
       id: 'cut',
+      kind: 'shortcut',
       name: 'Test Cut',
       side: 1,
       from: 0.75,
@@ -93,6 +95,7 @@ export const simFigure8: TrackDef = {
   name: 'Sim Figure Eight',
   blurb: 'Synthetic figure-8 with a flat crossing.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 808,
   width: 30,
@@ -114,6 +117,7 @@ export const simDraftOval: TrackDef = {
   name: 'Sim Draft Oval',
   blurb: 'Synthetic oval with long featureless straights.',
   difficulty: 1,
+  course: 'circuit',
   laps: 1,
   seed: 77,
   width: 30,
@@ -131,5 +135,87 @@ export const simDraftOval: TrackDef = {
   ],
   features: [],
   branches: [],
+  palette: simTestTrack.palette,
+};
+
+/**
+ * A point-to-point sprint of about 8 km: a three-way fork on a long straight (a rooty left
+ * route, a tree-studded right route and the clear main road between), a grove of trunks
+ * standing in the road, a falling tree across part of it, a herd crossing, log kickers and a
+ * finish at the far end. The builder adds the grid apron and the run-out.
+ */
+export const simSprint: TrackDef = {
+  id: 'simsprint',
+  name: 'Sim Sprint',
+  blurb: 'Synthetic point-to-point sprint with a three-way fork.',
+  difficulty: 2,
+  course: 'sprint',
+  laps: 1,
+  seed: 5150,
+  width: 40,
+  runoff: 40,
+  points: [
+    { x: 0, z: 0, y: 0 },
+    { x: 0, z: -1200, y: 0 },
+    { x: 300, z: -2000, y: 2 },
+    { x: 900, z: -2400, y: 4 },
+    { x: 2100, z: -2400, y: 4 },
+    { x: 2800, z: -2000, y: 2 },
+    { x: 3200, z: -1300, y: 0 },
+    { x: 3300, z: -400, y: 0 },
+    { x: 3800, z: 200, y: 0 },
+    { x: 4600, z: 300, y: 0 },
+  ],
+  features: [
+    { kind: 'boostCells', at: 0.3, lateral: 8, count: 5, spacing: 30 },
+    { kind: 'kicker', at: 0.7, length: 40, height: 2 },
+    { kind: 'route', from: 3.2, to: 3.95, name: 'Middle Way' },
+    { kind: 'hazard', hazard: { type: 'sweeper', id: 'herd1', at: 5.4, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 0 } },
+    { kind: 'hazard', hazard: { type: 'sweeper', id: 'herd2', at: 5.45, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 1.2 } },
+    // A grove standing in the road: 26 trunks over ~800 m, staggered so a lane stays open.
+    ...Array.from({ length: 26 }, (_, i) => ({ kind: 'pillar' as const, at: 6.1 + i * 0.033, lateral: (i % 2 === 0 ? -1 : 1) * (6 + (i % 3) * 3), radius: 2.5 })),
+    { kind: 'hazard', hazard: { type: 'blocker', id: 'falltree', at: 7.5, opening: 22, offset: 9, height: 3, warn: 2.5, up: 6, period: 14, phase: 0 } },
+    { kind: 'boostCells', at: 8.2, lateral: -8, count: 5, spacing: 30 },
+    { kind: 'kicker', at: 8.5, length: 40, height: 2.5 },
+  ],
+  branches: [
+    {
+      id: 'roots',
+      kind: 'route',
+      name: 'Root Hollow',
+      side: -1,
+      from: 3.2,
+      to: 3.95,
+      width: 26,
+      runoff: 10,
+      points: [
+        { x: 1420, z: -2490, y: 3 },
+        { x: 1590, z: -2540, y: 2 },
+        { x: 1760, z: -2490, y: 3 },
+      ],
+      features: [{ kind: 'rough', from: 2.2, to: 4.0, amount: 0.15 }],
+    },
+    {
+      id: 'trunks',
+      kind: 'route',
+      name: 'Trunk Row',
+      side: 1,
+      from: 3.2,
+      to: 3.95,
+      width: 26,
+      runoff: 10,
+      points: [
+        { x: 1420, z: -2310, y: 5 },
+        { x: 1590, z: -2260, y: 6 },
+        { x: 1760, z: -2310, y: 5 },
+      ],
+      features: [
+        { kind: 'pillar', at: 2.4, lateral: -5, radius: 2.5 },
+        { kind: 'pillar', at: 2.9, lateral: 5, radius: 2.5 },
+        { kind: 'pillar', at: 3.4, lateral: -4, radius: 2.5 },
+        { kind: 'pillar', at: 3.8, lateral: 5, radius: 2.5 },
+      ],
+    },
+  ],
   palette: simTestTrack.palette,
 };

@@ -8,6 +8,7 @@ export const bonecanyon: TrackDef = {
   name: 'Bone Canyon',
   blurb: 'Seven stone ribs over a bleached gorge, every gap off-centre. The Marrow Leap skips the bend.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 404,
   width: 46,
@@ -70,15 +71,17 @@ export const bonecanyon: TrackDef = {
     { kind: 'boostPad', at: 7.2, lateral: 0 },
     { kind: 'boostPad', at: 11.5, lateral: -10 },
     { kind: 'boostPad', at: 11.54, lateral: -10 },
-    // A young sand beast's neck sweeps across the road out of the bone field and back.
+    // The sand beast bursts out of the bone field on the left, arches over the left of the road
+    // and slams into the right, where it burrows; race under the arch.
     {
       kind: 'hazard',
-      hazard: { type: 'sweeper', id: 'neck', at: 11.0, radius: 8, height: 14, xFrom: -92, xTo: 92, cross: 3.2, hold: 1, period: 13, phase: 0 },
+      hazard: { type: 'blocker', id: 'neck', at: 11.0, opening: 64, offset: -36, height: 12, warn: 3, up: 4, period: 14, phase: 0 },
     },
   ],
   branches: [
     {
       id: 'marrow',
+      kind: 'shortcut',
       name: 'Marrow Leap',
       side: 1,
       from: 4.25,

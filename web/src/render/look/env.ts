@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { EnvLook, EnvRidgeLook, EnvTowersLook } from './lookTuning.ts';
+import type { EnvCanopyLook, EnvLook, EnvRidgeLook, EnvTowersLook } from './lookTuning.ts';
 
 // The environment the gliders reflect, painted once per race into a small half-float equirect
 // and pre-filtered by PMREM (so any roughness reads it with a few taps, never per frame). One
@@ -23,6 +23,12 @@ const TOWER_WIDTH: readonly [number, number] = [0.04, 0.14];
 const SKY_CURVE = 0.6;
 /** A ridge's crest is this much lighter than its foot, which sinks into the haze. */
 const RIDGE_CREST_LIGHT = 0.15;
+/** The canopy closes over this much elevation above where it starts (radians). */
+const CANOPY_CLOSE = 0.5;
+/** Leaf-cluster cells per radian of the canopy (finer is a busier dapple). */
+const CANOPY_CELLS = 14;
+/** Leaves overhead are lit from above: their underside, the part a glider sees, is this dark. */
+const CANOPY_UNDERSIDE = 0.55;
 /** Fixed seed: the reflected horizon is set dressing, the same every race. */
 const SEED = 1307;
 
@@ -78,6 +84,30 @@ function ridgeHeights(look: EnvRidgeLook, w: number): Float32Array {
   return out;
 }
 
+/** Per column, whether one of the forest's trunks stands in it round the horizon. */
+function trunkColumns(look: EnvCanopyLook, w: number): boolean[] {
+  const trunks = Array.from({ length: look.trunks }, (_, i) => ({
+    az: hash(SEED + i * 3.17) * Math.PI * 2 - Math.PI,
+    half: (look.trunkWidth[0] + (look.trunkWidth[1] - look.trunkWidth[0]) * hash(SEED + i * 5.11 + 1)) / 2,
+  }));
+  return Array.from({ length: w }, (_, x) => {
+    const az = ((x + 0.5) / w - 0.5) * Math.PI * 2;
+    return trunks.some((t) => {
+      let d = Math.abs(az - t.az);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      return d <= t.half;
+    });
+  });
+}
+
+/** How much of the sky at (az, el) the leaves hide, 0..1: closing in above `from`, broken by gaps. */
+function canopyCover(look: EnvCanopyLook, az: number, el: number): number {
+  const t = Math.max(0, Math.min(1, (el - look.from) / CANOPY_CLOSE));
+  if (t <= 0) return 0;
+  const cell = hash(Math.floor(az * CANOPY_CELLS) * 13.7 + Math.floor(el * CANOPY_CELLS) * 3.1 + SEED);
+  return cell < look.cover * t ? 1 : 0;
+}
+
 export function worldEnvironment(renderer: THREE.WebGLRenderer, look: EnvLook, sunDir: readonly [number, number, number]): { texture: THREE.Texture; dispose(): void } {
   const w = look.width;
   const h = w / 2;
@@ -94,6 +124,10 @@ export function worldEnvironment(renderer: THREE.WebGLRenderer, look: EnvLook, s
   const ridge = look.ridge;
   const ridgeH = ridge ? ridgeHeights(ridge, w) : null;
   const ridgeCol = ridge ? new THREE.Color(ridge.color).lerp(haze, ridge.haze) : null;
+  const canopy = look.canopy;
+  const leaves = canopy ? new THREE.Color(canopy.leaves).multiplyScalar(CANOPY_UNDERSIDE) : null;
+  const bark = canopy ? new THREE.Color(canopy.bark) : null;
+  const trunkCol = canopy ? trunkColumns(canopy, w) : null;
   const dir = new THREE.Vector3();
   const data = new Uint16Array(w * h * 4);
   const c = new THREE.Color();
@@ -128,6 +162,11 @@ export function worldEnvironment(renderer: THREE.WebGLRenderer, look: EnvLook, s
           const lit = hash(hit.t.seed * 31 + Math.floor(el * STOREYS_PER_RAD) * 7 + Math.floor(az * COLUMNS_PER_RAD)) < LIT_SHARE;
           c.copy(ground);
           if (lit) c.copy(warm).multiplyScalar(look.towers.gain * WINDOW_SHARE);
+        }
+        // Trunks rise from the horizon into the canopy; the canopy hides most of the sky above.
+        if (canopy && leaves && bark && trunkCol) {
+          if (trunkCol[x] && el < canopy.from + CANOPY_CLOSE) c.copy(bark);
+          else if (canopyCover(canopy, az, el) > 0) c.copy(leaves);
         }
       }
       const o = (y * w + x) * 4;

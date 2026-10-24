@@ -44,10 +44,11 @@ export function trackThumb(trackId: string, cls: string): HTMLElement {
   return img;
 }
 
-/** The course outline (shortcuts dashed) as an inline SVG in a 0..100 box. */
+/** The course outline (a circuit closed, a sprint open; shortcuts dashed) as an inline SVG in a 0..100 box. */
 export function trackOutline(trackId: string, cls: string): SVGSVGElement | null {
   const t = THUMBS[trackId];
-  if (!t) return null;
+  const def = trackIfBuilt(trackId);
+  if (!t || !def) return null;
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '-6 -6 112 112');
   svg.setAttribute('class', cls);
@@ -58,7 +59,8 @@ export function trackOutline(trackId: string, cls: string): SVGSVGElement | null
     if (dashed) el.setAttribute('class', 'is-branch');
     svg.append(el);
   };
-  line(t.outline, true, false);
-  for (const b of t.branches) line(b, false, true);
+  line(t.outline, def.course === 'circuit', false);
+  // The thumbnail tool lists branches in the track's order: a fork's routes are road, not dashed.
+  t.branches.forEach((b, i) => line(b, false, def.branches[i].kind === 'shortcut'));
   return svg;
 }

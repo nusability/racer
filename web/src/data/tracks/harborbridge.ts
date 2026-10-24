@@ -10,6 +10,7 @@ export const harborbridge: TrackDef = {
   name: 'Harbour Bridge',
   blurb: 'A figure of eight over the suspension bridge, a loop on the deck and the docks below.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 3202,
   width: 48,
@@ -124,7 +125,7 @@ export const harborbridge: TrackDef = {
     { kind: 'corkscrew', from: 51.87, to: 53.12, turns: 1 },
     { kind: 'narrow', from: 55.64, to: 57.87, width: 32, blend: 80 },
     { kind: 'runoff', from: 55.74, to: 57.78, amount: 0 },
-    { kind: 'loop', at: 56.25, radius: 28, span: 124, shift: 36, settle: 140 },
+    { kind: 'loop', at: 56.25, radius: 80, span: 124, shift: 36, settle: 140 },
     {
       kind: 'hazard',
       hazard: { type: 'gust', id: 'airship', from: 58.51, to: 60.51, strength: -5, on: 4, period: 13, phase: 0 },
@@ -135,13 +136,14 @@ export const harborbridge: TrackDef = {
     { kind: 'corkscrew', from: 14.87, to: 16.12, turns: 1 },
     { kind: 'narrow', from: 18.64, to: 20.87, width: 32, blend: 80 },
     { kind: 'runoff', from: 18.74, to: 20.78, amount: 0 },
-    { kind: 'loop', at: 19.25, radius: 28, span: 124, shift: -36, settle: 140 },
+    { kind: 'loop', at: 19.25, radius: 80, span: 124, shift: -36, settle: 140 },
     { kind: 'boostPad', at: 21.8, lateral: 0 },
     { kind: 'boostPad', at: 38.35, lateral: 0 },
   ],
   branches: [
     {
       id: 'container',
+      kind: 'shortcut',
       name: 'Container Cut',
       side: 1,
       from: 35.33,

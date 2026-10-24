@@ -1,4 +1,5 @@
-// Race orchestration: grid, countdown, laps, finish, standings and racer contacts.
+// Race orchestration: grid, countdown, laps, finish, standings and racer contacts, on a
+// circuit (laps of a loop) or a sprint (start to finish once, then a run-out to stop in).
 // Deterministic: same track, config and input tape give the same race.
 
 import type { Obstacle, PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
@@ -103,6 +104,7 @@ export class Race {
   constructor(track: Track, config: RaceConfig) {
     if (config.entrants.length === 0) throw new Error('Race: no entrants');
     if (!(config.laps >= 1)) throw new Error(`Race: laps ${config.laps} must be at least 1`);
+    if (track.course === 'sprint' && config.laps !== 1) throw new Error(`Race: a sprint is raced once, not ${config.laps} laps`);
     this.track = track;
     this.config = config;
     this.entrants = config.entrants;
@@ -113,9 +115,10 @@ export class Race {
       const col = i % 2;
       const back = GRID_FRONT_GAP + row * GRID_ROW_SPACING + col * GRID_STAGGER;
       const x = (col === 0 ? -1 : 1) * GRID_LANE_OFFSET;
-      const s = track.wrap(-back);
+      if (track.course === 'sprint' && back > track.startS) throw new Error(`Race: grid slot ${i} stands ${back} m back, off the ${track.startS} m apron`);
+      const s = track.wrap(track.startS - back);
       // Seeded after every driver's own stream, so the ground's jolts never echo a driver's choices.
-      return new Vehicle(e.id, e.stats, track, s, x, track.delta(0, s), driverSeed(config.seed, config.entrants.length + i));
+      return new Vehicle(e.id, e.stats, track, s, x, track.delta(track.startS, s), driverSeed(config.seed, config.entrants.length + i));
     });
     this.junctions = track.branches.map(junctionBounds);
     this.racers = this.vehicles.map((v) => v.state);
@@ -152,6 +155,8 @@ export class Race {
     const inputs = this.vehicles.map((v, i) => {
       const ai = this.drivers[i].drive(v, this.track, this.racers, this.time);
       const human = i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
+      // Past a sprint's finish there is only the run-out: everyone glides to a stop on the brake.
+      if (this.track.course === 'sprint' && v.state.finishTime !== null) return { ...ai, brake: true, boost: false };
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
@@ -167,8 +172,11 @@ export class Race {
       const ribbon = this.track.ribbon(v.state.branch);
       v.step(inputs[i], ribbon, this.hazardsOn(v.state.branch), this.time, events);
       if (v.state.crashed > 0) this.wrecks.push(i);
-      else this.junction(v);
-      // Standings distance runs along the main loop, whichever ribbon the racer is on.
+      else {
+        this.junction(v);
+        this.endBarrier(v);
+      }
+      // Standings distance runs along the main road, whichever ribbon the racer is on.
       v.state.distance += this.track.delta(from, this.mainS(v.state));
     });
     this.contacts(events);
@@ -252,7 +260,8 @@ export class Race {
   private laps(v: Vehicle, before: number, events: RaceEvent[]) {
     const st = v.state;
     if (st.finishTime !== null) return;
-    const L = this.track.length;
+    // A circuit's lap, or the whole of a sprint (one 'lap' that ends at its finish line).
+    const L = this.track.raceLength;
     const completed = Math.floor(st.distance / L);
     if (completed <= st.lap) return;
     // Cross time interpolated within the step, so racers finishing in one step still rank fairly.
@@ -461,7 +470,19 @@ export class Race {
     });
   }
 
-  /** Where on the main loop a racer counts as being: a branch maps linearly onto the stretch it skips. */
+  /**
+   * A sprint's run-out ends in a barrier: a racer that reaches the end of the main road stops
+   * there. Finishers are on the brake long before it (SPRINT_RUNOUT); the sim check asserts
+   * that nobody ever arrives.
+   */
+  private endBarrier(v: Vehicle) {
+    const st = v.state;
+    if (this.track.course !== 'sprint' || st.branch >= 0 || st.s < this.track.length) return;
+    st.speed = 0;
+    st.vx = 0;
+  }
+
+  /** Where on the main road a racer counts as being: a branch maps linearly onto the stretch it skips. */
   private mainS(st: RacerState): number {
     if (st.branch < 0) return st.s;
     const b = this.track.branches[st.branch];

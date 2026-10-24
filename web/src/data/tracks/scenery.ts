@@ -80,7 +80,49 @@ export interface CityScenery extends SceneryBase {
   billboardsPerKm: number;
 }
 
-export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery;
+/** A stretch of the main loop where the woods open up. */
+export interface ForestClearing {
+  from: TrackParam;
+  to: TrackParam;
+  /**
+   * 'glade': a sunlit meadow, no giants beside the road, sky overhead. 'town': logged-out
+   * ground round a settlement (the lumber town's street circuit): stumps and stacked timber.
+   */
+  style: 'glade' | 'town';
+}
+
+/** Elderwood: a forest of giant ancient trees, the canopy far overhead, ferns, moss and mist. */
+export interface ForestScenery extends SceneryBase {
+  biome: 'forest';
+  /**
+   * What the road is: 'trail' is dark packed earth with moss creeping in at its edges (most
+   * races, through the woods); 'logging' is a pale compacted logging road, the street circuits'.
+   */
+  road: 'trail' | 'logging';
+  /** Giant trees lining the course per kilometre of lap, both sides together (80–110 reads as a colonnade). */
+  treesPerKm: number;
+  /**
+   * Typical giant's height to the top of its crown, metres (120–180): the crowns start three
+   * quarters of the way up, so this is how high the canopy ceiling stands over the course.
+   */
+  treeHeight: number;
+  /** Typical trunk radius above the root flare, metres (2.5–4: trunks 5–8 m across). */
+  trunkRadius: number;
+  /** How far out from the course the woods stand before the mist takes them, metres. */
+  forestDepth: number;
+  /** How closed the canopy ceiling over the course is: 0 open sky, 1 a near-solid roof with gaps. */
+  canopy: number;
+  /** Ferns, shrubs, fallen logs and mossy boulders on the forest floor: 0 bare, 1 lush. */
+  undergrowth: number;
+  /** Ground mist drifting between the trunks: 0 clear, 1 thick. */
+  mist: number;
+  /** Shafts of sunlight through canopy gaps per kilometre of lap. */
+  shaftsPerKm: number;
+  /** Main-loop spans where the woods open into a glade or a logged-out town. */
+  clearings: ForestClearing[];
+}
+
+export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery | ForestScenery;
 
 export interface LandmarkPlacement {
   kind: LandmarkKind;

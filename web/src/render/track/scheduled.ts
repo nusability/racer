@@ -23,8 +23,8 @@ export interface DebrisLook {
   glow: number;
   dust: number;
   streak: number;
-  /** What falls: a rock, or a bundle of steel girders (a city's construction cranes). */
-  shape: 'rock' | 'girder';
+  /** What falls: a rock, a bundle of steel girders (a city's cranes) or a log (a forest's slopes). */
+  shape: 'rock' | 'girder' | 'log';
 }
 
 /** Last seconds of a dropper's warning in which the object is seen falling in. */
@@ -84,13 +84,17 @@ interface Slot {
   h: CourseHazard;
 }
 
-/** Builds the visuals for every hazard on `ribbons`; ids in `bound` are played by a landmark. */
+/**
+ * Builds the visuals for every hazard on `ribbons`; ids in `bound` are played by a landmark, and
+ * blockers in `ownBarrier` by one whose body covers the whole blocked span (no barrier drawn).
+ */
 export function buildScheduled(
   ribbons: Ribbon[],
   look: DebrisLook,
   paint: Paint,
   into: { glow: FlatBuilder; props: FlatBuilder },
   bound: Set<string>,
+  ownBarrier: Set<string>,
   quality: Quality,
 ): ScheduledVisuals {
   const { glow, props: posts } = into;
@@ -195,14 +199,15 @@ export function buildScheduled(
   const rings = inst(new THREE.RingGeometry(0.84, 1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }), dropCount, 'hazardRings');
   const shadows = inst(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }), soft ? dropCount : 0, 'hazardShadows');
   const debrisMat = new THREE.MeshLambertMaterial({ color: look.color, emissive: new THREE.Color(0xff4a10).multiplyScalar(look.glow), flatShading: true });
-  const debris = inst(look.shape === 'girder' ? girderBundle() : new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
+  const debris = inst(look.shape === 'girder' ? girderBundle() : look.shape === 'log' ? logPiece() : new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
   const dust = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: look.dust, transparent: true, opacity: 0.5, depthWrite: false }), soft ? dropCount : 0, 'hazardDust');
   const items: DropItem[] = [];
 
   // --- Barriers and stand-in sweeper bodies ---
-  // Every blocker shows its barrier, bound or not: it is exactly what racers collide with, and a
-  // landmark's own animation (a ship, a beast) need not cover the whole blocked width.
-  const barSlots = blockers;
+  // A blocker shows its barrier even when bound: it is exactly what racers collide with, and a
+  // landmark's own animation (a ship, a whale) need not cover the whole blocked width. Only a
+  // landmark that is itself the barrier across all of it (the sand beast) goes without.
+  const barSlots = blockers.filter((b) => !ownBarrier.has(b.h.def.id));
   const bars = inst(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: BAR_COLOUR, emissive: BAR_COLOUR.clone().multiplyScalar(0.25) }), barSlots.length * 2, 'hazardBars');
   const bodySlots = sweepers.filter((b) => !bound.has(b.h.def.id));
   const bodies = inst(new THREE.CylinderGeometry(1, 1.15, 1, 14), new THREE.MeshLambertMaterial({ color: BODY_COLOUR, flatShading: true }), bodySlots.length, 'hazardBodies');
@@ -383,6 +388,19 @@ export function girderBundle(): THREE.BufferGeometry {
   g.computeVertexNormals();
   return g;
 }
+/**
+ * A length of trunk lying along the road (as it rolled down a slope beside it and came to
+ * rest), filling the unit cylinder a dropped object is scaled into: along z (2 long), round in x–y.
+ */
+export function logPiece(): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(LOG_RADIUS, LOG_RADIUS, 2, LOG_SIDES, 1).rotateX(Math.PI / 2).translate(0, LOG_RADIUS - 1, 0).toNonIndexed();
+  g.computeVertexNormals();
+  return g;
+}
+/** The log rests on the road: its radius in the unit cylinder, and its facets. */
+const LOG_RADIUS = 0.78;
+const LOG_SIDES = 9;
+
 /** I-beam section in the unit bundle: flange thickness and width, web depth and thickness. */
 const GIRDER_FLANGE = 0.14;
 const GIRDER_WIDTH = 0.62;

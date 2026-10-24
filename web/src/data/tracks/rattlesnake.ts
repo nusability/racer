@@ -9,6 +9,7 @@ export const rattlesnake: TrackDef = {
   name: 'Rattlesnake Run',
   blurb: 'Four switchbacks up the snake, then down Fang Gulch under the digger\'s falling ore.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 202,
   width: 48,
@@ -86,7 +87,7 @@ export const rattlesnake: TrackDef = {
     { kind: 'canyon', from: 30.1, to: 32.8, wallHeight: 42 },
     {
       kind: 'hazard',
-      hazard: { type: 'dropper', id: 'ore', from: 30.8, to: 32.0, count: 3, radius: 3, period: 9, warn: 2.6, stay: 4, phase: 0 },
+      hazard: { type: 'dropper', id: 'ore', from: 31.21, to: 31.59, count: 3, radius: 3, period: 9, warn: 2.6, stay: 4, phase: 0 },
     },
     { kind: 'boulders', from: 35.1, to: 35.5, count: 6, radius: 3 },
     { kind: 'boostPad', at: 38.4, lateral: 0 },
@@ -96,6 +97,7 @@ export const rattlesnake: TrackDef = {
   branches: [
     {
       id: 'spine',
+      kind: 'shortcut',
       name: 'Spine Cut',
       side: 1,
       from: 19.4,
@@ -130,7 +132,7 @@ export const rattlesnakeScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.12, side: -1, distance: -148, straddle: true },
-    { kind: 'mine', at: 31.4, side: -1, distance: 150, hazard: 'ore' },
+    { kind: 'mine', at: 31.4, side: -1, distance: 60, hazard: 'ore' },
     { kind: 'cliffVillage', at: 22.5, side: -1, distance: 40, scale: 1.4 },
     { kind: 'wreck', at: 44.0, side: 1, distance: 30 },
     { kind: 'balloons', at: 47.0, side: -1, distance: 300 },

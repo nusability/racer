@@ -15,7 +15,8 @@ const OBSTACLE_POOL = 48;
 
 const DEFS: Record<ViewerHazardType, HazardDef> = {
   sweeper: { type: 'sweeper', id: 'viewer-sweeper', at: 0, radius: 7, height: 30, xFrom: 34, xTo: -30, cross: 3.5, hold: 2, period: 16, phase: 0 },
-  blocker: { type: 'blocker', id: 'viewer-blocker', at: 0, opening: 10, offset: -5, height: 12, warn: 3, up: 4, period: 15, phase: 0 },
+  // Open against one edge: the sand beast arches over the opening and closes the rest.
+  blocker: { type: 'blocker', id: 'viewer-blocker', at: 0, opening: 14, offset: -11, height: 12, warn: 3, up: 4, period: 15, phase: 0 },
   dropper: { type: 'dropper', id: 'viewer-dropper', from: -40, to: 40, count: 5, radius: 2.6, period: 11, warn: 2.4, stay: 4, phase: 0 },
   gust: { type: 'gust', id: 'viewer-gust', from: -70, to: 70, strength: -9, on: 5, period: 18, phase: 0 },
 };

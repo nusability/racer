@@ -30,6 +30,11 @@ const FLUSH_DROP = 0.35;
 const AFLOAT_BED = 6;
 /** Ground levelled under a bound landmark's base, metres of radius at most. */
 const BOUND_BASE = 120;
+/**
+ * Bound landmarks that are themselves a blocker's barrier across its whole blocked span (the
+ * sand beast's crater, plunging body and ridge of broken road): the track draws no barrier.
+ */
+export const DRAWS_OWN_BARRIER: ReadonlySet<LandmarkKind> = new Set<LandmarkKind>(['sandbeast']);
 /** Landmarks drawn in the sky round the camera: no pad, no footprint, never culled. */
 const SKY = new Set<LandmarkKind>(['auroraSky']);
 
@@ -95,6 +100,7 @@ function bindHazard(track: Track, id: string, toLocal: THREE.Matrix4): HazardBin
       const w = track.toWorld(s, x, y);
       return out.set(w.x, w.y, w.z).applyMatrix4(toLocal);
     },
+    wallAt: (s) => track.sampleAt(s).wallHeight,
   };
 }
 

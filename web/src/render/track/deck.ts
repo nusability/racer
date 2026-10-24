@@ -22,7 +22,7 @@ const PIER_WIDTH = 2.4;
 /** Loop and corkscrew frames clear the swept road by this much. */
 const FRAME_CLEAR = 7;
 const FRAME_BEAM = 1.8;
-/** Frames around a loop at these fractions of its span. */
+/** Frames around a loop at these fractions of its road. */
 const LOOP_FRAMES = [0.2, 0.35, 0.5, 0.65, 0.8];
 /** Corkscrew frames every this many metres. */
 const SCREW_FRAME_SPACING = 40;
@@ -88,12 +88,11 @@ export function buildSupports(cor: Corridor): void {
     if (!sh.bridge[k] || k % every !== 0) continue;
     pier(cor, k);
   }
+  for (const l of r.loops) {
+    const sweep = [Math.ceil(l.s0 / r.step), Math.floor(l.s1 / r.step)] as const;
+    for (const t of LOOP_FRAMES) frame(cor, Math.round((l.s0 + (l.s1 - l.s0) * t) / r.step), l.shift, sweep);
+  }
   for (const f of cor.view.features) {
-    if (f.kind === 'loop') {
-      const s0 = r.paramToS(f.at);
-      const sweep = [Math.ceil(s0 / r.step), Math.floor((s0 + f.span) / r.step)] as const;
-      for (const t of LOOP_FRAMES) frame(cor, Math.round((s0 + f.span * t) / r.step), f.shift, sweep);
-    }
     if (f.kind === 'corkscrew') {
       const s0 = r.paramToS(f.from);
       const s1 = r.paramToS(f.to);

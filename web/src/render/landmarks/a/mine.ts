@@ -22,10 +22,9 @@ import {
   mulberry32,
   rock,
   shade,
-  smooth,
   strut,
 } from './kit.ts';
-import { boundHazard, boundReach } from './bound.ts';
+import { boundHazard } from './bound.ts';
 import { BoundDigger } from './mineBound.ts';
 
 const RADIUS = 300;
@@ -35,8 +34,12 @@ const HEIGHT = 90;
 const BWE_X = 0;
 const BWE_Z = -70;
 const BWE_SCALE = 1.6;
+/** Bound, it works the roadside: sized so its boom spans a road from just past the edge. */
+const BWE_SCALE_BOUND = 1.1;
 const BOOM_PIVOT = new THREE.Vector3(0, 16, 8);
 const BOOM_TIP = new THREE.Vector3(0, 30, 86);
+/** The wheel's axle sits this far out past the boom tip. */
+const WHEEL_OUT = 2;
 const WHEEL_R = 13;
 const WHEEL_BUCKETS = 12;
 const WHEEL_SPIN = 0.55;
@@ -108,16 +111,16 @@ export function createMine(opts: LandmarkOptions): Landmark {
   rig.add(rock(1, 1), shade(ore, 1.1), { m: T(10, 4, MESA_Z - MESA_R0 - 4, 0, 0.3, 0, 46, 12, 18) });
 
   // --- Bucket-wheel excavator ---
-  // Authored at working scale, then grown to its hero size on one bone.
+  // Authored at working scale, then grown to its hero size on one bone. Bound, it stands at
+  // the roadside instead (posed in update, once the binding is live), sized in track metres.
   const bwe = rig.bone(rig.root, BWE_X, 0, BWE_Z);
   bwe.scale.setScalar(BWE_SCALE);
-  // Bound: it stands at the road edge facing the course (and is sized in track metres).
-  const digger = bound ? new BoundDigger(rig, bound.binding, bound.hazard, ore) : null;
-  if (digger) {
-    bwe.position.copy(digger.base);
-    bwe.rotation.y = digger.yaw;
-    bwe.scale.setScalar(BWE_SCALE * digger.frame.k);
-  }
+  bwe.updateMatrix();
+  const homeMatrix = bwe.matrix.clone();
+  const wheelAt = BOOM_TIP.clone().sub(BOOM_PIVOT).add(new THREE.Vector3(0, 0, WHEEL_OUT));
+  const digger = bound
+    ? new BoundDigger(rig, bound.binding, bound.hazard, { pivotY: BOOM_PIVOT.y, pivotZ: BOOM_PIVOT.z, boomLen: wheelAt.length(), wheelR: WHEEL_R, scale: BWE_SCALE_BOUND }, ore, shade(ore, 1.15))
+    : null;
   // Crawler base (fixed).
   for (const side of [-1, 1]) {
     rig.add(block(10, 6, 36), dark, { bone: bwe, m: T(side * 14, 0, 0) });
@@ -162,12 +165,10 @@ export function createMine(opts: LandmarkOptions): Landmark {
   // The boom stays: a unit strut re-aimed from the mast top at the boom tip every frame.
   const stay = rig.bone(slew, mastTop.x, mastTop.y, mastTop.z);
   for (const sx of [-1.4, 1.4]) rig.add(strut(), dark, { bone: stay, m: T(sx, 0, 0, 0, 0, 0, 0.35, 1, 0.35) });
-  const boomLen = P1.length();
-  const boomRest = Math.atan2(P1.y, P1.z);
-  /** Luff (radians, + raises the tip) that puts the wheel over the road centre when bound. */
-  const dumpLuff = digger ? Math.max(0, Math.acos(THREE.MathUtils.clamp((digger.reachToCentre() / BWE_SCALE - P0.z - 2) / boomLen, -1, 1)) - boomRest) : 0;
+  /** The boom's own angle above horizontal, hinge to wheel, as authored. */
+  const boomRest = Math.atan2(wheelAt.y, wheelAt.z);
   // The bucket wheel: rim, spokes, toothed buckets. Its axle runs across the boom tip.
-  const wheel = rig.bone(boom, P1.x, P1.y, P1.z + 2);
+  const wheel = rig.bone(boom, wheelAt.x, wheelAt.y, wheelAt.z);
   rig.add(new THREE.TorusGeometry(WHEEL_R, 1.1, 4, 16).rotateY(Math.PI / 2), yellow, { bone: wheel });
   for (let k = 0; k < WHEEL_BUCKETS; k++) {
     const a = (k / WHEEL_BUCKETS) * Math.PI * 2;
@@ -191,8 +192,13 @@ export function createMine(opts: LandmarkOptions): Landmark {
     rig.add(strut(), dark, { m: between(new THREE.Vector3(p.x - 8, towerH[i] * 0.5, p.z), new THREE.Vector3(p.x - 18, 4, p.z), 3) });
   });
   const pile = new THREE.Vector3(-215, 0, 65);
-  bwe.updateMatrix();
-  const beltStart = new THREE.Vector3(0, 11, -25).applyMatrix4(bwe.matrix);
+  // The belt starts under the excavator's home spot; bound, the excavator works the roadside
+  // and its ore is trucked to a hopper standing there instead.
+  const beltStart = new THREE.Vector3(0, 11, -25).applyMatrix4(homeMatrix);
+  if (digger) {
+    rig.add(block(16, beltStart.y + 6, 16), rust, { m: T(beltStart.x, 0, beltStart.z) });
+    rig.add(new THREE.ConeGeometry(11, 8, 4, 1, true).rotateY(Math.PI / 4).rotateX(Math.PI), steel, { m: T(beltStart.x, beltStart.y + 10, beltStart.z) });
+  }
   rig.add(new THREE.ConeGeometry(46, 30, 10).translate(0, 15, 0), ore, { m: T(pile.x, 0, pile.z) });
   rig.add(new THREE.ConeGeometry(30, 18, 9).translate(0, 9, 0), shade(ore, 1.15), { m: T(70, 0, 95) });
   const belts: THREE.Vector3[][] = [
@@ -275,17 +281,18 @@ export function createMine(opts: LandmarkOptions): Landmark {
     addBeam(rig, 160, 34, mix(0xfff6e0, palette.sun, 0.3), 0.07 + palette.dusk * 0.08, { m: new THREE.Matrix4().compose(top, q, new THREE.Vector3(1, 1, 1)) });
   }
 
-  const cullRadius = digger ? Math.max(RADIUS, boundReach(digger.frame, 150)) : RADIUS;
-  rig.build(kit.group, cullRadius, HEIGHT);
+  rig.build(kit.group, RADIUS, HEIGHT);
 
   const dust = brush({ life: 5, size0: 8, size1: 34, c0: mix(palette.rock, palette.sand, 0.6), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.6, keep: 0.5, lift: 0.8 });
   const steam = brush({ life: 7, size0: 8, size1: 40, c0: col(0xffffff), c1: mix(0xffffff, palette.horizon, 0.6), alpha: 0.6, keep: 0.6, lift: 3 });
   const roadDust = brush({ life: 3, size0: 5, size1: 20, c0: mix(palette.road, palette.sand, 0.5), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.4, keep: 0.5, lift: 0.4 });
 
-  const kLocal = digger ? digger.frame.k : 1;
-  const impact = brush({ life: 3, size0: 6 * kLocal, size1: 26 * kLocal, c0: mix(palette.rock, palette.sand, 0.5), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.75, keep: 0.4, lift: 1 });
+  // Sized in metres; bound, scaled to local units on the first update.
+  const impact = brush({ life: 3, size0: 6, size1: 26, c0: mix(palette.rock, palette.sand, 0.5), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.75, keep: 0.4, lift: 1 });
   // Grit pouring off the wheel while it dumps: falls fast, so it streaks down to the road.
-  const spill = brush({ life: 3.2, size0: 4 * kLocal, size1: 14 * kLocal, c0: mix(palette.rock, palette.sand, 0.4), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.7, keep: 0.9, lift: -25 * kLocal });
+  const spill = brush({ life: 3.2, size0: 4, size1: 14, c0: mix(palette.rock, palette.sand, 0.4), c1: mix(palette.sand, palette.horizon, 0.5), alpha: 0.7, keep: 0.9, lift: -25 });
+  let kLocal = 1;
+  let placed = false;
   const evt = mulberry32(opts.seed ^ 0x7e);
   const V = new THREE.Vector3();
   const W = new THREE.Vector3();
@@ -307,12 +314,18 @@ export function createMine(opts: LandmarkOptions): Landmark {
   function update(time: number, dt: number): void {
     lampI = 0;
     let dumping = false;
+    let digging = !digger;
     if (digger) {
-      // Bound: swing out over the road and raise the boom to the dump, on the dropper's clock.
-      const p = digger.pose(time);
-      slew.rotation.y = digger.slewFor(p.out);
-      boom.rotation.x = -dumpLuff * smooth(p.out);
+      // Bound: slew in over the road and luff the wheel to the spill height, on the dropper's clock.
+      const p = digger.update(time);
+      if (!placed) place(digger);
+      bwe.position.copy(digger.base);
+      bwe.rotation.y = digger.baseYaw;
+      slew.rotation.y = p.slew - digger.baseYaw;
+      // Rotating the boom about +X by a positive angle lowers its tip.
+      boom.rotation.x = -(p.luff - boomRest);
       dumping = p.dumping;
+      digging = p.out === 0;
     } else slew.rotation.y = Math.sin(time * SLEW_RATE) * SLEW_ARC;
     // Re-aim the stays from the mast top to the boom tip.
     TIP.copy(P1).applyAxisAngle(X_AXIS, boom.rotation.x).add(P0).sub(mastTop);
@@ -367,9 +380,9 @@ export function createMine(opts: LandmarkOptions): Landmark {
         // Spill from the buckets biting the face, steam off the sorting towers, road dust.
         // Each falling rock streams a dust trail, so the drop reads from far down the road.
         if (digger) for (const p of digger.falling) smoke.emit(spill, p.x, p.y, p.z, 0, 0, 0);
-        if (!digger || dumping) {
+        if (digging || dumping) {
           rig.local(wheel, (evt() - 0.5) * 10, -WHEEL_R + evt() * 6, (evt() - 0.5) * 10, V);
-          smoke.emit(digger ? spill : dust, V.x, V.y, V.z, (evt() - 0.5) * 6, -1, (evt() - 0.5) * 6);
+          smoke.emit(dumping ? spill : dust, V.x, V.y, V.z, (evt() - 0.5) * 6 * kLocal, -kLocal, (evt() - 0.5) * 6 * kLocal);
         }
         const i = Math.floor(evt() * towers.length);
         const p = towers[i];
@@ -385,7 +398,20 @@ export function createMine(opts: LandmarkOptions): Landmark {
     smoke.update(dt);
   }
 
-  return { group: kit.group, radius: cullRadius, update, dispose: () => disposeKit(kit) };
+  /** Bound, first update: size the excavator and the particles, and cull round its reach too. */
+  function place(d: BoundDigger): void {
+    kLocal = d.k;
+    bwe.scale.setScalar(BWE_SCALE_BOUND * kLocal);
+    for (const b of [impact, spill]) {
+      b.size0 *= kLocal;
+      b.size1 *= kLocal;
+      b.lift *= kLocal;
+    }
+    rig.bounds.radius = Math.max(rig.bounds.radius, d.base.length() + (BOOM_TIP.z + WHEEL_R) * BWE_SCALE_BOUND * kLocal);
+    placed = true;
+  }
+
+  return { group: kit.group, radius: RADIUS, update, dispose: () => disposeKit(kit) };
 }
 
 /** Particle emission tick, seconds. */
