@@ -57,7 +57,7 @@ export interface EngineRecipe {
     /** Extra body cutoff, Hz. */
     cutoffHz: number;
   };
-  /** Overall trim so the six voices sit at about the same loudness (measured offline, see screens/audio). */
+  /** Overall trim so the voices sit at about the same loudness (measured offline, see screens/audio). */
   level: number;
 }
 
@@ -119,6 +119,28 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
     jet: { hz: 3200, q: 0.6, gain: [0.02, 0.06] },
     boost: { pitch: 1.1, gain: 0.28, hzMul: 1.4, cutoffHz: 1200 },
     level: 0.85,
+  },
+  // Lumen Shard: a mag-lev wedge with no fan to speak of. A clean, saw-bright electric whine
+  // that climbs steeply with speed (linear motors, perfectly in tune, no wobble), a resonant
+  // zap in the body and a fine coil buzz over it; almost no exhaust.
+  wedge: {
+    whine: { partials: [1, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08], baseHz: 240, rangeHz: 2100, spreadCents: 2, gain: [0.04, 0.1], vibratoHz: 0.2, vibratoCents: 2 },
+    body: { partials: [1, 0, 0.2], baseHz: 60, rangeHz: 180, cutoffHz: 700, cutoffRangeHz: 2800, q: 9, drive: 1.1, gain: 0.14, sub: 0.08 },
+    pulse: { wave: 'square', hz: [40, 90], depth: 0.06 },
+    jet: { hz: 4200, q: 1.4, gain: [0.01, 0.05] },
+    boost: { pitch: 1.18, gain: 0.26, hzMul: 1.3, cutoffHz: 3000 },
+    // Trimmed to sit with the Sirocco, just under the others by RMS: a bright voice reads louder.
+    level: 1.3,
+  },
+  // Orbis Gyre: one big ring fan between two hulls. A deep whoosh with a slow, wide blade-pass
+  // "wub" that quickens with speed; the hulls echo the fan a few cents apart, so it beats.
+  gyre: {
+    whine: { partials: [1, 0.2, 0.6, 0.15, 0.4], baseHz: 150, rangeHz: 480, spreadCents: 11, gain: [0.045, 0.1], vibratoHz: 2.4, vibratoCents: 9 },
+    body: { partials: [1, 0.6, 0.45, 0.3, 0.2, 0.12], baseHz: 36, rangeHz: 95, cutoffHz: 320, cutoffRangeHz: 1500, q: 5, drive: 2.6, gain: 0.3, sub: 0.26 },
+    pulse: { wave: 'triangle', hz: [4, 12], depth: 0.35 },
+    jet: { hz: 700, q: 0.6, gain: [0.04, 0.11] },
+    boost: { pitch: 1.1, gain: 0.36, hzMul: 2, cutoffHz: 1400 },
+    level: 0.82,
   },
 };
 

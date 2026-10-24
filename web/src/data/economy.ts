@@ -1,10 +1,13 @@
 // Economy tunables. src/game/economy.ts is the only reader; credits are integers everywhere.
 //
 // Pacing (a decent player averages about 2nd and wins about half the cups it enters; the
-// numbers are walked through both worlds by tools/sim-economy.ts):
+// numbers are walked through every world by tools/sim-economy.ts):
 // - Dust Cup, first run: a couple of level-1 upgrades, or a start on saving for glider #2.
-// - Glider #2 during the desert's pro cup; the last current glider near the end of the
-//   second world, with price headroom for gliders later worlds add.
+// - Glider #2 during the desert's pro cup; the Halo Comet (top of the gliders sold from the
+//   start) at the end of the second world.
+// - Neon Meridian's own gliders (data/racers.ts) are what the city's pay buys: the Lumen Shard
+//   with the Neon Cup's winnings, the Orbis Gyre with the Zenith Crown's. Their upgrade sets
+//   (3.4x and 4.6x the starter's, via UPGRADE_CLASS_PRICE_STEP) are the long tail after that.
 // - A full upgrade set on the starter costs about a whole world's winnings.
 
 /** Championship payout at tier 1 in the first world, by finishing place (1st..6th). */

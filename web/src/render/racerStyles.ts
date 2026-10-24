@@ -1,4 +1,4 @@
-// The six ground-effect skimmers: low, wide racing wings riding an air cushion, pushed by ducted
+// The ground-effect skimmers: low, wide racing wings riding an air cushion, pushed by ducted
 // fans at the back. Each must read differently from the chase camera, i.e. from behind and a
 // little above: fan count and layout, wing planform and the fin silhouette.
 import * as THREE from 'three';
@@ -201,7 +201,93 @@ function ringwing(b: BlueprintBuilder): void {
   b.cushion = { width: 6.6, length: 7.5, z: 0 };
 }
 
-const STYLES: Record<RacerStyle, StyleBuilder> = { skiff, sponson, dart, quadfan, swept, ringwing };
+/**
+ * Lumen Shard: a flat mag-lev wedge. Its whole outline is traced in light (leading edges and a
+ * full-width tail bar), it rides on two glowing levitation pads instead of a skirt, and three
+ * small thrusters sit close together in the chopped tail. From behind: a wide dark blade with a
+ * light bar over a tight fan cluster.
+ */
+function wedge(b: BlueprintBuilder): void {
+  const { p, s, a } = b.c;
+  const TIP_X = 3.4;
+  const TAIL_Z = 3.75;
+  const NOSE_Z = -6.1;
+  b.hull.slab(mirrorOutline([[0.25, NOSE_Z], [TIP_X, 2.9], [TIP_X, TAIL_Z - 0.1], [0.8, TAIL_Z]]), 0.22, -0.05, p);
+  // A thinner second-colour layer under the blade: a two-tone edge that catches the eye side on.
+  b.hull.slab(mirrorOutline([[0.3, NOSE_Z + 0.6], [TIP_X - 0.25, 2.8], [TIP_X - 0.25, TAIL_Z - 0.3], [0.8, TAIL_Z - 0.2]]), 0.16, -0.27, s);
+  b.body({
+    z: -5.4, length: 9.0, y: 0.0, radius: 0.78, squash: 0.48, segments: 6, phase: Math.PI / 6,
+    shape: [[0, 0, a], [0.45, 0.12, p], [1, 0.4, s], [1, 0.8, p], [0.7, 1, DARK]],
+    canopy: { from: 0.32, to: 0.6, width: 0.9, height: 0.34 },
+  });
+  // Spine fairing that blends the fuselage into the thrusters.
+  b.hull.slab(mirrorOutline([[0.5, 1.0], [1.7, 2.6], [1.7, 3.3], [0.5, 3.4]]), 0.4, 0.3, p);
+  for (const x of [-1.05, 0, 1.05]) {
+    b.duct(x, 0.28, 3.6, { radius: 0.4, length: 0.8, color: s, lip: a, segments: 12, vanes: 3 });
+  }
+  b.strip(new THREE.Vector3(-1.75, 0.82, 3.25), new THREE.Vector3(1.75, 0.82, 3.25), 0.08);
+  b.strip(new THREE.Vector3(-TIP_X + 0.1, -0.12, TAIL_Z - 0.02), new THREE.Vector3(TIP_X - 0.1, -0.12, TAIL_Z - 0.02), 0.07);
+  for (const side of SIDES) {
+    // Leading-edge light, nose to wingtip: the shard's outline at night and in tunnels.
+    b.strip(new THREE.Vector3(side * 0.32, -0.04, NOSE_Z + 0.15), new THREE.Vector3(side * (TIP_X + 0.02), -0.04, 2.95), 0.07);
+    // Levitation pads: dark rails under the blade, glowing where they ride the field.
+    b.hull.box(0.5, 0.24, 6.4, DARK, placement(side * 1.9, SKID_Y + 0.2, -0.2));
+    b.strip(new THREE.Vector3(side * 1.9, SKID_Y + 0.06, -3.3), new THREE.Vector3(side * 1.9, SKID_Y + 0.06, 2.9), 0.12);
+    // Wingtip fins, leaning in, their top edges lit.
+    b.plate(side * TIP_X, [[2.0, -0.1], [3.65, -0.1], [3.95, 0.85], [3.25, 0.85]], 0.08, s, side * 0.28);
+    b.flap(placement(side * 3.27, 0.38, 3.7), [0.07, 0.5, 0.35], 'y', RUDDER_GAIN, a);
+    b.flap(placement(side * 2.4, -0.16, TAIL_Z - 0.35), [1.1, 0.06, 0.4], 'x', -side * AILERON_GAIN, a);
+    b.light(side * (TIP_X + 0.05), -0.02, 2.95);
+    b.tip(side * TIP_X, 0.0, TAIL_Z);
+  }
+  b.light(0, 0.0, NOSE_Z + 0.2);
+  b.cushion = { width: 6.4, length: 8.6, z: -0.8 };
+}
+
+/**
+ * Orbis Gyre: twin round hulls with a big ring fan raised between them on a bridge wing, and a
+ * small fan in each hull's tail. From behind: one large glowing ring over two small ones, which
+ * no other glider has. The ring's outer rim carries a light band.
+ */
+function gyre(b: BlueprintBuilder): void {
+  const { p, s, a } = b.c;
+  const HULL_X = 2.7;
+  const RING = { y: 0.7, z: 2.9, r: 1.08 };
+  for (const side of SIDES) {
+    b.hull.lathe([
+      { r: 0, z: -5.6, color: a }, { r: 0.32, z: -5.2, color: a }, { r: 0.58, z: -4.3, color: p }, { r: 0.7, z: -2.6, color: p },
+      { r: 0.7, z: 0.2, color: s }, { r: 0.7, z: 0.9, color: p }, { r: 0.6, z: 3.4, color: DARK }, { r: 0.48, z: 3.9, color: DARK },
+    ], b.seg(10), placement(side * HULL_X, -0.05, 0, 0, 0, 0, 1, 0.78, 1));
+    b.duct(side * HULL_X, -0.05, 4.25, { radius: 0.46, length: 0.8, color: p, lip: a, segments: 12, vanes: 3 });
+    // Light strip along each hull's crown.
+    b.strip(new THREE.Vector3(side * HULL_X, 0.52, -4.0), new THREE.Vector3(side * HULL_X, 0.52, 2.6), 0.07);
+    b.plate(side * HULL_X, [[1.6, 0.4], [3.6, 0.4], [4.2, 1.45], [3.3, 1.45]], 0.09, s, -side * 0.15);
+    b.flap(placement(side * (HULL_X + 0.1), 1.0, 3.75, 0, 0, -side * 0.15), [0.07, 0.55, 0.4], 'y', RUDDER_GAIN, a);
+    b.plate(side * (HULL_X + 0.55), [[-3.0, -0.1], [-2.4, SKID_Y], [2.4, SKID_Y], [3.0, -0.1]], 0.08, DARK);
+    // Struts from the hulls up to the ring.
+    b.hull.rod(new THREE.Vector3(side * (HULL_X - 0.45), 0.25, RING.z), new THREE.Vector3(side * (RING.r + 0.15), RING.y, RING.z), 0.11, b.seg(6), s);
+    b.flap(placement(side * 1.6, -0.06, 1.35), [0.9, 0.06, 0.45], 'x', -side * AILERON_GAIN, a);
+    b.light(side * HULL_X, 0.05, -5.45);
+    b.tip(side * (HULL_X + 0.55), 0.0, 3.9);
+  }
+  // The bridge wing joining the hulls, swept back under the ring.
+  b.hull.slab(mirrorOutline([[0.4, -2.6], [HULL_X, -1.6], [HULL_X, 1.2], [1.3, 3.2], [0.4, 3.3]]), 0.2, 0.0, p);
+  b.body({
+    z: -5.0, length: 6.6, y: 0.12, radius: 0.62, squash: 0.68, segments: 10,
+    shape: [[0, 0, s], [0.5, 0.15, p], [1, 0.45, p], [0.85, 0.8, s], [0.55, 1, DARK]],
+    canopy: { from: 0.16, to: 0.5, width: 0.8, height: 0.38 },
+  });
+  const ring = b.duct(0, RING.y, RING.z, { radius: RING.r, length: 1.1, color: s, lip: a, segments: 20, vanes: 6 });
+  b.onPart(ring, () => {
+    // The rim light band: thin, round the outside of the shroud, so the ring reads from any angle.
+    const band = placement(0, RING.y, RING.z);
+    b.glow.lathe([{ r: RING.r * 1.2, z: -0.12, color: 0xffffff }, { r: RING.r * 1.2, z: 0.12, color: 0xffffff }], b.seg(20), band);
+  });
+  b.light(0, 0.1, -4.95);
+  b.cushion = { width: 7.0, length: 9.0, z: -0.4 };
+}
+
+const STYLES: Record<RacerStyle, StyleBuilder> = { skiff, sponson, dart, quadfan, swept, ringwing, wedge, gyre };
 
 export function buildBlueprint(visual: RacerVisual, detail: Detail): Blueprint {
   const b = new BlueprintBuilder(visual, detail);

@@ -235,7 +235,7 @@ export const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeL
 };
 
 /** The best glider fully upgraded: what a leaked save (or a long career) brings to cup 1. */
-const OVER_UPGRADED = { racerId: 'halo', levels: { engine: 5, thrusters: 5, steering: 5, tank: 5, armor: 5 }, label: 'maxed Halo Comet' };
+const OVER_UPGRADED = { racerId: 'gyre', levels: { engine: 5, thrusters: 5, steering: 5, tank: 5, armor: 5 }, label: 'maxed Orbis Gyre' };
 
 export function allCupStudies() {
   for (const cup of CUPS) {

@@ -1,6 +1,6 @@
 // mode=wreck of the racer viewer: a skimmer races in and wrecks, looping every kind of wreck for
 // every style. URL parameters (besides racer-viewer's):
-//   racer=0..5 (default: cycle all)   kind=impact|fall|explode (default: cycle all)
+//   racer=index in RACERS (default: cycle all)   kind=impact|fall|explode (default: cycle all)
 //   scale=1|0.25 (time scale: slow motion)   t=<s> fast-forwards to t real seconds after the
 //   crash, pause=1 then freezes there (for screenshots)
 import * as THREE from 'three';

@@ -19,7 +19,7 @@ import type { RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 export const MIN_QUICK_LAPS = 1;
 export const MAX_QUICK_LAPS = 5;
 
-export type PurchaseResult = 'ok' | 'insufficient' | 'owned' | 'maxed';
+export type PurchaseResult = 'ok' | 'insufficient' | 'owned' | 'maxed' | 'locked';
 
 export interface StandingRow {
   id: string;
@@ -101,9 +101,16 @@ export class Career {
     return this.save.ownedRacers.includes(racerId);
   }
 
+  /** On sale: a glider tied to a world (RacerDef.unlockWorld) is sold once that world is open. */
+  isRacerOnSale(racerId: string): boolean {
+    const racer = racerById(racerId);
+    return racer.unlockWorld === undefined || this.isWorldUnlocked(racer.unlockWorld);
+  }
+
   buyRacer(racerId: string): PurchaseResult {
     const racer = racerById(racerId);
     if (this.owns(racerId)) return 'owned';
+    if (!this.isRacerOnSale(racerId)) return 'locked';
     if (!this.debit(racer.price)) return 'insufficient';
     this.save.ownedRacers.push(racerId);
     this.save.upgrades[racerId] = noUpgrades();

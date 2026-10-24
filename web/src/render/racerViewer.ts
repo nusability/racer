@@ -1,7 +1,7 @@
 // Dev-only page (racer-viewer.html) for judging the racers and effects in a browser. Not linked
 // from the game. URL parameters:
 //   mode=lineup|chase|showroom|wreck|stats   state=idle|race|boost|damaged (wreck: see wreckViewer.ts)
-//   view=rear|three|side|front|top     racer=0..5   detail=high|low   ui=0 hides the buttons
+//   view=rear|three|side|front|top     racer=index in RACERS   detail=high|low   ui=0 hides the buttons
 //   ground=sand|water|snow|asphalt (sky, ground and spray colours: the skimmers must fit any world)
 import * as THREE from 'three';
 import { RACERS } from '../data/racers.ts';
@@ -85,7 +85,7 @@ function buildBar(): void {
   if (mode !== 'lineup') RACERS.forEach((r, i) => link(r.name, 'racer', String(i), i === racerIndex));
 }
 
-// --- Lineup: all six side by side ------------------------------------------------------------
+// --- Lineup: every racer side by side --------------------------------------------------------
 function lineup(): (dt: number, t: number) => void {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);

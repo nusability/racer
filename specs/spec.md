@@ -76,7 +76,9 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
    a loop. The craft disintegrates in slow motion, then the results show a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
-   tap to the next race). Spend them in the garage on new racers and upgrades.
+   tap to the next race). Spend them in the garage on new racers and upgrades. Some gliders
+   are sold only once their world opens (Neon Meridian brings two above the Halo Comet); the
+   garage shows them locked until then, with the world that opens them.
 
 **Win / lose / end**: a race ends when everyone finishes, or 20 s after the player does. A cup
 is four races scored 10/8/6/4/2/1; winning it pays a bonus and unlocks the next cup of that
@@ -91,9 +93,9 @@ world. Winning a world's elite cup makes you that world's champion.
 | Name | Value | What it controls |
 |---|---|---|
 | Simulation step | 1/120 s | Fixed step for physics and AI, seeded RNG |
-| Starter top speed | 150 m/s (540 km/h) | Dustwing; racers range 150–198 m/s, up to ~240 m/s upgraded |
-| Boost | ×(1 + 0.22–0.32) top speed | Racer's boostPower; thrusters add 0.03 per level |
-| Boost tank | 4.5–6.5 s full (+12% per Boost tank upgrade) | Holding boost drains it; no heat, no penalty |
+| Starter top speed | 150 m/s (540 km/h) | Dustwing; racers range 150–212 m/s, up to ~250 m/s upgraded |
+| Boost | ×(1 + 0.25–0.37) top speed | Racer's boostPower; thrusters add 0.03 per level |
+| Boost tank | 5–7 s full (+12% per Boost tank upgrade) | Holding boost drains it; no heat, no penalty |
 | Tank fill | Start 40%; +1.5%/s passive (paused 1.5 s after use); +10% per boost cell | Dry tank resumes at 10%; cells once per racer per lap |
 | Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings; none (nor pads) in shortcuts |
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
@@ -117,8 +119,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Catch-up | Rivals behind push up to +5% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes; slipstream carries most of the catching up, visibly |
 | Slipstream | 4–40 m behind another racer, inside a wake 2.5 m wide close up narrowing to 1.2 m: up to +6% top speed and +0.02/s tank; pulling out after 0.8 s of full draft keeps the bonus 0.6 s (slingshot) | Everyone drafts; AIs tuck in on straights and pull out to pass |
 | Championship pay | 1400/1050/770/560/350/210 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
-| Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s | Top glider ~28% faster than the starter |
-| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k | Upgrade costs scale with glider class |
+| Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s; Neon Meridian's two: 202 / 212 m/s | Halo Comet ~28% faster than the starter; each city glider another ~5% |
+| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 56 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132) |
 | World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 

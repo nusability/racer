@@ -7,16 +7,22 @@
 // payout table; a cup is retried until won, where wins accrue at the study's cup-win rate per
 // attempt (an attempt that brings the running total to 1 is the win). Deterministic.
 
-import { WORLDS } from '../src/data/worlds.ts';
+import { WORLDS, worldById } from '../src/data/worlds.ts';
 import { cupById, type CupDef } from '../src/data/championships.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
+import type { RacerDef } from '../src/core/types.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, noUpgrades, upgradeCost, type UpgradeLevels } from '../src/data/upgrades.ts';
 import { racePayout } from '../src/game/economy.ts';
 import { ASSUMED, DECENT, studyCup } from './sim-cups.ts';
 
 /** A glider is worth saving for when it costs at least this multiple of the current one: small steps are skipped. */
 const GLIDER_STEP = 1.5;
-/** While a better glider is still to buy, upgrades may only spend money above this share of its price. */
+/**
+ * While a better glider is on sale, upgrades may only spend money above this share of its
+ * price. Once savings reach that share the player is committed: everything goes to the glider
+ * until it is bought (otherwise a glider dearer than 1 / (1 - share) attempts' income is never
+ * reached, the surplus always going to upgrades).
+ */
 const SAVE_FOR_GLIDER = 0.6;
 /**
  * A 5-run study can show no cup wins at all; a decent player still wins within a few tries,
@@ -40,17 +46,35 @@ function label(m: Machine): string {
   return `${racerById(m.selected).name} ${UPGRADES.map((u) => `${u.id[0].toUpperCase()}${l[u.id]}`).join(' ')}`;
 }
 
-function fullSetCost(racerId: string): number {
+/** Credits to take `racerId` from `levels` to a full set. */
+function setCost(racerId: string, levels: UpgradeLevels): number {
   const r = racerById(racerId);
   let total = 0;
-  for (const u of UPGRADES) for (let lvl = 0; lvl < MAX_UPGRADE_LEVEL; lvl++) total += upgradeCost(r, u.id, lvl);
+  for (const u of UPGRADES) for (let lvl = levels[u.id]; lvl < MAX_UPGRADE_LEVEL; lvl++) total += upgradeCost(r, u.id, lvl);
   return total;
 }
 
-/** Buys the next glider worth having when affordable, then upgrades level by level, in preference order, above the savings. */
+function fullSetCost(racerId: string): number {
+  return setCost(racerId, noUpgrades());
+}
+
+/** Cups won so far: worlds open on them (WorldDef.unlockedBy), and world-tied gliders with their worlds. */
+const wonCups = new Set<string>();
+
+function onSale(g: RacerDef): boolean {
+  if (g.unlockWorld === undefined) return true;
+  const unlockedBy = worldById(g.unlockWorld).unlockedBy;
+  return unlockedBy === null || wonCups.has(unlockedBy);
+}
+
+/**
+ * Buys the next glider worth having when affordable, then upgrades level by level, in preference
+ * order, above the savings. A glider nearly finished is finished first: while the rest of its
+ * upgrade set costs less than the next glider, nothing is put aside for that glider.
+ */
 function shop(m: Machine, credits: number, log: string[]): number {
   const current = racerById(m.selected).price;
-  const next = gliders.find((g) => !m.owned.includes(g.id) && g.price >= Math.max(1, current * GLIDER_STEP));
+  const next = gliders.find((g) => !m.owned.includes(g.id) && onSale(g) && g.price >= Math.max(1, current * GLIDER_STEP));
   if (next && credits >= next.price) {
     credits -= next.price;
     m.owned.push(next.id);
@@ -58,7 +82,8 @@ function shop(m: Machine, credits: number, log: string[]): number {
     m.selected = next.id;
     log.push(`${next.name} (${next.price})`);
   }
-  const reserve = next && !m.owned.includes(next.id) ? next.price * SAVE_FOR_GLIDER : 0;
+  const saving = next !== undefined && !m.owned.includes(next.id) && setCost(m.selected, m.levels[m.selected]) >= next.price;
+  const reserve = !saving ? 0 : credits >= next.price * SAVE_FOR_GLIDER ? next.price : next.price * SAVE_FOR_GLIDER;
   const racer = racerById(m.selected);
   for (;;) {
     const lv = m.levels[m.selected];
@@ -87,7 +112,7 @@ const milestones = new Map<string, number>();
 const starterSet = fullSetCost(starter.id);
 
 console.log(`Full upgrade set: ${gliders.map((g) => `${g.name} ${fullSetCost(g.id)}`).join(', ')}`);
-console.log(`Glider prices: ${gliders.map((g) => `${g.name} ${g.price}`).join(', ')}\n`);
+console.log(`Glider prices: ${gliders.map((g) => `${g.name} ${g.price}${g.unlockWorld ? ` (with ${worldById(g.unlockWorld).name})` : ''}`).join(', ')}\n`);
 
 for (const world of WORLDS) {
   for (const cupId of world.cupIds) {
@@ -115,7 +140,10 @@ for (const world of WORLDS) {
       credits += gain;
       earned += gain;
       if (!milestones.has('starterSet') && earned >= starterSet) milestones.set('starterSet', races);
-      if (won) break;
+      if (won) {
+        wonCups.add(cup.id);
+        break;
+      }
     }
   }
 }
