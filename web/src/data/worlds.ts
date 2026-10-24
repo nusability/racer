@@ -51,6 +51,16 @@ export const WORLDS: WorldDef[] = [
     unlockedBy: 'shoreline',
     card: { from: 0xcdeeff, to: 0x2b4a8a },
   },
+  {
+    id: 'city',
+    name: 'Neon Meridian',
+    blurb: 'Loops between the towers, corkscrews over the avenues and a maglev that never brakes.',
+    biome: 'city',
+    trackIds: ['downtown', 'harborbridge', 'neonspiral', 'undercity', 'skyway', 'zenithtower'],
+    cupIds: ['neon', 'skyline', 'zenith'],
+    unlockedBy: 'frost',
+    card: { from: 0xff2fb4, to: 0x2a1060 },
+  },
 ];
 
 export function worldById(id: string): WorldDef {

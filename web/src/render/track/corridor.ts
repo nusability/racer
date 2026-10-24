@@ -39,6 +39,11 @@ const CANYON_KEEP = 0.05;
 const ROUGH_ROAD_SHADE = 0.6;
 /** Rough amount past which the wall kerb is painted as a hazard. */
 const ROUGH_KERB = 0.05;
+/**
+ * Cast concrete stands straighter than rock: a wall's lean off vertical per metre of height
+ * (a base batter plus this), and none of the rock's lumpy noise.
+ */
+const CONCRETE_LEAN = { base: 0.25, perMetre: 0.03 } as const;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
 
@@ -307,7 +312,8 @@ export class Corridor {
     const s = kk * this.ribbon.step;
     const foot = this.banked(kk, side * this.edge(kk, side), -RUNOFF_DROP);
     const outer = RIDGE_OUTER;
-    const n = (i: number) => this.noise(s / 21 + i * 3.7, side * 9 + i) * 0.8;
+    const lumpy = this.paint.masonry === 'sandstone' ? 1 : 0;
+    const n = (i: number) => this.noise(s / 21 + i * 3.7, side * 9 + i) * 0.8 * lumpy;
     const rock = this.boundary === 'rock';
     const h = RIDGE_HEIGHT * (rock ? 1.3 : 1) + n(0);
     const g5 = this.groundAt(kk, side, outer * 0.6, foot.y);
@@ -335,8 +341,9 @@ export class Corridor {
     const s = kk * this.ribbon.step;
     const foot = this.banked(kk, side * this.edge(kk, side), 0);
     const outer = this.shape.outer[sideIndex(side)][kk] - this.edge(kk, side);
-    const nz = (i: number) => Math.abs(this.noise(s / 15 + i * 3.1, side * 5 + i * 1.7)) * h * 0.09;
-    const lean = 1.2 + h * 0.12;
+    const rock = this.paint.masonry === 'sandstone';
+    const nz = (i: number) => (rock ? Math.abs(this.noise(s / 15 + i * 3.1, side * 5 + i * 1.7)) * h * 0.09 : 0);
+    const lean = rock ? 1.2 + h * 0.12 : CONCRETE_LEAN.base + h * CONCRETE_LEAN.perMetre;
     const g6 = this.groundAt(kk, side, outer, foot.y);
     const rimEnd = Math.min(outer - 8, lean + 6 + (CANYON_RIM - 6) * c);
     const dx = [0, lean * 0.35 + nz(1), lean * 0.7 + nz(2), lean + nz(3), rimEnd, rimEnd + (outer - rimEnd) * 0.5, outer];

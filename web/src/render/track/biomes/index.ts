@@ -1,6 +1,7 @@
 import type { TrackPalette } from '../../../core/types.ts';
 import type { TrackScenery } from '../../../data/tracks/scenery.ts';
 import { beachKit } from './beach.ts';
+import { cityKit } from './city.ts';
 import { desertKit } from './desert.ts';
 import { iceKit } from './ice.ts';
 import type { BiomeKit } from './kit.ts';
@@ -14,6 +15,8 @@ export function biomeKit(scenery: TrackScenery, palette: TrackPalette): BiomeKit
       return beachKit(scenery, palette);
     case 'ice':
       return iceKit(scenery, palette);
+    case 'city':
+      return cityKit(scenery, palette);
   }
 }
 

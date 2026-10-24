@@ -23,6 +23,7 @@ export const RIVAL_PARITY_SHARE = 0.98;
 export const PERFORMANCE_BOOST_WEIGHT = 0.045;
 
 import { CUPS_ICE } from './cupsIce.ts';
+import { CUPS_CITY } from './cupsCity.ts';
 import { TIER_SKILLS } from './rivalSkills.ts';
 
 export interface RivalDef {
@@ -157,8 +158,9 @@ export const CUPS: CupDef[] = [
     ],
     unlocks: null,
   },
-  // Frostline's cups live in their own file; same tier bands as above.
+  // Frostline's and Neon Meridian's cups live in their own files; same tier bands as above.
   ...CUPS_ICE,
+  ...CUPS_CITY,
 ];
 
 export function cupById(id: string): CupDef {

@@ -44,7 +44,18 @@ export type LandmarkKind =
   | 'icePalace'
   | 'frozenFalls'
   | 'auroraSky'
-  | 'snowcatConvoy';
+  | 'snowcatConvoy'
+  // Set E: the city
+  | 'maglev'
+  | 'crane'
+  | 'demolition'
+  | 'cargoAirship'
+  | 'skyscrapers'
+  | 'neonBillboards'
+  | 'stadium'
+  | 'hologramDragon'
+  | 'suspensionBridge'
+  | 'skyTram';
 
 /**
  * A landmark that IS part of the course (the sand beast that crosses the road, the digger

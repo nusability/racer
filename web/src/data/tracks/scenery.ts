@@ -69,7 +69,18 @@ export interface IceScenery extends SceneryBase {
   seracs: number;
 }
 
-export type TrackScenery = DesertScenery | BeachScenery | IceScenery;
+/** The city: walled roads between towers, neon and elevated highways, by night. */
+export interface CityScenery extends SceneryBase {
+  biome: 'city';
+  /** Towers standing around the course, in blocks off the road. */
+  towers: number;
+  /** Typical tower height, metres; the skyline the track is read against. */
+  towerHeight: number;
+  /** Neon billboards beside the course per kilometre of lap. */
+  billboardsPerKm: number;
+}
+
+export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery;
 
 export interface LandmarkPlacement {
   kind: LandmarkKind;

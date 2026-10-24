@@ -3,6 +3,8 @@ import type { Corridor } from '../corridor.ts';
 import type { Quality } from '../config.ts';
 import type { Ground } from '../ground.ts';
 import type { RoadStyle } from '../textures.ts';
+import type { Masonry } from '../paint.ts';
+import type { DebrisLook } from '../scheduled.ts';
 
 // A biome kit: everything about a world's look that is not the course itself. The corridor,
 // hazards, junctions, pickups and landmarks are shared; the kit supplies the open ground, its
@@ -41,6 +43,13 @@ export interface DressContext {
 export interface BiomeKit {
   ground: GroundStyle;
   road: RoadStyle;
+  /**
+   * Street lighting on the road: how much of its own texture it shows with no sun on it
+   * (0 = none, lit by sun and sky alone).
+   */
+  roadLight: number;
+  /** What walls, tunnels and rock dressing are made of. */
+  masonry: Masonry;
   /** Near-white detail maps multiplied over vertex colours. */
   detail(seed: number, quality: Quality): { sand: THREE.CanvasTexture; rock: THREE.CanvasTexture };
   dress(ctx: DressContext): Dressing;
@@ -50,5 +59,5 @@ export interface BiomeKit {
    * What hazards throw onto the road and blow across it: dropped rocks (`glow` > 0 makes them
    * molten), the dust of their impact and the streaks of a gust (sRGB hex).
    */
-  debris: { color: number; glow: number; dust: number; streak: number };
+  debris: DebrisLook;
 }

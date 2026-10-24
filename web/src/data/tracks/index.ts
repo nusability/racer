@@ -20,8 +20,14 @@ import { glacier, glacierScenery } from './glacier.ts';
 import { icefalls, icefallsScenery } from './icefalls.ts';
 import { avalanche, avalancheScenery } from './avalanche.ts';
 import { auroracrown, auroracrownScenery } from './auroracrown.ts';
+import { downtown, downtownScenery } from './downtown.ts';
+import { harborbridge, harborbridgeScenery } from './harborbridge.ts';
+import { neonspiral, neonspiralScenery } from './neonspiral.ts';
+import { undercity, undercityScenery } from './undercity.ts';
+import { skyway, skywayScenery } from './skyway.ts';
+import { zenithtower, zenithtowerScenery } from './zenithtower.ts';
 
-export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront, coralcove, lagoonloop, boardwalk, seastacks, tidalcaves, volcanoisle, snowfield, frozenharbor, glacier, icefalls, avalanche, auroracrown];
+export const TRACKS: TrackDef[] = [sunpan, rattlesnake, oasis, bonecanyon, glasssea, devilsteeth, mirageh, stormfront, coralcove, lagoonloop, boardwalk, seastacks, tidalcaves, volcanoisle, snowfield, frozenharbor, glacier, icefalls, avalanche, auroracrown, downtown, harborbridge, neonspiral, undercity, skyway, zenithtower];
 
 const SCENERY: Record<string, TrackScenery> = {
   sunpan: sunpanScenery,
@@ -44,6 +50,12 @@ const SCENERY: Record<string, TrackScenery> = {
   icefalls: icefallsScenery,
   avalanche: avalancheScenery,
   auroracrown: auroracrownScenery,
+  downtown: downtownScenery,
+  harborbridge: harborbridgeScenery,
+  neonspiral: neonspiralScenery,
+  undercity: undercityScenery,
+  skyway: skywayScenery,
+  zenithtower: zenithtowerScenery,
 };
 
 export function trackById(id: string): TrackDef {

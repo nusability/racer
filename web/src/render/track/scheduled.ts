@@ -23,6 +23,8 @@ export interface DebrisLook {
   glow: number;
   dust: number;
   streak: number;
+  /** What falls: a rock, or a bundle of steel girders (a city's construction cranes). */
+  shape: 'rock' | 'girder';
 }
 
 /** Last seconds of a dropper's warning in which the object is seen falling in. */
@@ -193,7 +195,7 @@ export function buildScheduled(
   const rings = inst(new THREE.RingGeometry(0.84, 1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }), dropCount, 'hazardRings');
   const shadows = inst(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }), soft ? dropCount : 0, 'hazardShadows');
   const debrisMat = new THREE.MeshLambertMaterial({ color: look.color, emissive: new THREE.Color(0xff4a10).multiplyScalar(look.glow), flatShading: true });
-  const debris = inst(new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
+  const debris = inst(look.shape === 'girder' ? girderBundle() : new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
   const dust = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: look.dust, transparent: true, opacity: 0.5, depthWrite: false }), soft ? dropCount : 0, 'hazardDust');
   const items: DropItem[] = [];
 
@@ -357,6 +359,37 @@ export function buildScheduled(
     },
   };
 }
+
+/**
+ * Three I-beams lying side by side across the road with a fourth across them, filling the
+ * unit cylinder a dropped object is scaled into (length 2 along x, height 2, depth 2).
+ */
+export function girderBundle(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const beam = (z: number, y: number, yaw: number) => {
+    for (const [h, w, dy] of [[GIRDER_FLANGE, GIRDER_WIDTH, 0], [GIRDER_DEPTH, GIRDER_WEB, (GIRDER_DEPTH + GIRDER_FLANGE) / 2], [GIRDER_FLANGE, GIRDER_WIDTH, GIRDER_DEPTH + GIRDER_FLANGE]]) {
+      parts.push(new THREE.BoxGeometry(2, h, w).translate(0, y + dy + h / 2, z).rotateY(yaw).toNonIndexed());
+    }
+  };
+  for (const z of [-GIRDER_WIDTH, 0, GIRDER_WIDTH]) beam(z, -1, 0);
+  beam(0, -1 + GIRDER_DEPTH + 2 * GIRDER_FLANGE, GIRDER_CROSS_YAW);
+  const pos: number[] = [];
+  for (const p of parts) {
+    pos.push(...(p.getAttribute('position').array as Float32Array));
+    p.dispose();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+/** I-beam section in the unit bundle: flange thickness and width, web depth and thickness. */
+const GIRDER_FLANGE = 0.14;
+const GIRDER_WIDTH = 0.62;
+const GIRDER_DEPTH = 0.62;
+const GIRDER_WEB = 0.14;
+/** The top girder lies skewed across the others, as a dropped load does. */
+const GIRDER_CROSS_YAW = 0.5;
 
 /** A beacon post at the roadside, square in section. */
 function post(b: FlatBuilder, r: Ribbon, s: number, x: number) {
