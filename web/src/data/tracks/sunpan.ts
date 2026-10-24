@@ -86,9 +86,11 @@ export const sunpan: TrackDef = {
         { x: 1878, z: -350, y: 1 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.93, lateral: 0, count: 4, spacing: 28 },
+        // Broken salt crust either side of the kicker, then a squeeze: lift or pay in hull.
         { kind: 'kicker', at: 3.3, length: 40, height: 2 },
-        { kind: 'boostPad', at: 4.2, lateral: 0 },
+        { kind: 'rough', from: 2.5, to: 2.9, amount: 1 },
+        { kind: 'rough', from: 3.7, to: 3.95, amount: 0.8 },
+        { kind: 'narrow', from: 4.0, to: 4.6, width: 18 },
       ],
     },
   ],

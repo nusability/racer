@@ -144,6 +144,14 @@
 .hb--boost.is-full .hb__track { animation: tankfull 0.9s ease-in-out infinite; }
 .hb--boost.is-empty { opacity: 0.45; }
 .hb--boost.is-empty .hb__track { border-color: rgba(60, 242, 255, 0.35); }
+/* Slipstream: a slim pale-cyan gauge over the speed that fades in while riding a wake. */
+.hud__slip { display: flex; align-items: center; gap: 6px; opacity: 0; transition: opacity 0.25s ease-out; }
+.hud__slip.is-on { opacity: 1; }
+.hud__slip-text { font-size: 12px; font-weight: 800; font-style: italic; letter-spacing: 0.18em; color: #cff4ff; }
+.hud__slip-track { width: 72px; height: 6px; border-radius: 3px; background: rgba(2, 30, 36, 0.6); border: 1px solid rgba(207, 244, 255, 0.5); overflow: hidden; }
+.hud__slip-fill { height: 100%; transform-origin: 0 50%; transform: scaleX(0); will-change: transform; background: #cff4ff; }
+.hud__slip.is-full .hud__slip-track { box-shadow: 0 0 10px rgba(207, 244, 255, 0.9); border-color: #ffffff; }
+.hud__slip.is-full .hud__slip-text { text-shadow: 0 0 10px rgba(207, 244, 255, 0.9); }
 @keyframes sheen { from { background-position: 0 0, 100% 0; } to { background-position: 0 0, -100% 0; } }
 @keyframes tankfull { 50% { box-shadow: 0 0 18px rgba(60, 242, 255, 0.9); border-color: #d6fdff; } }
 @keyframes blink { 50% { opacity: 0.35; } }

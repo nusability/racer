@@ -5,9 +5,13 @@
 import { TRACKS, sceneryById } from '../src/data/tracks/index.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
 import { SEA_LEVEL } from '../src/render/track/config.ts';
-import { Ribbon, Track } from '../src/core/track.ts';
-import type { TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY } from '../src/data/tuning.ts';
+import { Ribbon, Track, type Branch } from '../src/core/track.ts';
+import { Race } from '../src/core/race.ts';
+import { AiDriver, type AiOptions } from '../src/core/ai.ts';
+import { racerById } from '../src/data/racers.ts';
+import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
+import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -54,8 +58,6 @@ const OPEN_LANE = 16;
 const DIVERGE = 320;
 /** Shortcuts are the risky line: a tighter free lane is enough there. */
 const BRANCH_LANE = 8;
-/** A shortcut should save between these many seconds at RACE_SPEED. */
-const SAVING_RANGE: [number, number] = [1.5, 6];
 
 interface Flight {
   landed: boolean;
@@ -458,6 +460,118 @@ function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: s
   }
 }
 
+// --- Shortcut trade-off: measured by driving it, not by its length ---------------------------
+// A stock glider is raced from the grid three times by the same driver: round the main road,
+// through the shortcut flat out (boost held, never lifting) and through it lifting to the safe
+// speed on rough ground. Every run is identical until the driver lines up for the shortcut,
+// so the difference in when each one passes a mark past the rejoin is the time it saves.
+// Averaged over a few runs, each with its own seed and a later getaway from the grid, so one
+// unlucky jolt or one hazard timing (the AI cannot dodge every scheduled hazard) doesn't decide
+// the number.
+
+/** The measuring driver: a sharp line and quick hands, like a skilled player. */
+const MEASURE_EYES = 0.9;
+/** Stock armour (1.0), no upgrades: the glider the hull targets are written for. */
+const MEASURE_RACER = 'dustwing';
+/** Seed and seconds the driver sits on the brake after GO, per run: the delays shift where the hazards' schedules catch it. */
+const MEASURE_RUNS: { seed: number; hold: number }[] = [
+  { seed: 4242, hold: 0 },
+  { seed: 4243, hold: 6 },
+  { seed: 4244, hold: 13 },
+];
+/** The clock stops this far past the rejoin, so a messy merge counts against the shortcut. */
+const MEASURE_TAIL = 300;
+/** A measuring run longer than this many seconds is stuck. */
+const MEASURE_TIMEOUT = 240;
+/**
+ * Flat out, a shortcut saves this many seconds: enough to be worth a third of a hull, not so
+ * much that one cut decides a race (telemetry: one 4 s cut took a player from P6 to P1).
+ */
+const FLAT_SAVING: [number, number] = [1.5, 3.5];
+/** Lifted through, it still pays a little: the careful line is a choice, not a trap. */
+const LIFT_SAVING: [number, number] = [0.2, 2];
+/** Flat out must beat lifting by at least this, or there is nothing to choose between. */
+const CHOICE_GAP = 0.8;
+/** Hull a stock glider loses flat out: a real chunk, survivable from fresh, deadly when battered. */
+const FLAT_HULL: [number, number] = [0.25, 0.45];
+/** Hull the lifted line costs at most: the careful way is cheap. */
+const LIFT_HULL = 0.1;
+/** Fewest runs that must survive the main road for the average to mean anything. */
+const MEASURE_MIN_FAIR = 2;
+const WAIT: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
+const HOLD: PlayerInput = { steer: 0, nudge: 0, brake: true, boost: false };
+
+interface Measured {
+  /** Race time at the mark past the rejoin, or null when the run wrecked. */
+  time: number | null;
+  damage: number;
+}
+
+function measure(t: Track, b: Branch, mode: 'main' | 'flat' | 'lift', seed: number, hold: number): Measured {
+  const stats = effectiveStats(racerById(MEASURE_RACER), noUpgrades());
+  const race = new Race(t, {
+    laps: t.def.laps,
+    seed,
+    entrants: [{ id: 'm', name: 'measure', racerId: MEASURE_RACER, stats, isPlayer: true, skill: MEASURE_EYES }],
+  });
+  const options: AiOptions = mode === 'main' ? { shortcuts: false, cellDetours: true } : { shortcuts: b.def.id, cellDetours: true, rough: mode };
+  const eyes = new AiDriver(MEASURE_EYES, seed, options);
+  const v = race.vehicles[0];
+  const r = v.state;
+  const mark = b.exitS + MEASURE_TAIL;
+  for (let n = 0; n * SIM_DT < MEASURE_TIMEOUT; n++) {
+    let input = WAIT;
+    if (race.phase === 'racing') {
+      // The driver's eyes run from GO either way, so the run only differs in when it leaves.
+      input = eyes.drive(v, t, race.racers, race.time);
+      if (race.time < hold) input = HOLD;
+      if (mode === 'flat' && r.branch === b.index) input = { ...input, boost: true };
+    }
+    race.step(input);
+    if (r.crashed > 0) return { time: null, damage: r.damage };
+    if (r.branch < 0 && r.distance >= mark) return { time: race.time, damage: r.damage };
+  }
+  throw new Error(`${t.def.id}: measuring ${b.def.id} (${mode}) never reached s=${fmt(mark)}`);
+}
+
+/** Saving flat out and lifting, and the hull each costs, against the targets above. */
+function checkTradeOff(t: Track, b: Branch, label: string, warn: string[]) {
+  const runs = MEASURE_RUNS.map(({ seed, hold }) => ({
+    main: measure(t, b, 'main', seed, hold),
+    flat: measure(t, b, 'flat', seed, hold),
+    lift: measure(t, b, 'lift', seed, hold),
+  }));
+  // A wreck on the main road (a hazard caught out the measuring driver) says nothing about the shortcut.
+  const fair = runs.filter((r) => r.main.time !== null);
+  if (fair.length < MEASURE_MIN_FAIR) {
+    warn.push(`${label}: only ${fair.length} of ${runs.length} measuring runs survived the main road`);
+    return;
+  }
+  const wrecks = (k: 'flat' | 'lift') => fair.filter((r) => r[k].time === null).length;
+  const mean = (f: (r: (typeof fair)[number]) => number) => fair.reduce((a, r) => a + f(r), 0) / fair.length;
+  const kept = (k: 'flat' | 'lift') => fair.filter((r) => r[k].time !== null);
+  const saving = (k: 'flat' | 'lift') => {
+    const ok = kept(k);
+    return ok.length === 0 ? NaN : ok.reduce((a, r) => a + (r.main.time as number) - (r[k].time as number), 0) / ok.length;
+  };
+  const fs = saving('flat');
+  const ls = saving('lift');
+  const fh = mean((r) => r.flat.damage - r.main.damage);
+  const lh = mean((r) => r.lift.damage - r.main.damage);
+  const wreckNote = (k: 'flat' | 'lift') => (wrecks(k) > 0 ? ` (${wrecks(k)}/${fair.length} wrecked)` : '');
+  const row = `flat out ${fs.toFixed(2).padStart(5)}s hull ${(fh * 100).toFixed(0).padStart(2)}%${wreckNote('flat')}  lifting ${ls.toFixed(2).padStart(5)}s hull ${(lh * 100).toFixed(0).padStart(2)}%${wreckNote('lift')}`;
+  console.log(`    trade-off: ${row}`);
+  shortcutTable.push(`${t.def.id.padEnd(13)} ${b.def.name.padEnd(16)} ${row}`);
+  if (wrecks('flat') > 0 || wrecks('lift') > 0) warn.push(`${label}: a measuring run wrecked in the shortcut (${row})`);
+  if (!(fs >= FLAT_SAVING[0] && fs <= FLAT_SAVING[1])) warn.push(`${label}: flat out saves ${fs.toFixed(2)}s, outside ${FLAT_SAVING.join('..')}s`);
+  if (!(ls >= LIFT_SAVING[0] && ls <= LIFT_SAVING[1])) warn.push(`${label}: lifting saves ${ls.toFixed(2)}s, outside ${LIFT_SAVING.join('..')}s`);
+  if (!(fs - ls >= CHOICE_GAP)) warn.push(`${label}: flat out beats lifting by only ${(fs - ls).toFixed(2)}s (< ${CHOICE_GAP}s): no real choice`);
+  if (fh < FLAT_HULL[0] || fh > FLAT_HULL[1]) warn.push(`${label}: flat out costs ${(fh * 100).toFixed(0)}% hull, outside ${FLAT_HULL.map((x) => x * 100).join('..')}%`);
+  if (lh > LIFT_HULL) warn.push(`${label}: lifting costs ${(lh * 100).toFixed(0)}% hull (> ${LIFT_HULL * 100}%)`);
+}
+
+const shortcutTable: string[] = [];
+
 function check(def: TrackDef): string[] {
   const warn: string[] = [];
   const t = new Track(def);
@@ -487,8 +601,7 @@ function check(def: TrackDef): string[] {
     console.log(`  ${label} "${b.def.name}" side ${b.side > 0 ? 'right' : 'left'} @${b.def.from}..${b.def.to}: skips ${fmt(span)}m, runs ${fmt(r.length)}m, saves ${fmt(saving)}m = ${(saving / RACE_SPEED).toFixed(1)}s at ${RACE_SPEED} m/s`);
     checkRibbon(r, b.def.features, b.def.points.length + 4, label, warn, false);
     if (b.def.width < BRANCH_WIDTH[0] || b.def.width > BRANCH_WIDTH[1]) warn.push(`${label}: width ${b.def.width} outside ${BRANCH_WIDTH.join('..')}`);
-    const secs = saving / RACE_SPEED;
-    if (secs < SAVING_RANGE[0] || secs > SAVING_RANGE[1]) warn.push(`${label}: saves ${secs.toFixed(1)}s, outside ${SAVING_RANGE.join('..')}s`);
+    checkTradeOff(t, b, label, warn);
     const jEnd = r.paramToS(1);
     const xStart = r.paramToS(b.def.points.length + 2);
     if (jEnd > J * 1.5 || r.length - xStart > J * 1.5) warn.push(`${label}: junctions stretched (${fmt(jEnd)}m, ${fmt(r.length - xStart)}m): first/last points too far off`);
@@ -564,9 +677,17 @@ function check(def: TrackDef): string[] {
 }
 
 // Node global; the tools share the browser tsconfig, which has no Node typings.
-declare const process: { exitCode: number };
+declare const process: { exitCode: number; argv: string[] };
 
 let warnings = 0;
-for (const def of TRACKS) warnings += check(def).length;
-console.log(`\n${TRACKS.length} tracks, ${warnings} warnings`);
+// Track ids on the command line check only those (the shortcut runs make a full check slow).
+const only = process.argv.slice(2);
+const chosen = only.length === 0 ? TRACKS : TRACKS.filter((d) => only.includes(d.id));
+if (only.length > 0 && chosen.length !== only.length) {
+  throw new Error(`track-check: unknown track id in ${only.join(', ')}`);
+}
+for (const def of chosen) warnings += check(def).length;
+console.log(`\nShortcuts (stock ${MEASURE_RACER}, saving vs the main road to ${MEASURE_TAIL} m past the rejoin):`);
+for (const line of shortcutTable) console.log(`  ${line}`);
+console.log(`\n${chosen.length} tracks, ${warnings} warnings`);
 process.exitCode = warnings > 0 ? 1 : 0;

@@ -117,8 +117,9 @@ export const lagoonloop: TrackDef = {
         { x: 700, z: 500, y: 3.5 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.88, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 3.6, lateral: 0 },
+        // Shell-and-rock bar, then a walled squeeze.
+        { kind: 'rough', from: 2.2, to: 3.5, amount: 0.9 },
+        { kind: 'narrow', from: 3.7, to: 4.8, width: 18 },
       ],
     },
   ],

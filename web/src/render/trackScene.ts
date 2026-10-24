@@ -7,6 +7,7 @@ import { Corridor, type Scatter } from './track/corridor.ts';
 import { buildCells, type CellItem } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
 import { buildRockFeatures } from './track/features.ts';
+import { buildRoughGround } from './track/rough.ts';
 import { Ground } from './track/ground.ts';
 import { buildHazards } from './track/hazards.ts';
 import { buildScheduled } from './track/scheduled.ts';
@@ -71,6 +72,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   for (const c of corridors) {
     buildHazards(c);
     buildRockFeatures(c, def.seed);
+    buildRoughGround(c, def.seed, quality);
   }
   const props = new FlatBuilder();
   buildDressing(corridors[0], props, def.seed, CORNER_STANDS[quality]);

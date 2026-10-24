@@ -18,6 +18,10 @@ const GO_LINGER_MS = 700;
 const FLASH_MS = 1400;
 const WRECK_SLAM_MS = 520;
 const COUNT_POP_MS = 350;
+/** The slipstream gauge shows from this draft up (and fades out below it). */
+const DRAFT_SHOWN = 0.05;
+/** At or above this draft the gauge glows: the wake is full. */
+const DRAFT_GLOW = 0.9;
 
 const PAUSE_KEYS = new Set(['Escape', 'KeyP']);
 
@@ -67,6 +71,8 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const tank = bar('BOOST', 'hb--boost');
   const hull = bar('HULL', 'hb--hull');
   const critical = h('div', 'hud__critical', 'HULL CRITICAL');
+  const slipFill = h('div', 'hud__slip-fill');
+  const slip = h('div', 'hud__slip', h('span', 'hud__slip-text', 'SLIPSTREAM'), h('div', 'hud__slip-track', slipFill));
   const wreck = h('div', 'hud__wreck');
   const countEl = h('div', 'hud__count');
   const flashEl = h('div', 'hud__flash');
@@ -96,7 +102,7 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
     countEl,
     flashEl,
     wreck,
-    h('div', 'hud__bottom', critical, h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', tank.el, hull.el)),
+    h('div', 'hud__bottom', critical, slip, h('div', 'hud__speed', speedEl, h('span', 'hud__speed-u', 'KM/H')), h('div', 'hud__bars', tank.el, hull.el)),
   );
   root.append(el);
 
@@ -114,6 +120,9 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
   const hullLow = classSlot(hull.el, 'is-low');
   const hullCritical = classSlot(el, 'is-critical');
   const finished = classSlot(el, 'is-finished');
+  const setSlip = barSlot(slipFill);
+  const slipOn = classSlot(slip, 'is-on');
+  const slipFull = classSlot(slip, 'is-full');
   const setCount = textSlot(countEl);
   const countOn = classSlot(countEl, 'is-on');
 
@@ -137,6 +146,9 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
       hullCritical(hullLeft < HULL_CRITICAL && hullLeft > 0);
       boosting(v.boosting);
       finished(v.finished);
+      setSlip(v.draft);
+      slipOn(v.draft >= DRAFT_SHOWN);
+      slipFull(v.draft >= DRAFT_GLOW);
 
       const now = performance.now();
       if (v.countdown !== lastCount) {

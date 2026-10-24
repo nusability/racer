@@ -132,12 +132,13 @@ export const auroracrown: TrackDef = {
       runoff: 0,
       points: [
         { x: -390, z: -1150, y: 23 },
-        { x: -580, z: -960, y: 22 },
+        { x: -488, z: -868, y: 22 },
         { x: -760, z: -780, y: 21 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.81, lateral: 0, count: 4, spacing: 28 },
+        // Broken crown ice along the open edge.
         { kind: 'drop', from: 1.8, to: 4.2 },
+        { kind: 'rough', from: 2.2, to: 3.6, amount: 0.8 },
       ],
     },
   ],

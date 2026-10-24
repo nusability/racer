@@ -30,6 +30,8 @@ export interface TelemetrySample {
   hull: number;
   boosting: boolean;
   offroad: boolean;
+  /** Slipstream drafted, 0..1 (rounded). */
+  draft: number;
   /** Metres to the racer just ahead / just behind (null when leading / last). */
   gapAhead: number | null;
   gapBehind: number | null;
@@ -76,6 +78,9 @@ const LOGGED: ReadonlySet<RaceEvent['type']> = new Set([
   'lap',
   'finish',
   'land',
+  'draft',
+  'slingshot',
+  'jolt',
 ]);
 
 const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
@@ -93,6 +98,7 @@ export class TelemetryRecorder {
   private brakeSteps = 0;
   private steerTravel = 0;
   private scrapeSteps = 0;
+  private roughSteps = 0;
   private offroad = false;
 
   constructor(request: RaceRequest, settings: Settings, build: string) {
@@ -122,16 +128,21 @@ export class TelemetryRecorder {
         if (ev.id === pid) this.scrapeSteps++;
         continue;
       }
+      if (ev.type === 'rough') {
+        if (ev.id === pid) this.roughSteps++;
+        continue;
+      }
       if (ev.type === 'offroad' && ev.id === pid) this.offroad = ev.on;
       if (!LOGGED.has(ev.type) || !('id' in ev)) continue;
       // Rivals' pickups and landings would drown the log; their hits and wrecks matter.
-      if (ev.id !== pid && (ev.type === 'pickup' || ev.type === 'land' || ev.type === 'boostPad' || ev.type === 'tankEmpty')) continue;
+      if (ev.id !== pid && (ev.type === 'pickup' || ev.type === 'land' || ev.type === 'boostPad' || ev.type === 'tankEmpty' || ev.type === 'draft' || ev.type === 'slingshot' || ev.type === 'jolt')) continue;
       this.events.push({ t: round(race.time, 2), type: ev.type, who: this.name(ev.id), detail: eventDetail(ev) });
     }
     if (race.phase !== 'racing' || race.time < this.nextSample) return;
     this.nextSample = race.time + TELEMETRY_SAMPLE_PERIOD;
     const p = race.player();
-    const ordered = [...race.racers].sort((a, b) => a.place - b.place);
+    // Wrecked racers place last with their distance frozen; a gap to one is meaningless.
+    const ordered = race.racers.filter((r) => r === p || r.crashed === 0).sort((a, b) => a.place - b.place);
     const idx = ordered.indexOf(p);
     const ahead = ordered[idx - 1];
     const behind = ordered[idx + 1];
@@ -146,6 +157,7 @@ export class TelemetryRecorder {
       hull: round(1 - p.damage, 2),
       boosting: p.boosting,
       offroad: this.offroad,
+      draft: round(p.draft, 2),
       gapAhead: ahead ? Math.round(ahead.distance - p.distance) : null,
       gapBehind: behind ? Math.round(p.distance - behind.distance) : null,
     });
@@ -185,7 +197,11 @@ export class TelemetryRecorder {
       },
       fps: { average: Math.round(1 / Math.max(1e-3, mean(this.frameTimes))), worst5pct: Math.round(1 / Math.max(1e-3, mean(worst))) },
       samples: this.samples,
-      events: [...this.events, { t: 0, type: 'wallScrapeSeconds', who: 'you', detail: String(round(this.scrapeSteps * SIM_DT, 1)) }],
+      events: [
+        ...this.events,
+        { t: 0, type: 'wallScrapeSeconds', who: 'you', detail: String(round(this.scrapeSteps * SIM_DT, 1)) },
+        { t: 0, type: 'roughSeconds', who: 'you', detail: String(round(this.roughSteps * SIM_DT, 1)) },
+      ],
       results: outcome.results,
       wreck: outcome.playerWreck,
     };
@@ -206,6 +222,10 @@ function eventDetail(ev: RaceEvent): string | undefined {
       return `P${ev.place} ${round(ev.time, 2)}s`;
     case 'land':
       return `${round(ev.impact, 1)} m/s`;
+    case 'draft':
+      return ev.on ? 'on' : 'off';
+    case 'jolt':
+      return String(round(ev.intensity, 2));
     default:
       return undefined;
   }

@@ -126,10 +126,10 @@ export const icefalls: TrackDef = {
         { x: 1470, z: -290, y: 17 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.26, lateral: 0, count: 4, spacing: 28 },
+        // Icefall rubble, then ice blocks to thread.
         { kind: 'slick', from: 3.5, to: 4.6, grip: 0.8 },
-        { kind: 'boostPad', at: 2.3, lateral: 0 },
-        { kind: 'boostPad', at: 6.4, lateral: 0 },
+        { kind: 'rough', from: 2.0, to: 3.9, amount: 1 },
+        { kind: 'boulders', from: 5.0, to: 5.8, count: 3, radius: 1.3 },
       ],
     },
   ],

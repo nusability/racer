@@ -115,11 +115,9 @@ export const snowfield: TrackDef = {
         { x: 1990, z: 640, y: 4 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.66, lateral: 0, count: 4, spacing: 28 },
+        // Pressure ridges across the frozen lake.
         { kind: 'slick', from: 3.0, to: 5.0, grip: 0.75 },
-        { kind: 'boostPad', at: 2.3, lateral: 0 },
-        { kind: 'boostPad', at: 2.34, lateral: 0 },
-        { kind: 'boostPad', at: 6.5, lateral: 0 },
+        { kind: 'rough', from: 3.3, to: 4.9, amount: 1 },
       ],
     },
   ],

@@ -7,6 +7,7 @@ import { AiDriver, driverSeed } from './ai.ts';
 import { Vehicle } from './vehicle.ts';
 import { hazardObstacles } from './hazards.ts';
 import { junctionBounds, type JunctionBounds } from './junction.ts';
+import { Slipstream } from './slipstream.ts';
 import {
   AUTOPILOT_SKILL,
   BRANCH_JUNCTION_LENGTH,
@@ -96,6 +97,8 @@ export class Race {
   private readonly wrecks: number[] = [];
   /** This step's hazard obstacles per ribbon (branch index, -1 = main). */
   private readonly hazardNow = new Map<number, Obstacle[]>();
+  /** Every racer's draft in the wake of the racers ahead of it. */
+  private readonly slipstream: Slipstream;
 
   constructor(track: Track, config: RaceConfig) {
     if (config.entrants.length === 0) throw new Error('Race: no entrants');
@@ -111,10 +114,12 @@ export class Race {
       const back = GRID_FRONT_GAP + row * GRID_ROW_SPACING + col * GRID_STAGGER;
       const x = (col === 0 ? -1 : 1) * GRID_LANE_OFFSET;
       const s = track.wrap(-back);
-      return new Vehicle(e.id, e.stats, track, s, x, track.delta(0, s));
+      // Seeded after every driver's own stream, so the ground's jolts never echo a driver's choices.
+      return new Vehicle(e.id, e.stats, track, s, x, track.delta(0, s), driverSeed(config.seed, config.entrants.length + i));
     });
     this.junctions = track.branches.map(junctionBounds);
     this.racers = this.vehicles.map((v) => v.state);
+    this.slipstream = new Slipstream(this.vehicles.length);
     this.drivers = config.entrants.map(
       (e, i) => new AiDriver(e.isPlayer ? AUTOPILOT_SKILL : e.skill, driverSeed(config.seed, i)),
     );
@@ -151,6 +156,7 @@ export class Race {
     });
     const before = this.racers.map((r) => r.distance);
     this.catchUp();
+    this.slipstream.step(this.vehicles, this.track, events);
     this.hazardNow.clear();
     this.vehicles.forEach((v, i) => {
       if (v.state.crashed > 0) {

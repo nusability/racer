@@ -69,6 +69,8 @@ export interface HudView {
   boost: number;
   damage: number; // 0..1
   boosting: boolean;
+  /** Slipstream drafted, 0..1. */
+  draft: number;
   /** 3, 2, 1, 0 (= GO) during the start; null otherwise. */
   countdown: number | null;
   finished: boolean;

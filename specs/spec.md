@@ -65,7 +65,10 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    hazards the player can read and dodge (a sand beast arching over and slamming across the
    road, a digger dropping ore, ships and rotor wash pushing racers sideways, whales and
    freighters blocking a causeway, avalanches, calving glaciers, herds crossing). Every track
-   has a walled, risky shortcut that saves two or three seconds. A WRECK ENDS THE RACE: hull
+   has a walled shortcut that is a trade-off, not a free cut: rough ground (marked by hazard
+   kerbs and wall stripes) batters the hull at speed, mixed with squeezes, boulders or drops.
+   Flat out it saves 1.5–3.5 s for about a third of a stock hull; lifted through, it saves
+   much less and costs almost nothing. A WRECK ENDS THE RACE: hull
    gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
    a loop. The craft disintegrates in slow motion, then the results show a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
@@ -88,7 +91,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Boost | ×(1 + 0.22–0.32) top speed | Racer's boostPower; thrusters add 0.03 per level |
 | Boost tank | 4.5–6.5 s full (+12% per Boost tank upgrade) | Holding boost drains it; no heat, no penalty |
 | Tank fill | Start 40%; +1.5%/s passive (paused 1.5 s after use); +10% per boost cell | Dry tank resumes at 10%; cells once per racer per lap |
-| Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings, shortcuts |
+| Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings; none (nor pads) in shortcuts |
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 70% top speed and extra drag, no damage |
@@ -97,7 +100,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Racer contact | Shoved apart by closing speed, split by armour; 0.002 hull per m/s above 8 m/s | One hit per pair per second |
 | Repair cell | +25% hull | Once per racer per lap |
 | Loop | Below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews |
-| Shortcuts | 1–2 per track, 18–22 m wide, walled | Save 1.5–3 s when driven well |
+| Shortcuts | 1–2 per track, 18–22 m wide, walled | Stock glider, measured (track-check): flat out saves 1.5–3.5 s for 25–45% hull; lifting saves 0.2–2 s for ≤ 10%, and at least 0.8 s less than flat out |
+| Rough ground | Hull/s = 0.2 × amount × ((v/top − 0.7)/0.3)^1.5 ÷ armour above 70% of top speed; jolts up to 7 m/s sideways (seeded) | Lifting to 70% is free; boosting through costs ~2.5× flat out. AIs lift by skill (0.9 → 0.73 of top), skip shortcuts above 80–50% hull, and rookies sometimes charge through |
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | Launch boost only for a press within 0.3 s after GO |
 | False start | Any boost during the countdown: 1.0 s stall at GO, no launch boost | AIs false-start 0.25·(1−skill)², perfect-start 0.8·skill |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
@@ -105,8 +109,9 @@ world. Winning a world's elite cup makes you that world's champion.
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
 | Laps | 2–3 per track, 9.3–10 km | Lap times 54–65 s on the starter racer |
 | Rival parity | Every rival lifted to ≥ 98% of the player's performance index (topSpeed × (1 + 0.045 × boostPower × boostTank)) | Upgrades are a feel choice; they never trivialise a cup |
-| Cup rival fields | Skill bands per tier, shared by every world: rookie 0.44–0.32, pro 0.48–0.36, elite 0.58–0.49 (eased skill²·⁸, 0.3 s reaction delay at skill 0) | Machines at parity with the player; the cup roster is the floor |
-| Catch-up | Rivals behind push up to +15% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes |
+| Cup rival fields | Skill bands per tier, shared by every world: rookie 0.44–0.32, pro 0.48–0.36, elite 0.58–0.49 (eased skill²·⁸, 0.3 s reaction delay at skill 0) | Machines at parity with the player; the cup roster is the floor, and a cup whose floor out-paces the player's glider says so ("Field is N% faster than your …") on its card and screen |
+| Catch-up | Rivals behind push up to +5% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes; slipstream carries most of the catching up, visibly |
+| Slipstream | 4–40 m behind another racer, inside a wake 2.5 m wide close up narrowing to 1.2 m: up to +6% top speed and +0.02/s tank; pulling out after 0.8 s of full draft keeps the bonus 0.6 s (slingshot) | Everyone drafts; AIs tuck in on straights and pull out to pass |
 | Championship pay | 1400/1050/770/560/350/210 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
 | Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s | Top glider ~28% faster than the starter |
 | Glider prices | 0 / 8k / 15k / 24k / 32k / 40k | Upgrade costs scale with glider class |

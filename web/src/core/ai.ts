@@ -10,6 +10,7 @@ import { hazardObstacles } from './hazards.ts';
 import type { Vehicle } from './vehicle.ts';
 import { cornerPull, currentTopSpeed, steerRate } from './handling.ts';
 import { minJumpSpeed } from './jumps.ts';
+import { draftGap } from './slipstream.ts';
 import {
   AI_BOOST_CAUTION_HI,
   AI_BOOST_CAUTION_LO,
@@ -28,6 +29,15 @@ import {
   AI_CORNER_FACTOR_LO,
   AI_CROSSING_WINDOW_HI,
   AI_CROSSING_WINDOW_LO,
+  AI_DRAFT_CATCH,
+  AI_DRAFT_MAX_CURVATURE,
+  AI_DRAFT_PASS_CLEARANCE,
+  AI_DRAFT_PASS_TIME,
+  AI_DRAFT_SHIFT_RATE,
+  AI_DRAFT_STRAIGHT_TIME,
+  AI_DRAFT_TUCK_HI,
+  AI_DRAFT_TUCK_LO,
+  AI_DRAFT_TUCK_MIN_GAP,
   AI_DROP_MARGIN_HI,
   AI_DROP_MARGIN_LO,
   AI_JUMP_SPEED_MARGIN,
@@ -50,8 +60,13 @@ import {
   AI_REACTION_LO,
   AI_REPAIR_DETOUR,
   AI_REPAIR_WANT,
+  AI_ROUGH_LIFT_HI,
+  AI_ROUGH_LIFT_LO,
+  AI_ROUGH_RECKLESS,
   AI_SAMPLE_STEP,
   AI_SHORTCUT_HI,
+  AI_SHORTCUT_HULL_HI,
+  AI_SHORTCUT_HULL_LO,
   AI_SHORTCUT_LO,
   AI_SHORTCUT_LOOK_TIME,
   AI_SKILL_CURVE,
@@ -63,16 +78,27 @@ import {
   BRAKE_DECEL,
   CELL_VALUE,
   CORNER_PULL,
+  DRAFT_FULL,
+  DRAFT_MAX_GAP,
+  DRAFT_MIN_GAP,
+  DRAFT_SLINGSHOT_CHARGE,
   GRIP_REF,
   HANDLING_REF,
   LATERAL_RESPONSE,
+  RACER_DAMAGE_FREE_SPEED,
   RACER_HALF_WIDTH,
   RACER_LENGTH,
   RACER_RADIUS,
+  ROUGH_SAFE_SPEED,
   SIM_DT,
 } from '../data/tuning.ts';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+// Tucking in closer than the wake starts would only ever end in a rear-end.
+if (AI_DRAFT_TUCK_MIN_GAP < DRAFT_MIN_GAP) throw new Error(`AI_DRAFT_TUCK_MIN_GAP ${AI_DRAFT_TUCK_MIN_GAP} is inside the draft's DRAFT_MIN_GAP ${DRAFT_MIN_GAP}`);
+// A pull-out faster than a contact's damage-free speed would turn every rub into a ram.
+if (AI_DRAFT_SHIFT_RATE >= RACER_DAMAGE_FREE_SPEED) throw new Error(`AI_DRAFT_SHIFT_RATE ${AI_DRAFT_SHIFT_RATE} must stay under RACER_DAMAGE_FREE_SPEED ${RACER_DAMAGE_FREE_SPEED}`);
 
 interface SpeedProfiles {
   brake: Float64Array;
@@ -81,6 +107,8 @@ interface SpeedProfiles {
   loopAhead: Uint8Array;
   /** Metres of road ahead of each sample on which full boost needs no braking. */
   boostRun: Float64Array;
+  /** Fastest speed from which this driver can still be lifted to its rough-ground pace in time. */
+  rough: Float64Array;
 }
 
 function profileAt(ribbon: Ribbon, profile: Float64Array, s: number): number {
@@ -93,8 +121,16 @@ export function driverSeed(raceSeed: number, index: number): number {
 }
 
 export interface AiOptions {
-  /** Whether this driver ever takes shortcuts. */
-  shortcuts: boolean;
+  /**
+   * Which shortcuts this driver takes: none (false), its own call each lap (true), or always
+   * the one with this branch id and no other (measuring a shortcut).
+   */
+  shortcuts: boolean | string;
+  /**
+   * Overrides the driver's own feel for rough ground (measurements): 'lift' to exactly the
+   * safe speed, 'flat' never lifting. Absent, it lifts as its skill and nerve say.
+   */
+  rough?: 'lift' | 'flat';
   /** Whether this driver swerves to collect boost cells (otherwise only those on its line). */
   cellDetours: boolean;
 }
@@ -118,7 +154,11 @@ export class AiDriver {
   private readonly seen: number[] = [];
   private readonly profiles = new Map<Ribbon, SpeedProfiles>();
   /** Per branch: the lap a shortcut was last decided on and whether it is being taken. */
-  private readonly shortcut = new Map<number, { lap: number; take: boolean }>();
+  private readonly shortcut = new Map<number, { lap: number; take: boolean; reckless: boolean }>();
+  /** Seconds this driver has held a full draft: once it would charge a slingshot, pull out. */
+  private fullDraft = 0;
+  /** Where the slipstream has moved this driver off its line, metres (eased, see AI_DRAFT_SHIFT_RATE). */
+  private draftOffset = 0;
 
   constructor(skill: number, seed: number, options: AiOptions = { shortcuts: true, cellDetours: true }) {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
@@ -164,6 +204,7 @@ export class AiDriver {
       const d = ribbon.delta(st.s, p.s);
       if (d > 0 && d < lineLook && Math.abs(p.x - target) < AI_PAD_DETOUR) target = p.x;
     }
+    target = this.draftLine(st, ribbon, field, target, v);
     target = this.cellDetour(veh, ribbon, target, lineLook);
     if (st.damage >= AI_REPAIR_WANT) target = this.repairDetour(veh, ribbon, target, lineLook);
     const route = this.routeChoice(track, st, v, target);
@@ -229,7 +270,11 @@ export class AiDriver {
     const seen = ribbon.wrap(st.s + v * reaction);
     const top = currentTopSpeed(stats, st, true);
     let brake = v > Math.min(profileAt(ribbon, profiles.brake, st.s), profileAt(ribbon, profiles.brake, seen));
-    const boostRoom = top <= profileAt(ribbon, profiles.boost, seen);
+    // Rough ground: lift to this driver's pace for it in time, and never boost into it.
+    const lifts = this.options.rough !== 'flat' && !(st.branch >= 0 && this.shortcut.get(st.branch)?.reckless === true);
+    const roughCap = lifts ? Math.min(profileAt(ribbon, profiles.rough, st.s), profileAt(ribbon, profiles.rough, seen)) : Infinity;
+    if (v > roughCap) brake = true;
+    const boostRoom = top <= profileAt(ribbon, profiles.boost, seen) && top <= roughCap;
     const jump = nextJump(ribbon, st.s, (top * top) / (2 * BRAKE_DECEL) + top * reaction);
     const jumpSpeed = jump === null ? 0 : minJumpSpeed(ribbon, jump) * AI_JUMP_SPEED_MARGIN;
     // A loop ahead wants all the speed there is: stalling at its top is a wreck.
@@ -267,6 +312,73 @@ export class AiDriver {
     }
     const lane = Math.max(0, half - RACER_HALF_WIDTH - AI_WALL_MARGIN);
     return clamp(n > 0 ? curvSum / n / AI_LINE_FULL_CURVATURE : 0, -1, 1) * lane;
+  }
+
+  /** The line with the slipstream's pull on it, eased so tucking in and pulling out are never a lunge. */
+  private draftLine(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], line: number, v: number): number {
+    this.fullDraft = st.draft >= DRAFT_FULL ? this.fullDraft + SIM_DT : 0;
+    const want = this.draftAim(st, ribbon, field, line, v) - line;
+    const step = AI_DRAFT_SHIFT_RATE * SIM_DT;
+    this.draftOffset += clamp(want - this.draftOffset, -step, step);
+    return line + this.draftOffset;
+  }
+
+  /**
+   * Slipstream on a straight: tuck in behind the nearest rival ahead (aces all the way onto
+   * its line, novices hardly at all), and once the draft has charged a slingshot, or the gap
+   * would close inside AI_DRAFT_TUCK_MIN_GAP soon, pull out beside it to pass where that lane
+   * is clear. With no room, hold the own line rather than sit on its tail: a rear-end costs hull.
+   */
+  private draftAim(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], line: number, v: number): number {
+    const tuck = this.bySkill(AI_DRAFT_TUCK_LO, AI_DRAFT_TUCK_HI);
+    if (tuck <= 0 || st.airborne) return line;
+    let lead: RacerState | null = null;
+    let leadGap = Infinity;
+    for (const r of field) {
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || Math.abs(r.x - st.x) > AI_DRAFT_CATCH) continue;
+      const gap = draftGap(st, r, ribbon);
+      // A rival still overlapping us alongside counts: the pass isn't done until we're clear of it.
+      if (gap < -2 * RACER_LENGTH || gap > DRAFT_MAX_GAP || gap >= leadGap) continue;
+      lead = r;
+      leadGap = gap;
+    }
+    if (lead === null) return line;
+    const closing = st.speed - lead.speed;
+    const closingIn = leadGap < AI_DRAFT_TUCK_MIN_GAP || (closing > 0 && (leadGap - AI_DRAFT_TUCK_MIN_GAP) / closing < AI_DRAFT_PASS_TIME);
+    // Seeking a wake is for straights; getting out of one before running into it is for anywhere,
+    // because the wake works in bends too.
+    if (!closingIn && this.fullDraft < DRAFT_SLINGSHOT_CHARGE) return this.straightAhead(ribbon, st.s, v) ? line + (lead.x - line) * tuck : line;
+    // Pass: already beside it, hold that side (crossing its nose would be a ram); in line, pull
+    // out on the side of the own line (the inside of what comes next), else the other.
+    const lane = Math.max(0, ribbon.widthAt(st.s) / 2 - RACER_HALF_WIDTH - AI_WALL_MARGIN);
+    const offset = 2 * RACER_HALF_WIDTH + AI_DRAFT_PASS_CLEARANCE;
+    const beside = Math.abs(lead.x - st.x) >= 2 * RACER_HALF_WIDTH;
+    const first = beside ? Math.sign(st.x - lead.x) : line !== lead.x ? Math.sign(line - lead.x) : lead.x > 0 ? -1 : 1;
+    for (const side of beside ? [first] : [first, -first]) {
+      const x = lead.x + side * offset;
+      if (Math.abs(x) <= lane && this.laneClear(st, ribbon, field, lead, x, leadGap)) return x;
+    }
+    // Squeezed beside it, stay put rather than drift into it; in line with no room, keep the own line.
+    return beside ? st.x : line;
+  }
+
+  /** No bend sharper than AI_DRAFT_MAX_CURVATURE within AI_DRAFT_STRAIGHT_TIME of travel. */
+  private straightAhead(ribbon: Ribbon, s: number, v: number): boolean {
+    for (let d = 0; d <= v * AI_DRAFT_STRAIGHT_TIME; d += AI_SAMPLE_STEP) {
+      if (Math.abs(ribbon.curvatureAt(ribbon.wrap(s + d))) > AI_DRAFT_MAX_CURVATURE) return false;
+    }
+    return true;
+  }
+
+  /** No other racer within touching (plus the pass clearance) of `x` from just behind us to just past `lead`. */
+  private laneClear(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], lead: RacerState, x: number, leadGap: number): boolean {
+    const reach = 2 * RACER_HALF_WIDTH + AI_DRAFT_PASS_CLEARANCE;
+    for (const r of field) {
+      if (r === st || r === lead || r.branch !== st.branch || r.crashed > 0 || Math.abs(r.x - x) >= reach) continue;
+      const gap = draftGap(st, r, ribbon);
+      if (gap > -2 * RACER_LENGTH && gap < leadGap + 2 * RACER_LENGTH) return false;
+    }
+    return true;
   }
 
   /** The nearest untaken boost cell close enough to the line to be worth the swerve. */
@@ -366,7 +478,7 @@ export class AiDriver {
       if (!inJunction && (ahead < 0 || ahead > v * AI_SHORTCUT_LOOK_TIME)) continue;
       let choice = this.shortcut.get(b.index);
       if (choice === undefined || choice.lap !== st.lap) {
-        choice = { lap: st.lap, take: this.rng() < this.bySkill(AI_SHORTCUT_LO, AI_SHORTCUT_HI) };
+        choice = this.shortcutCall(b.def.id, st.lap, st.damage);
         this.shortcut.set(b.index, choice);
       }
       if (!choice.take) continue;
@@ -375,6 +487,19 @@ export class AiDriver {
       return { x: b.side * (inJunction ? half + b.def.width / 2 : half - RACER_HALF_WIDTH), crossing: inJunction };
     }
     return { x: line, crossing: false };
+  }
+
+  /**
+   * Whether to take a shortcut this lap, and whether to go through it flat out. Shortcuts are
+   * rough: a hull already past this driver's limit stays on the main road (rookies push their
+   * luck further), and rookies now and then charge through without lifting and get hurt.
+   */
+  private shortcutCall(id: string, lap: number, damage: number): { lap: number; take: boolean; reckless: boolean } {
+    if (typeof this.options.shortcuts === 'string') return { lap, take: this.options.shortcuts === id, reckless: false };
+    // Both rolls every time, so this driver's stream doesn't depend on the state of its hull.
+    const keen = this.rng() < this.bySkill(AI_SHORTCUT_LO, AI_SHORTCUT_HI);
+    const reckless = this.rng() < AI_ROUGH_RECKLESS * (1 - this.skill) ** 2;
+    return { lap, take: keen && damage < this.bySkill(AI_SHORTCUT_HULL_LO, AI_SHORTCUT_HULL_HI), reckless };
   }
 
   /**
@@ -390,9 +515,9 @@ export class AiDriver {
     // Drift = |κ|·v²·CORNER_PULL·GRIP_REF/grip must stay within a share of the steer rate.
     const budget = (this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
     const corner = ribbon.samples.map((p) => Math.sqrt((budget * p.grip) / Math.max(Math.abs(p.curvature), Number.MIN_VALUE)));
-    const envelope = (decel: number) => {
-      const n = corner.length;
-      const out = Float64Array.from(corner);
+    const envelope = (decel: number, limits: readonly number[] = corner) => {
+      const n = limits.length;
+      const out = Float64Array.from(limits);
       // A loop needs two sweeps backwards so limits propagate across the start line.
       for (let pass = 0; pass < (ribbon.closed ? 2 : 1); pass++) {
         for (let i = n - 1; i >= 0; i--) {
@@ -423,7 +548,11 @@ export class AiDriver {
         loopAhead[i] = toTop <= AI_LOOP_LOOK ? 1 : 0;
       }
     }
-    const made = { brake: envelope(BRAKE_DECEL), boost, boostRun, loopAhead };
+    // On rough ground this driver holds a share of its top speed: the safe speed when told to
+    // lift exactly, else by skill (aces just over it, rookies well over and paying for it).
+    const lift = stats.topSpeed * (this.options.rough === 'lift' ? ROUGH_SAFE_SPEED : this.bySkill(AI_ROUGH_LIFT_LO, AI_ROUGH_LIFT_HI));
+    const rough = envelope(BRAKE_DECEL, ribbon.samples.map((p) => (p.rough > 0 ? lift : Infinity)));
+    const made = { brake: envelope(BRAKE_DECEL), boost, boostRun, loopAhead, rough };
     this.profiles.set(ribbon, made);
     return made;
   }

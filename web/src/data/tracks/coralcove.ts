@@ -81,8 +81,10 @@ export const coralcove: TrackDef = {
         { x: 1100, z: -2300, y: 3 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.26, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 3.5, lateral: 0 },
+        // Dead coral rubble, coral heads to thread, then a squeeze.
+        { kind: 'rough', from: 2.4, to: 2.9, amount: 1 },
+        { kind: 'boulders', from: 3.2, to: 3.8, count: 4, radius: 1.4 },
+        { kind: 'narrow', from: 4.0, to: 4.8, width: 18 },
       ],
     },
   ],

@@ -11,7 +11,7 @@ import type { UpgradeLevels } from '../data/upgrades.ts';
 import type { UpgradeId } from '../core/types.ts';
 import { racePayout } from './economy.ts';
 import type { Payout } from './economy.ts';
-import { PLAYER_NAME, championshipGrid, playerEntrant, quickRaceGrid } from './opponents.ts';
+import { PLAYER_NAME, championshipGrid, fieldEdge, playerEntrant, quickRaceGrid } from './opponents.ts';
 import { APPLIED_RACE_MEMORY, freshSave, loadSave, writeSave } from './save.ts';
 import type { KeyValueStore, SaveData } from './save.ts';
 import type { RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
@@ -214,6 +214,11 @@ export class Career {
 
   private nextRaceId(): string {
     return `race-${this.save.raceSerial}`;
+  }
+
+  /** How much faster the cup's field is than the selected glider (0 when it isn't); see fieldEdge. */
+  fieldEdge(cup: CupDef): number {
+    return fieldEdge(cup, this.player());
   }
 
   private player() {

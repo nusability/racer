@@ -103,3 +103,33 @@ export const simFigure8: TrackDef = {
   branches: [],
   palette: simTestTrack.palette,
 };
+
+/**
+ * A long flat oval with nothing on it, for the slipstream check: nothing but the wake can
+ * change the gap between two racers. Collinear control points make the middle of the first
+ * straight exactly straight (a spline bows a segment whose neighbours are off its line).
+ */
+export const simDraftOval: TrackDef = {
+  id: 'simdraft',
+  name: 'Sim Draft Oval',
+  blurb: 'Synthetic oval with long featureless straights.',
+  difficulty: 1,
+  laps: 1,
+  seed: 77,
+  width: 30,
+  runoff: 20,
+  points: [
+    { x: 0, z: 0, y: 0 },
+    { x: 0, z: -1000, y: 0 },
+    { x: 0, z: -2000, y: 0 },
+    { x: 0, z: -3000, y: 0 },
+    { x: 0, z: -4000, y: 0 },
+    { x: 600, z: -4600, y: 0 },
+    { x: 1200, z: -4000, y: 0 },
+    { x: 1200, z: 0, y: 0 },
+    { x: 600, z: 600, y: 0 },
+  ],
+  features: [],
+  branches: [],
+  palette: simTestTrack.palette,
+};

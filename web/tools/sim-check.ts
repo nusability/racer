@@ -11,11 +11,13 @@ import { RACERS, racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
+import { Slipstream } from '../src/core/slipstream.ts';
+import { Vehicle } from '../src/core/vehicle.ts';
 import { minJumpSpeed } from '../src/core/jumps.ts';
 import { currentTopSpeed } from '../src/core/handling.ts';
-import { SIM_DT } from '../src/data/tuning.ts';
+import { DRAFT_FULL, DRAFT_TOP_SPEED, RACER_LENGTH, SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
-import { simFigure8, simTestTrack } from './sim-test-track.ts';
+import { simDraftOval, simFigure8, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
 
 // The project has no Node typings (the web build must not see them); this is all we use.
@@ -199,6 +201,154 @@ for (const def of defs) {
     report(track, run(track, def.laps, SEED, Array.from({ length: FIELD }, (_, i) => entrant(i, starter, spread(i, FIELD, SKILL_LO, SKILL_HI), false)), null));
   }
 }
+
+/** Where on the draft oval's dead-straight stretch the slipstream check starts, metres along s. */
+const DRAFT_CHECK_S = 1100;
+const DRAFT_CHECK_SECONDS = 3;
+/** Bumper-to-bumper gap the follower starts at: well inside the wake. */
+const DRAFT_CHECK_GAP = 12;
+/** Past the far edge of the wake. */
+const DRAFT_CHECK_FAR_GAP = 60;
+/** Lateral offset that is clear of the wake. */
+const DRAFT_CHECK_ASIDE = 5;
+/** A tucked-in follower must gain at least this much on an equal leader, metres. */
+const DRAFT_CHECK_MIN_GAIN = 3;
+/** Out of the wake, equal racers' gap may drift at most this much, metres. */
+const DRAFT_CHECK_DRIFT = 0.05;
+/** In the slingshot run, the follower pulls out after this long tucked in, seconds. */
+const DRAFT_CHECK_PULL_OUT = 1.5;
+
+interface DraftRun {
+  gain: number;
+  maxDraft: number;
+  slingshots: number;
+  /** Most the follower's top-speed bonus held at, from the first step out of the wake on. */
+  slipAfterPullOut: number;
+  tankGain: number;
+}
+
+/**
+ * Two equal starters at top speed on a featureless straight, driven by nothing but the real
+ * Vehicle and Slipstream: what does the wake alone do to the gap?
+ */
+function draftRun(track: Track, gap: number, x: number, pullOutAt: number | null): DraftRun {
+  const stats = effectiveStats(racerById(STARTER), noUpgrades());
+  const leader = new Vehicle('lead', stats, track, DRAFT_CHECK_S + gap + RACER_LENGTH, 0, 0, 1);
+  const follower = new Vehicle('chase', stats, track, DRAFT_CHECK_S, x, 0, 2);
+  const vehicles = [leader, follower];
+  for (const v of vehicles) v.state.speed = stats.topSpeed;
+  const slip = new Slipstream(vehicles.length);
+  const gap0 = track.delta(follower.state.s, leader.state.s);
+  const res: DraftRun = { gain: 0, maxDraft: 0, slingshots: 0, slipAfterPullOut: 0, tankGain: 0 };
+  let out = false;
+  for (let t = 0; t < DRAFT_CHECK_SECONDS; t += SIM_DT) {
+    if (pullOutAt !== null && t >= pullOutAt) follower.targetX = DRAFT_CHECK_ASIDE;
+    const events: RaceEvent[] = [];
+    slip.step(vehicles, track, events);
+    res.slingshots += events.filter((e) => e.type === 'slingshot' && e.id === 'chase').length;
+    if (res.slingshots > 0) out = true;
+    if (out) res.slipAfterPullOut = Math.max(res.slipAfterPullOut, follower.slip);
+    for (const v of vehicles) v.step(IDLE, track, [], t, events);
+    res.maxDraft = Math.max(res.maxDraft, follower.state.draft);
+  }
+  res.gain = gap0 - track.delta(follower.state.s, leader.state.s);
+  res.tankGain = follower.state.boost - leader.state.boost;
+  return res;
+}
+
+function slipstreamCheck() {
+  const track = new Track(simDraftOval);
+  const tucked = draftRun(track, DRAFT_CHECK_GAP, 0, null);
+  const aside = draftRun(track, DRAFT_CHECK_GAP, DRAFT_CHECK_ASIDE, null);
+  const far = draftRun(track, DRAFT_CHECK_FAR_GAP, 0, null);
+  const sling = draftRun(track, DRAFT_CHECK_GAP, 0, DRAFT_CHECK_PULL_OUT);
+  console.log(
+    `\nslipstream (equal starters, ${DRAFT_CHECK_SECONDS} s): tucked in gains ${tucked.gain.toFixed(1)} m (draft ${tucked.maxDraft.toFixed(2)}, ` +
+      `tank +${tucked.tankGain.toFixed(3)}), aside ${aside.gain.toFixed(2)} m, ${DRAFT_CHECK_FAR_GAP} m back ${far.gain.toFixed(2)} m; ` +
+      `pulled out: ${sling.slingshots} slingshot(s), bonus held ${sling.slipAfterPullOut.toFixed(3)}`,
+  );
+  if (tucked.gain < DRAFT_CHECK_MIN_GAIN) fail(`slipstream: a tucked-in follower gained only ${tucked.gain.toFixed(2)} m`);
+  if (tucked.maxDraft < DRAFT_FULL) fail(`slipstream: draft never got full (${tucked.maxDraft.toFixed(2)})`);
+  if (!(tucked.tankGain > 0)) fail('slipstream: drafting did not top up the tank');
+  if (Math.abs(aside.gain) > DRAFT_CHECK_DRIFT || aside.maxDraft > 0) fail(`slipstream: a follower out of the wake drafted (gap moved ${aside.gain.toFixed(2)} m)`);
+  if (Math.abs(far.gain) > DRAFT_CHECK_DRIFT || far.maxDraft > 0) fail(`slipstream: a follower beyond the wake drafted (gap moved ${far.gain.toFixed(2)} m)`);
+  if (sling.slingshots !== 1) fail(`slipstream: pulling out of a full draft gave ${sling.slingshots} slingshots`);
+  if (sling.slipAfterPullOut < DRAFT_TOP_SPEED) fail(`slipstream: the slingshot bonus did not hold (${sling.slipAfterPullOut.toFixed(3)})`);
+}
+
+if (only.length === 0 || only.includes(simDraftOval.id)) slipstreamCheck();
+
+/** Rough ground laid on the draft oval's first straight (params 1..3 run from 1000 to 3000 m). */
+const ROUGH_CHECK_FROM = 1.2;
+const ROUGH_CHECK_TO = 1.6;
+/** Where each rough run starts, metres along s, and where it is judged: clear of the stretch both sides. */
+const ROUGH_CHECK_START = 1000;
+const ROUGH_CHECK_END = 1800;
+/** Flat out (top speed, no boost) over that 400 m must cost at least this much hull... */
+const ROUGH_CHECK_MIN_FAST = 0.3;
+/** ...boost held must cost at least this many times more... */
+const ROUGH_CHECK_BOOST_RATIO = 1.5;
+/** ...and held at this share of top speed (under the safe speed), at most this much. */
+const ROUGH_CHECK_SLOW_SHARE = 0.65;
+const ROUGH_CHECK_MAX_SLOW = 0.005;
+/** Doubled armour must halve the bill to within this fraction. */
+const ROUGH_CHECK_ARMOUR_TOLERANCE = 0.1;
+
+interface RoughRun {
+  damage: number;
+  jolts: number;
+  rough: number;
+  wrecked: boolean;
+  fingerprint: string;
+}
+
+/** One starter over the stretch, driven by nothing but the real Vehicle: flat out, boosted or held slow. */
+function roughRun(track: Track, mode: 'fast' | 'boost' | 'slow', armor: number): RoughRun {
+  const stats = { ...effectiveStats(racerById(STARTER), noUpgrades()), armor };
+  const v = new Vehicle('rough', stats, track, ROUGH_CHECK_START, 0, 0, SEED);
+  v.state.speed = mode === 'slow' ? stats.topSpeed * ROUGH_CHECK_SLOW_SHARE : stats.topSpeed;
+  v.state.boost = 1;
+  const res: RoughRun = { damage: 0, jolts: 0, rough: 0, wrecked: false, fingerprint: '' };
+  for (let t = 0; v.state.s < ROUGH_CHECK_END && v.state.crashed <= 0; t += SIM_DT) {
+    const brake = mode === 'slow' && v.state.speed > stats.topSpeed * ROUGH_CHECK_SLOW_SHARE;
+    const events: RaceEvent[] = [];
+    v.step({ steer: 0, nudge: 0, brake, boost: mode === 'boost' }, track, [], t, events);
+    res.jolts += events.filter((e) => e.type === 'jolt').length;
+    res.rough += events.filter((e) => e.type === 'rough').length;
+  }
+  res.damage = v.state.damage;
+  res.wrecked = v.state.crashed > 0;
+  res.fingerprint = JSON.stringify(v.state);
+  return res;
+}
+
+function roughCheck() {
+  const track = new Track({
+    ...simDraftOval,
+    id: 'simrough',
+    features: [...simDraftOval.features, { kind: 'rough', from: ROUGH_CHECK_FROM, to: ROUGH_CHECK_TO, amount: 1 }],
+  });
+  const fast = roughRun(track, 'fast', 1);
+  const again = roughRun(track, 'fast', 1);
+  const boost = roughRun(track, 'boost', 1);
+  const slow = roughRun(track, 'slow', 1);
+  const armoured = roughRun(track, 'fast', 2);
+  const pct = (r: RoughRun) => `${(r.damage * 100).toFixed(1)}%${r.wrecked ? ' (wrecked)' : ''}`;
+  console.log(
+    `
+rough ground (400 m, stock starter): flat out ${pct(fast)} hull, ${fast.jolts} jolts; boost held ${pct(boost)}; ` +
+      `held at ${ROUGH_CHECK_SLOW_SHARE * 100}% top speed ${pct(slow)}, ${slow.jolts} jolts; armour 2 flat out ${pct(armoured)}`,
+  );
+  if (fast.rough === 0) fail('rough: the stretch never reported rough ground');
+  if (fast.damage < ROUGH_CHECK_MIN_FAST) fail(`rough: flat out cost only ${pct(fast)} hull`);
+  if (fast.jolts === 0) fail('rough: flat out never jolted');
+  if (!(boost.damage >= fast.damage * ROUGH_CHECK_BOOST_RATIO || boost.wrecked)) fail(`rough: boosting cost ${pct(boost)}, not ${ROUGH_CHECK_BOOST_RATIO}x flat out`);
+  if (slow.damage > ROUGH_CHECK_MAX_SLOW || slow.jolts > 0) fail(`rough: under the safe speed it still cost ${pct(slow)} and ${slow.jolts} jolts`);
+  if (Math.abs(armoured.damage * 2 - fast.damage) > fast.damage * ROUGH_CHECK_ARMOUR_TOLERANCE) fail(`rough: armour 2 cost ${pct(armoured)} against ${pct(fast)}`);
+  if (fast.fingerprint !== again.fingerprint) fail('rough: two identical runs diverged (the jolts must be seeded)');
+}
+
+if (only.length === 0 || only.includes('simrough')) roughCheck();
 
 // Cup balance: the real rival fields against stand-in players (skipped for single-track runs).
 if (only.length === 0 || args.includes('--cups')) allCupStudies();

@@ -15,7 +15,7 @@ import { ChaseCamera } from '../render/chaseCamera.ts';
 import { Effects } from '../render/effects.ts';
 import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
 import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } from '../render/racerPose.ts';
-import { SpeedLines } from '../render/speedLines.ts';
+import { DRAFT_STREAKS, SpeedLines } from '../render/speedLines.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/trackScene.ts';
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
@@ -48,6 +48,9 @@ import {
   SESSION_OFFROAD_DUST,
   SESSION_MAX_FRAME_DT,
   SESSION_SHAKE_HIT,
+  SESSION_SHAKE_JOLT,
+  SESSION_SHAKE_ROUGH,
+  SESSION_JOLT_IMPACT,
   SESSION_SHAKE_LAND,
   SESSION_SHAKE_SCRAPE,
 } from './sessionTuning.ts';
@@ -107,6 +110,8 @@ export class RaceSession {
   private readonly cam: ChaseCamera;
   private readonly effects: Effects;
   private readonly speedLines: SpeedLines;
+  /** The wake streaming round the player's craft while it drafts. */
+  private readonly draftLines: SpeedLines;
   private readonly hud: Hud;
   private readonly input: InputSource;
   private readonly hudRoot: HTMLElement;
@@ -115,6 +120,8 @@ export class RaceSession {
   private countdown: number | null = null;
   private countdownClearAt = 0;
   private scrapeLevel = 0;
+  /** How hard rough ground battered the player this frame, for the rumble loop. */
+  private roughLevel = 0;
   private shownBranch = -1;
   private readonly minimap: Minimap;
   private readonly dotColors: string[];
@@ -184,6 +191,7 @@ export class RaceSession {
     this.scene.add(this.cam.camera);
     this.effects = new Effects(this.scene, ctx.settings.quality);
     this.speedLines = new SpeedLines(this.cam.camera);
+    this.draftLines = new SpeedLines(this.cam.camera, DRAFT_STREAKS);
 
     this.hudRoot = document.createElement('div');
     this.hudRoot.className = 'race-layer';
@@ -339,6 +347,24 @@ export class RaceSession {
         }
         return;
       }
+      case 'rough':
+        if (ev.id === pid) {
+          this.cam.addShake(SESSION_SHAKE_ROUGH * ev.intensity);
+          this.roughLevel = Math.max(this.roughLevel, ev.intensity);
+        }
+        return;
+      case 'jolt': {
+        const i = this.indexOf(ev.id);
+        if (this.nearCamera(i)) {
+          this.worldPos(i, this.tmpPos);
+          this.effects.landing(this.tmpPos, ev.intensity * SESSION_JOLT_IMPACT);
+        }
+        if (ev.id === pid) {
+          audio.oneShot('hit', ev.intensity * SESSION_JOLT_IMPACT);
+          this.cam.addShake(SESSION_SHAKE_JOLT * ev.intensity);
+        }
+        return;
+      }
       case 'hit':
         this.views[this.indexOf(ev.id)].lastHit = ev.kind;
         if (ev.id === pid) {
@@ -429,6 +455,12 @@ export class RaceSession {
       case 'offroad':
         this.views[this.indexOf(ev.id)].offroad = ev.on;
         return;
+      case 'slingshot':
+        if (ev.id === pid) {
+          audio.oneShot('slingshot');
+          this.hud.flash('SLINGSHOT!');
+        }
+        return;
     }
   }
 
@@ -513,6 +545,8 @@ export class RaceSession {
     }
     this.minimap.update(this.race.racers, pi, this.dotColors);
     this.speedLines.update(dt, Math.max(0, Math.min(1, (speedFrac - 0.45) * 1.6)) + (p.boosting ? 0.35 : 0));
+    // A wrecked player has no wake to ride; its draft only decays in the sim.
+    this.draftLines.update(dt, this.playerWreck ? 0 : p.draft);
     this.effects.update(dt, this.cam.camera);
     // Hazards run on race time: the scene must show exactly what the simulation collides with.
     this.trackScene.update(this.race.time, this.cam.camera.position);
@@ -522,6 +556,9 @@ export class RaceSession {
       this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne, style: this.playerStyle, surface });
       this.ctx.audio.wind(Math.min(1, speedFrac));
       this.ctx.audio.scrapeLoop(this.scrapeLevel);
+      this.ctx.audio.rumbleLoop(this.roughLevel);
+      this.roughLevel = 0;
+      this.ctx.audio.draft(p.draft);
       this.scrapeLevel = 0;
     }
     // The world keeps sounding through the wreck cinematic; hazards run on race time.
@@ -540,6 +577,7 @@ export class RaceSession {
       boost: p.boost,
       damage: p.damage,
       boosting: p.boosting,
+      draft: p.draft,
       countdown: this.countdown,
       finished: p.finishTime !== null,
     });
@@ -591,6 +629,7 @@ export class RaceSession {
     this.hud.dispose();
     this.hudRoot.remove();
     this.speedLines.dispose();
+    this.draftLines.dispose();
     this.effects.dispose();
     for (const v of this.views) v.model.dispose();
     this.trackScene.dispose();

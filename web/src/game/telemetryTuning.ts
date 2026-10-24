@@ -1,7 +1,7 @@
 // Race telemetry settings (src/game/telemetry.ts).
 
 /** Bump when the log shape changes; older logs on the device are then ignored. */
-export const TELEMETRY_VERSION = 1;
+export const TELEMETRY_VERSION = 2;
 export const TELEMETRY_KEY = 'mirage-racer.telemetry';
 /** Races kept on the device. */
 export const TELEMETRY_KEEP = 10;

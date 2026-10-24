@@ -89,18 +89,18 @@ export const devilsteeth: TrackDef = {
       runoff: 0,
       points: [
         { x: 1650, z: -1250, y: 8 },
-        { x: 2000, z: -1100, y: 6 },
-        { x: 2300, z: -900, y: 5 },
+        { x: 2051, z: -1162, y: 6 },
+        { x: 2249, z: -838, y: 5 },
         { x: 2520, z: -700, y: 4 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.20, lateral: 0, count: 4, spacing: 28 },
+        // The fangs to slalom, then broken teeth underfoot.
         { kind: 'pillar', at: 2.6, lateral: -4, radius: 2 },
         { kind: 'pillar', at: 2.9, lateral: 4, radius: 2 },
         { kind: 'pillar', at: 3.2, lateral: -4, radius: 2 },
         { kind: 'pillar', at: 3.5, lateral: 4, radius: 2 },
         { kind: 'pillar', at: 3.8, lateral: -3.5, radius: 2 },
-        { kind: 'boostPad', at: 4.5, lateral: 0 },
+        { kind: 'rough', from: 4.0, to: 5.2, amount: 0.8 },
       ],
     },
   ],

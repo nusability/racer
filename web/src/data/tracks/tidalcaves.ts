@@ -118,9 +118,11 @@ export const tidalcaves: TrackDef = {
         { x: -1000, z: -660, y: 9 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.48, lateral: 0, count: 4, spacing: 28 },
+        // A rock-strewn cave floor either side of the pillar.
         { kind: 'tunnel', from: 1.6, to: 4.4, ceiling: 11 },
         { kind: 'pillar', at: 3.2, lateral: -4, radius: 1.8 },
+        { kind: 'rough', from: 2.2, to: 3.0, amount: 1 },
+        { kind: 'rough', from: 3.4, to: 3.8, amount: 1 },
       ],
     },
   ],

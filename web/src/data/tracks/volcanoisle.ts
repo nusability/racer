@@ -89,16 +89,17 @@ export const volcanoisle: TrackDef = {
         { x: 1080, z: -1810, y: 59 },
         { x: 1270, z: -1680, y: 62 },
         { x: 1500, z: -1400, y: 64 },
-        { x: 1750, z: -1050, y: 66 },
-        { x: 1950, z: -650, y: 62 },
+        { x: 1640, z: -982, y: 66 },
+        { x: 2060, z: -718, y: 62 },
         { x: 2150, z: -330, y: 56 },
         { x: 2300, z: -235, y: 50 },
       ],
       features: [
-        { kind: 'boostCells', at: 4.71, lateral: 0, count: 4, spacing: 28 },
+        // Cooled lava crust out of the tube, then fallen blocks.
         { kind: 'tunnel', from: 2.8, to: 4.6, ceiling: 11 },
         { kind: 'pillar', at: 3.7, lateral: 4, radius: 1.8 },
-        { kind: 'boostPad', at: 5.0, lateral: 0 },
+        { kind: 'rough', from: 5.0, to: 6.0, amount: 0.6 },
+        { kind: 'boulders', from: 6.3, to: 6.9, count: 4, radius: 1.4 },
       ],
     },
     {
@@ -116,9 +117,9 @@ export const volcanoisle: TrackDef = {
         { x: 2360, z: 620, y: 4 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.54, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 2.95, lateral: 0 },
+        // The leap lands on broken basalt.
         { kind: 'jump', at: 3.2, rampLength: 60, rampHeight: 4, gapLength: 40 },
+        { kind: 'rough', from: 4.2, to: 5.1, amount: 1 },
       ],
     },
   ],

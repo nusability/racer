@@ -127,9 +127,9 @@ export const mirageh: TrackDef = {
         { x: 3150, z: -474, y: 83 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.96, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 2.4, lateral: 0 },
+        // A crumbling cliff road: every jolt is toward an open edge.
         { kind: 'drop', from: 2.6, to: 6.6 },
+        { kind: 'rough', from: 3.2, to: 5.0, amount: 0.9 },
       ],
     },
   ],

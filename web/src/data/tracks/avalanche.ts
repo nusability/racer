@@ -118,10 +118,9 @@ export const avalanche: TrackDef = {
         { x: 2375, z: -1570, y: 57 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.22, lateral: 0, count: 4, spacing: 28 },
+        // Avalanche debris along the open col.
         { kind: 'drop', from: 2.2, to: 7.0 },
-        { kind: 'boostPad', at: 2.3, lateral: 0 },
-        { kind: 'boostPad', at: 6.6, lateral: 0 },
+        { kind: 'rough', from: 3.0, to: 4.8, amount: 0.95 },
       ],
     },
   ],
