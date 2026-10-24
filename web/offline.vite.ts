@@ -4,7 +4,7 @@
 // the browser installs it in the background when online and drops the old one, so players never
 // run a mix of two builds.
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import type { Plugin, ResolvedConfig } from 'vite';
 
 /** Files the worker must not cache: itself (the browser fetches it fresh to look for updates). */
@@ -26,7 +26,8 @@ export function offline(build: string): Plugin {
       config = c;
     },
     closeBundle() {
-      const outDir = join(config.root, config.build.outDir);
+      // resolve, not join: an absolute outDir (a build outside the project) stays as given.
+      const outDir = resolve(config.root, config.build.outDir);
       const files = listFiles(outDir)
         .map((f) => relative(outDir, f).split(sep).join('/'))
         .filter((f) => !NOT_CACHED.has(f))

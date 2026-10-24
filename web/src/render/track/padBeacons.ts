@@ -1,41 +1,58 @@
-// Holographic chevrons hovering over each boost pad. A pad lies flat on the road, so from the
-// low chase camera it foreshortens to a sliver until it is already under the nose; upright
-// chevrons at head height, flanked by two tall light posts, read from far away and say
-// "this way, now". They are light only:
-// racers fly straight through them.
+// A stack of glowing, downward-pointing chevrons floating over each boost pad's leading
+// section. A pad lies flat on the road, so from the low chase camera it foreshortens to a
+// sliver until it is already under the nose; a tall stack of "V"s at head height reads from far
+// away, and blinking top to bottom in quick sequence it says "down, onto this pad". They are
+// solid prisms rather than flat cut-outs, so they keep their shape seen from the side and in
+// banked corners, and they are light only: racers fly straight through them.
+//
+// No light posts: the stack stands as tall as they did and glows, so it already shows over a
+// crest or round a bend; posts only cluttered the silhouette.
+//
+// Every chevron on every ribbon is one mesh and one draw call. The bob and the blink run in the
+// vertex shader off one time uniform, so a frame costs no CPU geometry work.
 
 import * as THREE from 'three';
 import type { Ribbon } from '../../core/track.ts';
-import { SmoothBuilder } from './builder.ts';
 
-/** Chevrons per pad, spread along it from its leading edge. */
-const BEACON_COUNT = 3;
-/** Metres between chevrons along the pad (the pad is 24 m long). */
-const BEACON_SPACING = 7;
-/** Height of the chevron's lowest point above the road: above a craft's canopy, below tunnel roofs. */
-const BEACON_BASE = 2.5;
-/** Apex height above the base. */
-const BEACON_RISE = 2.6;
-/** Thickness of a chevron arm, measured vertically. */
-const BEACON_THICKNESS = 0.95;
-/** Share of the pad's width a chevron spans: a little wider than the pad, so it reads from afar. */
-const BEACON_WIDTH_SHARE = 1.15;
+/** Chevrons per stack. */
+const CHEVRON_COUNT = 3;
+/** Metres from the pad's leading edge to the stack: over the pad, where the racer should aim. */
+const STACK_INSET = 3;
+/** Height of the lowest chevron's point above the road: clear of a craft's canopy. */
+const STACK_BASE = 3;
+/** Vertical distance between stacked chevrons: about two arm thicknesses, so they nest with a clear gap. */
+const CHEVRON_PITCH = 1.9;
+/** Span of a chevron as a share of the pad's width: a little wider than the pad, so it frames it. */
+const CHEVRON_WIDTH_SHARE = 1.15;
+/** How far the point hangs below the tips: a "V" of about 120°, wide enough to read as one shape from 150 m. */
+const CHEVRON_DROP = 2.5;
+/** Thickness of an arm, measured vertically. */
+const CHEVRON_THICKNESS = 0.9;
+/** Depth of the prism along the road: enough to stay a solid shape seen edge-on from the side. */
+const CHEVRON_DEPTH = 0.9;
+/** Headroom kept under a tunnel ceiling: a stack that would reach it is squeezed down to fit. */
+const CEILING_MARGIN = 1;
+
+/** The pad's cyan, saturated: a pale glow vanishes against sunlit sand and sky, a saturated hue does not. */
+const BEACON_COLOR = new THREE.Color(0x12d8ff);
 /**
- * The pad's cyan, saturated: a pale or additive glow vanishes against sunlit sand and sky,
- * a solid saturated hue does not.
+ * Brightness of a chevron at the peak of its blink: well above every world's bloom threshold
+ * (the brightest is 1.5, sunlit snow), so the lit chevron flares on the look pass.
  */
-const BEACON_COLOR = 0x12d8ff;
-/** Mostly solid; a little see-through so it still feels like a hologram. */
-const BEACON_OPACITY = 0.9;
-/** Light posts at the pad's corners: tall enough to show over a crest or a bend from far away. */
-const POST_HEIGHT = 9;
-const POST_WIDTH = 0.8;
-/** Pulses per second running forward through a pad's chevrons. */
-const BEACON_PULSE_RATE = 1.6;
-/** Brightness between pulses, so a chevron never vanishes. */
-const BEACON_DIM = 0.55;
-/** Pulse texture resolution; only its 1D profile matters. */
-const PULSE_TEXELS = 64;
+const BLINK_PEAK = 3.2;
+/** Brightness between blinks, so a chevron never vanishes: still a solid cyan by day, a glow at night. */
+const BLINK_DIM = 1.1;
+/** Seconds for the light to run once down the stack: quick enough to read as motion, not as three lamps. */
+const BLINK_PERIOD = 0.6;
+/** Gentle bob of the whole stack along the road's up, metres, and its rate (Hz). */
+const BOB_AMPLITUDE = 0.35;
+const BOB_RATE = 0.8;
+
+/** Face shading: the faces toward and away from the racer brightest, the arms' edges darker, so the prism reads as solid. */
+const SHADE_CAP = 1;
+const SHADE_TOP = 0.75;
+const SHADE_UNDER = 0.5;
+const SHADE_END = 0.85;
 
 export interface PadBeacons {
   mesh: THREE.Mesh | null;
@@ -43,89 +60,129 @@ export interface PadBeacons {
   dispose(): void;
 }
 
-/**
- * Each chevron's vertices share one u (its place in the row), sampled from a scrolling 1D
- * pulse texture: the row lights up front-to-back like runway lights without per-frame CPU work.
- */
+/** Chevron outline in (lateral, height) around its point, counter-clockwise from the lower left tip. */
+function outline(half: number): [number, number][] {
+  const t = CHEVRON_THICKNESS;
+  const d = CHEVRON_DROP;
+  return [
+    [-half, d],
+    [0, 0],
+    [half, d],
+    [half, d + t],
+    [0, t],
+    [-half, d + t],
+  ];
+}
+
+/** Shade of the wall along outline edge i → i+1: lower edges face down, upper edges up, tips sideways. */
+const EDGE_SHADE = [SHADE_UNDER, SHADE_UNDER, SHADE_END, SHADE_TOP, SHADE_TOP, SHADE_END];
+
 export function buildPadBeacons(ribbons: readonly Ribbon[]): PadBeacons {
-  const b = new SmoothBuilder();
-  const white = new THREE.Color(1, 1, 1);
+  const pos: number[] = [];
+  const col: number[] = [];
+  /** xyz: the road's up at the pad (the bob's direction); w: the chevron's place in the blink, 0 at the top. */
+  const beacon: number[] = [];
+  const c = new THREE.Color();
   for (const r of ribbons) {
     for (const p of r.boostPads) {
-      const half = (p.width * BEACON_WIDTH_SHARE) / 2;
-      for (let i = 0; i < BEACON_COUNT; i++) {
-        const s = p.s - p.length / 2 + i * BEACON_SPACING;
-        // Later chevrons sit later in the pulse, so the light runs the way the racer goes.
-        const u = -i / BEACON_COUNT;
-        const at = (x: number, y: number) => b.vertex(r.toWorld(s, p.x + x, y), white, u, 0);
-        const lo = BEACON_BASE;
-        const top = BEACON_BASE + BEACON_RISE;
-        // Two arms meeting at the apex: outer edge then inner edge, left tip → apex → right tip.
-        const a0 = at(-half, lo);
-        const a1 = at(-half, lo + BEACON_THICKNESS);
-        const a2 = at(0, top);
-        const a3 = at(0, top + BEACON_THICKNESS);
-        const a4 = at(half, lo);
-        const a5 = at(half, lo + BEACON_THICKNESS);
-        b.tri(a0, a2, a3);
-        b.tri(a0, a3, a1);
-        b.tri(a2, a4, a5);
-        b.tri(a2, a5, a3);
-      }
-      // Posts at the pad's leading corners, lit with the first chevron.
-      const s0 = p.s - p.length / 2;
-      for (const side of [-1, 1]) {
-        const x = p.x + side * half;
-        const at = (dx: number, y: number) => b.vertex(r.toWorld(s0, x + dx, y), white, 0, 0);
-        const q0 = at(-POST_WIDTH / 2, 0);
-        const q1 = at(POST_WIDTH / 2, 0);
-        const q2 = at(POST_WIDTH / 2, POST_HEIGHT);
-        const q3 = at(-POST_WIDTH / 2, POST_HEIGHT);
-        b.tri(q0, q1, q2);
-        b.tri(q0, q2, q3);
+      const sc = p.s - p.length / 2 + STACK_INSET;
+      const up = r.frameAt(sc).up;
+      const shape = outline((p.width * CHEVRON_WIDTH_SHARE) / 2);
+      const stackTop = STACK_BASE + (CHEVRON_COUNT - 1) * CHEVRON_PITCH + CHEVRON_DROP + CHEVRON_THICKNESS + BOB_AMPLITUDE;
+      const room = r.ceilingAt(sc) - CEILING_MARGIN;
+      // Under a low ceiling the stack's heights shrink about the road; in the open it keeps its size.
+      const squeeze = Math.min(1, room / stackTop);
+      if (squeeze <= 0) throw new Error(`pad beacons: the ceiling at s=${sc.toFixed(0)} leaves no room for a chevron stack`);
+      for (let k = 0; k < CHEVRON_COUNT; k++) {
+        const base = STACK_BASE + k * CHEVRON_PITCH;
+        const slot = CHEVRON_COUNT - 1 - k;
+        const at = (i: number, ds: number) => {
+          const [x, y] = shape[i];
+          return r.toWorld(sc + ds, p.x + x, (base + y) * squeeze);
+        };
+        const tri = (a: THREE.Vector3Like, b: THREE.Vector3Like, d: THREE.Vector3Like, shade: number) => {
+          c.copy(BEACON_COLOR).multiplyScalar(shade);
+          for (const v of [a, b, d]) {
+            pos.push(v.x, v.y, v.z);
+            col.push(c.r, c.g, c.b);
+            beacon.push(up.x, up.y, up.z, slot);
+          }
+        };
+        const front = (i: number) => at(i, -CHEVRON_DEPTH / 2);
+        const back = (i: number) => at(i, CHEVRON_DEPTH / 2);
+        // The two caps, each as two arm quads.
+        for (const face of [front, back]) {
+          tri(face(0), face(1), face(4), SHADE_CAP);
+          tri(face(0), face(4), face(5), SHADE_CAP);
+          tri(face(1), face(2), face(3), SHADE_CAP);
+          tri(face(1), face(3), face(4), SHADE_CAP);
+        }
+        // The walls round the outline.
+        for (let i = 0; i < shape.length; i++) {
+          const j = (i + 1) % shape.length;
+          tri(front(i), front(j), back(j), EDGE_SHADE[i]);
+          tri(front(i), back(j), back(i), EDGE_SHADE[i]);
+        }
       }
     }
   }
-  const geo = b.build(true);
-  const tex = pulseTexture();
-  const mat = new THREE.MeshBasicMaterial({
-    color: BEACON_COLOR,
-    map: tex,
-    transparent: true,
-    opacity: BEACON_OPACITY,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const mesh = geo ? new THREE.Mesh(geo, mat) : null;
-  if (mesh) {
+  const uniforms = {
+    uTime: { value: 0 },
+    uBob: { value: BOB_AMPLITUDE },
+    uBobOmega: { value: 2 * Math.PI * BOB_RATE },
+    uBlinkRate: { value: 1 / BLINK_PERIOD },
+    uBlinkPeak: { value: BLINK_PEAK },
+    uBlinkDim: { value: BLINK_DIM },
+    uSlots: { value: CHEVRON_COUNT },
+  };
+  // Closed prisms, but double-sided so the winding of the ribbon's frame never matters.
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+attribute vec4 aBeacon;
+uniform float uTime;
+uniform float uBob;
+uniform float uBobOmega;
+uniform float uBlinkRate;
+uniform float uBlinkPeak;
+uniform float uBlinkDim;
+uniform float uSlots;`,
+      )
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += aBeacon.xyz * (uBob * sin(uTime * uBobOmega));')
+      .replace(
+        '#include <color_vertex>',
+        // The flash runs down the stack: slot 0 (the top) lights first, then each one below,
+        // each fading over the rest of the cycle with a cubic tail.
+        `#include <color_vertex>
+float since = fract(uTime * uBlinkRate - aBeacon.w / uSlots);
+vColor.rgb *= mix(uBlinkDim, uBlinkPeak, pow(1.0 - since, 3.0));`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'padBeacons';
+  let geo: THREE.BufferGeometry | null = null;
+  let mesh: THREE.Mesh | null = null;
+  if (pos.length > 0) {
+    geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('aBeacon', new THREE.Float32BufferAttribute(beacon, 4));
+    geo.computeBoundingSphere();
+    mesh = new THREE.Mesh(geo, mat);
     mesh.name = 'padBeacons';
     mesh.matrixAutoUpdate = false;
   }
   return {
     mesh,
     update(time) {
-      tex.offset.x = time * BEACON_PULSE_RATE;
+      uniforms.uTime.value = time;
     },
     dispose() {
       geo?.dispose();
       mat.dispose();
-      tex.dispose();
     },
   };
-}
-
-/** One bright pulse with a soft tail over a dim floor, repeating along u. */
-function pulseTexture(): THREE.DataTexture {
-  const data = new Uint8Array(PULSE_TEXELS * 4);
-  for (let i = 0; i < PULSE_TEXELS; i++) {
-    const t = i / PULSE_TEXELS;
-    const level = BEACON_DIM + (1 - BEACON_DIM) * Math.pow(1 - t, 3);
-    const v = Math.round(level * 255);
-    data.set([v, v, v, 255], i * 4);
-  }
-  const tex = new THREE.DataTexture(data, PULSE_TEXELS, 1);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.magFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
 }

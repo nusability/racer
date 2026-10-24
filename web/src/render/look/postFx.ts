@@ -18,8 +18,15 @@ import { COMPOSITE_FRAGMENT, DOWN_FRAGMENT, FULLSCREEN_VERTEX, PREFILTER_FRAGMEN
 const MSAA_SAMPLES = 4;
 /** Boost blur taps along the radial line (the centre tap included). */
 const BLUR_TAPS = 6;
-/** Wet-road reflection taps along each smear. */
-const WET_TAPS = 5;
+/** Wet-road reflection taps along each smear: jittered per pixel, so they blend into one streak. */
+const WET_TAPS = 6;
+/** Share of the smear that runs up the road past the mirror point, so a light's reflection starts just under it. */
+const WET_LEAD = 0.25;
+/**
+ * Reflections sample the glow chain's level at 1/2^this of the drawing buffer (1/8): soft
+ * enough that the jittered taps melt into one streak, and the same size at every graphics level.
+ */
+const WET_SHIFT = 3;
 /** Below this length the road's horizon line is off screen at infinity (looking straight down): no reflections that frame. */
 const HORIZON_MIN = 1e-4;
 
@@ -79,6 +86,9 @@ export class PostFx {
   private readonly size = new THREE.Vector2();
   private readonly bloomShift: number;
   private readonly nv = new THREE.Vector3();
+  /** The glow level wet reflections sample, and the gain that keeps them as bright as the full glow (null without them). */
+  private readonly wetLevel: THREE.WebGLRenderTarget | null = null;
+  private readonly wetGain: number = 0;
   private boost = 0;
   /** Eased 1 on flat road, 0 where the road curls: the mirrored reflections fade with it. */
   private flat = 1;
@@ -91,7 +101,7 @@ export class PostFx {
   ) {
     this.sceneRT = hdrTarget(opts.aa === 'msaa' ? MSAA_SAMPLES : 0, true);
     const g = opts.grade;
-    const defines: Record<string, string | number> = { BLUR_TAPS, WET_TAPS };
+    const defines: Record<string, string | number> = { BLUR_TAPS, WET_TAPS, WET_LEAD: WET_LEAD.toFixed(4) };
     const b = opts.bloom;
     this.bloomShift = opts.bloomShift;
     // The deepest level stays where `levels` puts it below half resolution whatever the shift,
@@ -118,11 +128,18 @@ export class PostFx {
     if (opts.wet) {
       // Reflections are drawn from the blurred glow, so they need the bloom chain (resolveLook ties them).
       if (!b) throw new Error('look: wet-road reflections need bloom');
+      // up[i] is at 1/2^(i + shift + 1) and sums the chain's levels from i + 1 down.
+      const level = WET_SHIFT - opts.bloomShift - 1;
+      if (level < 0 || level >= this.up.length) throw new Error(`look: wet-road reflections sample the glow at 1/${2 ** WET_SHIFT}, which bloom starting at 1/${2 ** opts.bloomShift} with ${b.levels} levels does not reach`);
+      this.wetLevel = this.up[level];
+      // That level sums fewer of the chain's levels than the full glow: scale back so `reflection` keeps its meaning.
+      this.wetGain = (count - 1) / (count - 1 - level);
       defines.WET = 1;
     }
     const uniforms: Record<string, THREE.IUniform> = {
       tScene: { value: this.sceneRT.texture },
       tBloom: { value: null },
+      tWet: { value: this.wetLevel?.texture ?? null },
       // The glow sums every level of the chain: divide so `strength` means the same at any level count.
       uBloom: { value: b ? b.strength / (count - 1) : 0 },
       uExposure: { value: g.exposure },
@@ -200,7 +217,7 @@ export class PostFx {
     }
     if (wet) {
       this.flat += ((f.curling ? 0 : 1) - this.flat) * (1 - Math.exp(-wet.curlResponse * f.dt));
-      u.uWet.value = onScreen ? wet.reflection * this.flat : 0;
+      u.uWet.value = onScreen ? wet.reflection * this.wetGain * this.flat : 0;
     }
 
     this.quad.material = this.composite;

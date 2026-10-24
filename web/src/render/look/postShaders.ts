@@ -75,6 +75,7 @@ void main() {
 export const COMPOSITE_FRAGMENT = /* glsl */ `
 uniform sampler2D tScene;
 uniform sampler2D tBloom;
+uniform sampler2D tWet;
 uniform float uBloom;
 uniform float uExposure;
 uniform vec3 uLift;
@@ -167,25 +168,35 @@ void main() {
 
 #ifdef WET
   // The road writes 1 - wetness into alpha. Lights mirror about the road plane's horizon line
-  // (exact for anything far away, and a fair smear for the rest), drawn from the blurred glow
-  // and stretched toward the viewer like light on wet asphalt.
+  // (exact for anything far away, and a fair smear for the rest), drawn from a soft level of the
+  // glow chain and stretched toward the viewer like light on wet asphalt.
   float wet = 1.0 - scene.a;
   vec2 p = vec2(vUv.x * uAspect, vUv.y);
   float side = dot(uHorizon.xy, p) + uHorizon.z;
   if (wet > 0.01 && side < 0.0) {
     vec2 m = p - 2.0 * side * uHorizon.xy;
+    // A few evenly spaced taps would draw a few stacked copies of every light. Interleaved
+    // gradient noise (Jimenez 2014) slides each pixel's taps along the streak by its own share of
+    // the spacing, so neighbours sample between each other's taps and the eye integrates one
+    // continuous streak. It is fixed in screen space: no shimmer from frame to frame.
+    float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     vec3 refl = vec3(0.0);
+    float weights = 0.0;
     for (int i = 0; i < WET_TAPS; i++) {
-      // Taps run from the mirror point toward the horizon, so each light streaks down the road toward the viewer.
-      vec2 q = m - uHorizon.xy * (uSmear * (float(i) / float(WET_TAPS - 1) - 0.25));
+      // t runs from the head of the streak (a little toward the horizon) down the road toward the viewer.
+      float t = (float(i) + jitter) / float(WET_TAPS);
+      vec2 q = m - uHorizon.xy * (uSmear * (t - WET_LEAD));
       vec2 uv = vec2(q.x / uAspect, q.y);
       float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-      refl += texture2D(tBloom, uv).rgb * inside;
+      // Brightest at the head, tapering to nothing at the tail, so the streak has no far end to repeat.
+      float w = 1.0 - t;
+      refl += texture2D(tWet, uv).rgb * (w * inside);
+      weights += w;
     }
     float grazing = mix(uNearShare, 1.0, exp(side * 4.0));
     // Fade in below the mirror line rather than starting at full strength on it.
     float edge = smoothstep(0.0, uHorizonFade, -side);
-    c += refl * (wet * uWet * grazing * edge / float(WET_TAPS));
+    c += refl * (wet * uWet * grazing * edge / weights);
   }
 #endif
 
