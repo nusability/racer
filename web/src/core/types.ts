@@ -308,7 +308,7 @@ export interface RacerStats {
 }
 
 /** Ground-effect skimmer silhouettes (src/render/racerStyles.ts). */
-export type RacerStyle = 'skiff' | 'sponson' | 'dart' | 'quadfan' | 'swept' | 'ringwing';
+export type RacerStyle = 'skiff' | 'sponson' | 'dart' | 'quadfan' | 'swept' | 'ringwing' | 'wedge' | 'gyre';
 
 export interface RacerVisual {
   style: RacerStyle;
@@ -326,6 +326,11 @@ export interface RacerDef {
   blurb: string;
   /** Credits; 0 = owned from the start. */
   price: number;
+  /**
+   * World (data/worlds.ts) whose opening puts this glider on sale; absent means on sale from
+   * the start. Lets a late world bring gliders its winnings are meant to buy.
+   */
+  unlockWorld?: string;
   base: RacerStats;
   visual: RacerVisual;
 }

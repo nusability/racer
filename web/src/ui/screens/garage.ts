@@ -2,6 +2,7 @@
 // Prices are always on the button before the tap; unaffordable buttons are disabled.
 import type { RacerStats } from '../../core/types.ts';
 import { RACERS } from '../../data/racers.ts';
+import { worldById } from '../../data/worlds.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, effectiveStats } from '../../data/upgrades.ts';
 import { button, creditsChip, formatCredits, h, panel, pips, statBar } from '../kit.ts';
 import type { AppCtx, Screen } from './context.ts';
@@ -74,7 +75,12 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
     );
 
     let primary: HTMLButtonElement;
-    if (!owned) {
+    if (!owned && !career.isRacerOnSale(racer.id)) {
+      // Not on sale yet: say what opens it, so the glider reads as a goal rather than a wall.
+      const reason = `Unlocks with ${worldById(racer.unlockWorld as string).name}`;
+      primary = button({ id: 'garage_locked_button', label: 'LOCKED', sub: reason, aria: `${racer.name}: ${reason}`, variant: 'ghost', disabled: true, onTap: () => {} });
+      primary.classList.add('is-status', 'is-locked');
+    } else if (!owned) {
       primary = button({
         id: 'garage_buy_button',
         label: 'BUY',
@@ -103,7 +109,7 @@ export function garageScreen(ctx: AppCtx, initialRacer?: string): Screen {
       primary.classList.add('is-status');
     }
 
-    const dots = h('div', 'carousel__dots', ...RACERS.map((r, i) => h('span', `dot${i === index ? ' is-on' : ''}${career.owns(r.id) ? ' is-owned' : ''}`)));
+    const dots = h('div', 'carousel__dots', ...RACERS.map((r, i) => h('span', `dot${i === index ? ' is-on' : ''}${career.owns(r.id) ? ' is-owned' : career.isRacerOnSale(r.id) ? '' : ' is-locked'}`)));
     const prev = button({ id: 'garage_prev_button', label: '‹', aria: 'Previous racer', variant: 'icon', onTap: () => step(-1) });
     const next = button({ id: 'garage_next_button', label: '›', aria: 'Next racer', variant: 'icon', onTap: () => step(1) });
     prev.classList.add('carousel__prev');

@@ -1,6 +1,12 @@
 // The racer catalogue. Speeds are m/s (the HUD shows km/h). Ordered by price; every step up
-// is a clear net gain (about +5% top speed, more pull, handling and boost; the top glider is
-// ~28% faster than the starter) so the next glider is a goal. Armour is each one's character.
+// is a clear net gain (about +5% top speed, more pull, handling and boost) so the next glider
+// is a goal. Armour is each one's character.
+//
+// The first six are on sale from the start (Halo Comet, ~28% faster than the starter, is the
+// top of that ladder). The last two go on sale with Neon Meridian (unlockWorld): city cups pay
+// 3.6x the desert, and by then a decent player owns a maxed Halo, so these are what that money
+// buys. Priced (tools/sim-economy.ts) so a decent player buys the first with the Neon Cup's
+// winnings, going into the Skyline Cup, and the second with the Zenith Crown's.
 import type { RacerDef } from '../core/types.ts';
 
 export const RACERS: RacerDef[] = [
@@ -57,6 +63,28 @@ export const RACERS: RacerDef[] = [
     price: 40000,
     base: { topSpeed: 192, accel: 90, handling: 2.15, grip: 0.8, boostPower: 0.33, boostTank: 6.5, armor: 1.6 },
     visual: { style: 'ringwing', primary: 0xf4f1e8, secondary: 0xc9a227, accent: 0x2b2b2b, glow: 0xffe27a },
+  },
+  {
+    id: 'shard',
+    name: 'Lumen Shard',
+    pilot: 'Nyx Ardent',
+    blurb: 'A mag-lev wedge traced in light. Turns on a pin; a wall still hurts.',
+    price: 95000,
+    unlockWorld: 'city',
+    // Lightly armoured, like the Sirocco: the precision is bought with a fragile hull.
+    base: { topSpeed: 202, accel: 97, handling: 2.3, grip: 0.85, boostPower: 0.35, boostTank: 6.5, armor: 1.1 },
+    visual: { style: 'wedge', primary: 0x22203a, secondary: 0x3b3768, accent: 0xd8dcf0, glow: 0x3cf2ff },
+  },
+  {
+    id: 'gyre',
+    name: 'Orbis Gyre',
+    pilot: 'Juno Vael',
+    blurb: 'Twin hulls round a spinning ring fan. Heavy, armoured, and the fastest thing in the city.',
+    price: 145000,
+    unlockWorld: 'city',
+    // The heaviest armour of all: the twin hulls take the hits for the ring.
+    base: { topSpeed: 212, accel: 104, handling: 2.4, grip: 0.85, boostPower: 0.37, boostTank: 7, armor: 2.0 },
+    visual: { style: 'gyre', primary: 0xb3122e, secondary: 0x262629, accent: 0xeeeeee, glow: 0xff3a5c },
   },
 ];
 

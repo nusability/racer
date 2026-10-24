@@ -463,8 +463,11 @@
 .carousel__foot { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 .carousel__dots { display: flex; gap: 8px; justify-content: center; }
 .btn.is-status:disabled { opacity: 1; filter: none; color: var(--cyan); border-color: rgba(60, 242, 255, 0.5); }
+/* A glider not on sale yet: legible (it is a goal), but plainly not a button to press. */
+.btn.is-status.is-locked:disabled { color: var(--sand-dim); border-color: rgba(201, 164, 124, 0.45); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(248, 227, 192, 0.3); }
 .dot.is-owned { background: var(--sand-dim); }
+.dot.is-locked { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(248, 227, 192, 0.35); }
 .dot.is-on { background: var(--orange); transform: scale(1.4); }
 .garage__upgrades { min-height: 0; display: flex; flex-direction: column; }
 .garage__upgrades .panel { overflow: auto; scrollbar-width: none; }
