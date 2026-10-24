@@ -11,7 +11,7 @@ import { quadFacing } from './paint.ts';
 
 /** Thickness of an arch span (vertical) and its depth along the road. */
 const ARCH_THICKNESS = 6.5;
-const ARCH_DEPTH = 7;
+export const ARCH_DEPTH = 7;
 /** How far the underside of an arch bows up over its opening. */
 const ARCH_BOW = 5;
 /** How steeply the underside drops into the legs either side of the opening. */

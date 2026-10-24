@@ -5,9 +5,10 @@ import { cupById } from '../data/championships.ts';
 import { RACERS, racerById } from '../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES, noUpgrades } from '../data/upgrades.ts';
 import type { UpgradeLevels } from '../data/upgrades.ts';
+import { isGraphicsLevel } from '../render/graphics.ts';
 import type { Settings } from './types.ts';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'mirage-racer.save';
 /** How many applied race ids are remembered to make applying an outcome idempotent. */
 export const APPLIED_RACE_MEMORY = 16;
@@ -52,7 +53,7 @@ export interface KeyValueStore {
 }
 
 export function defaultSettings(): Settings {
-  return { steering: 'drag', sensitivity: 1, sound: true, quality: 'high' };
+  return { steering: 'drag', sensitivity: 1, sound: true, graphics: 'auto', benchmark: null };
 }
 
 export function freshSave(): SaveData {
@@ -99,7 +100,21 @@ function validSettings(v: unknown): boolean {
     v.sensitivity >= 0.5 &&
     v.sensitivity <= 1.5 &&
     typeof v.sound === 'boolean' &&
-    (v.quality === 'low' || v.quality === 'high')
+    (v.graphics === 'auto' || isGraphicsLevel(v.graphics)) &&
+    (v.benchmark === null || validBenchmark(v.benchmark))
+  );
+}
+
+function validBenchmark(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isGraphicsLevel(v.level) &&
+    isGraphicsLevel(v.measured) &&
+    typeof v.ms === 'number' &&
+    v.ms > 0 &&
+    typeof v.lowerBound === 'boolean' &&
+    typeof v.build === 'string' &&
+    typeof v.gpu === 'string'
   );
 }
 
@@ -147,6 +162,23 @@ function migrateV1(d: Record<string, unknown>): void {
 }
 
 /**
+ * v2 → v3 (graphics levels): the low/high quality switch became a graphics level with an
+ * automatic setting. High was the default, so a v2 'high' cannot be told from a player who
+ * never opened Settings: it goes to auto, which measures the device. 'low' was a choice and
+ * stays low.
+ */
+function migrateV2(d: Record<string, unknown>): void {
+  if (isObj(d.settings)) {
+    const q = d.settings.quality;
+    if (q !== 'low' && q !== 'high') throw new SaveInvalid(`settings.quality ${String(q)}`);
+    d.settings.graphics = q === 'low' ? 'low' : 'auto';
+    d.settings.benchmark = null;
+    delete d.settings.quality;
+  }
+  d.version = 3;
+}
+
+/**
  * The 'cooling' upgrade became the 'tank' upgrade (heat was replaced by a boost tank). Levels
  * carry over so a player keeps what they paid for.
  */
@@ -166,6 +198,7 @@ export function decodeSave(raw: string | null): SaveData {
     const parsed: unknown = JSON.parse(raw);
     if (!isObj(parsed)) throw new SaveInvalid('not an object');
     if (parsed.version === 1) migrateV1(parsed);
+    if (parsed.version === 2) migrateV2(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);

@@ -6,14 +6,20 @@ import { FOG_FAR, type Quality } from './config.ts';
 import { worldOfTrack } from '../../data/worlds.ts';
 import { LOOK_FLAGS_ON, resolveLook, type LookFlags } from '../look/look.ts';
 import { PostFx } from '../look/postFx.ts';
+import { isGraphicsLevel, pixelRatioFor } from '../graphics.ts';
+import { GRAPHICS_LEVELS, GRAPHICS_PROFILE, type GraphicsLevel } from '../graphicsTuning.ts';
 
 // Developer-only fly-through of a track (track-viewer.html, never linked from the game).
-// Query: ?track=id&quality=high|low&s=metres&speed=m/s&view=fly|orbit|top&pause=1&look=0|1&off=bloom,wet&aa=msaa
+// Query: ?track=id&level=low|medium|high|ultra&s=metres&speed=m/s&view=fly|orbit|top&pause=1&look=0|1&off=bloom,wet&aa=msaa
 // (look: the world's look pass as a race draws it, every effect on; 0 draws it without. off and aa
 // switch single effects as the debug menu's WORLD LOOK switches do).
 
 const params = new URLSearchParams(location.search);
-const quality: Quality = params.get('quality') === 'low' ? 'low' : 'high';
+// quality= is the name from before graphics levels; its low|high are levels too.
+const levelParam = params.get('level') ?? params.get('quality') ?? 'high';
+if (!isGraphicsLevel(levelParam)) throw new Error(`track viewer: level=${levelParam} is not ${GRAPHICS_LEVELS.join(', ')}`);
+const level: GraphicsLevel = levelParam;
+const quality: Quality = GRAPHICS_PROFILE[level].detail;
 const def = trackById(params.get('track') ?? TRACKS[0].id);
 const RACER_HEIGHT = 2.2;
 /** Chase-cam offset behind and above the racer position. */
@@ -23,7 +29,7 @@ const LOOK_AHEAD = 60;
 const MAP_SIZE = 180;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+renderer.setPixelRatio(pixelRatioFor(level, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -41,20 +47,22 @@ for (const k of (params.get('off') ?? '').split(',').filter((x) => x)) {
 }
 const aa = params.get('aa');
 if (aa !== null) {
-  if (aa !== 'fxaa' && aa !== 'msaa' && aa !== 'off') throw new Error(`track viewer: aa=${aa} is not fxaa, msaa or off`);
+  if (aa !== 'level' && aa !== 'fxaa' && aa !== 'msaa' && aa !== 'off') throw new Error(`track viewer: aa=${aa} is not level, fxaa, msaa or off`);
   lookFlags.aa = aa;
 }
-const worldLook = resolveLook(worldOfTrack(def.id).biome, quality, lookFlags, PostFx.supported(renderer));
+const worldLook = resolveLook(worldOfTrack(def.id).biome, level, lookFlags, PostFx.supported(renderer), def.palette);
 if (worldLook && !worldLook.post) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = worldLook.look.grade.exposure;
+  renderer.toneMappingExposure = worldLook.look.grade.materialExposure;
 }
 const post = worldLook?.post
   ? new PostFx(renderer, {
       bloom: worldLook.bloom ? worldLook.look.bloom : null,
+      bloomShift: worldLook.bloomShift,
       grade: worldLook.look.grade,
       boostBlur: null,
       wet: worldLook.wetReflections ? worldLook.look.wetRoad : null,
+      haze: worldLook.heatHaze ? worldLook.look.heatHaze : null,
       aa: worldLook.aa,
     })
   : null;
@@ -210,7 +218,7 @@ function frame(now: number) {
   if (frames++ % 10 === 0) {
     const i = renderer.info.render;
     hud.textContent =
-      `${def.name} (${quality})  ${track.length.toFixed(0)} m  build ${buildMs.toFixed(0)} ms\n` +
+      `${def.name} (${level})  ${track.length.toFixed(0)} m  build ${buildMs.toFixed(0)} ms\n` +
       `s ${s.toFixed(0)}  ${(speed * 3.6).toFixed(0)} km/h  view ${view}  fps ${fps.toFixed(0)}\n` +
       `draw calls ${i.calls}  triangles ${(i.triangles / 1000).toFixed(1)}k\n` +
       `space pause · f/o/t views · arrows speed/lateral · drag orbit`;

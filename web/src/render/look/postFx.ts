@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
-import type { AaMode, BloomLook, BoostBlurLook, GradeLook, WetRoadLook } from './lookTuning.ts';
+import type { AaMode, BloomLook, BoostBlurLook, GradeLook, HeatHazeLook, WetRoadLook } from './lookTuning.ts';
 import { COMPOSITE_FRAGMENT, DOWN_FRAGMENT, FULLSCREEN_VERTEX, PREFILTER_FRAGMENT, UP_FRAGMENT } from './postShaders.ts';
 
 // A hand-rolled minimal composer, cheaper than three's EffectComposer + UnrealBloomPass (which
 // blurs five mips in two separable passes each, and copies between passes):
 //
 //   scene → HDR target (half float; MSAA when chosen)
-//   bloom: bright pass to 1/2, dual-filter down to 1/4, 1/8, … and back up to 1/4
-//   composite (one pass): boost blur, + bloom, + wet-road reflections, ACES, grade, sRGB
+//   bloom: bright pass to 1/2 (by default), dual-filter down to 1/4, 1/8, … and back up to 1/4
+//   composite (one pass): heat haze, boost blur, + bloom, + wet-road reflections, ACES, grade, sRGB
 //   FXAA (when chosen) on the display-referred result
 //
 // The HUD is DOM above the canvas, so none of this touches it.
@@ -25,9 +25,12 @@ const HORIZON_MIN = 1e-4;
 
 export interface PostOptions {
   bloom: BloomLook | null;
+  /** The bloom chain starts at 1/2^shift of the drawing buffer (LookBudget.bloomShift). */
+  bloomShift: number;
   grade: GradeLook;
   boostBlur: BoostBlurLook | null;
   wet: WetRoadLook | null;
+  haze: HeatHazeLook | null;
   aa: AaMode;
 }
 
@@ -74,10 +77,13 @@ export class PostFx {
   private readonly composite: THREE.ShaderMaterial;
   private readonly fxaa: THREE.ShaderMaterial | null;
   private readonly size = new THREE.Vector2();
+  private readonly bloomShift: number;
   private readonly nv = new THREE.Vector3();
   private boost = 0;
   /** Eased 1 on flat road, 0 where the road curls: the mirrored reflections fade with it. */
   private flat = 1;
+  /** Seconds since the race began drawing: the haze's noise drifts with it. */
+  private time = 0;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -87,11 +93,16 @@ export class PostFx {
     const g = opts.grade;
     const defines: Record<string, string | number> = { BLUR_TAPS, WET_TAPS };
     const b = opts.bloom;
+    this.bloomShift = opts.bloomShift;
+    // The deepest level stays where `levels` puts it below half resolution whatever the shift,
+    // so the glow reaches as far at every graphics level: a later start is just fewer passes.
+    const count = b ? b.levels + 2 - opts.bloomShift : 0;
     if (b) {
       if (b.levels < 2) throw new Error(`look: bloom needs at least 2 levels below half resolution, got ${b.levels}`);
-      // down[0] is half resolution; each further level halves again. up[i] matches down[i].
-      for (let i = 0; i <= b.levels; i++) this.down.push(hdrTarget(0, false));
-      for (let i = 1; i < b.levels; i++) this.up.push(hdrTarget(0, false));
+      if (count < 2) throw new Error(`look: bloom starting at 1/${2 ** opts.bloomShift} resolution leaves ${count} levels for ${b.levels} below half; it needs 2`);
+      // down[0] is the chain's start (1/2^shift); each further level halves again. up[i] matches down[i + 1].
+      for (let i = 0; i < count; i++) this.down.push(hdrTarget(0, false));
+      for (let i = 2; i < count; i++) this.up.push(hdrTarget(0, false));
       this.prefilter = pass(PREFILTER_FRAGMENT, {
         tInput: { value: null },
         uTexel: { value: new THREE.Vector2() },
@@ -113,7 +124,7 @@ export class PostFx {
       tScene: { value: this.sceneRT.texture },
       tBloom: { value: null },
       // The glow sums every level of the chain: divide so `strength` means the same at any level count.
-      uBloom: { value: b ? b.strength / b.levels : 0 },
+      uBloom: { value: b ? b.strength / (count - 1) : 0 },
       uExposure: { value: g.exposure },
       uLift: { value: new THREE.Vector3(...g.lift) },
       uGamma: { value: new THREE.Vector3(...g.gamma) },
@@ -123,12 +134,18 @@ export class PostFx {
       uBlur: { value: 0 },
       uHorizon: { value: new THREE.Vector3() },
       uWet: { value: 0 },
+      uHaze: { value: 0 },
+      uTime: { value: 0 },
     };
     if (opts.boostBlur) {
       const bb = opts.boostBlur;
       Object.assign(uniforms, { uBlurInner: { value: bb.inner }, uBlurOuter: { value: bb.outer }, uChroma: { value: bb.chroma } });
     }
     if (opts.wet) Object.assign(uniforms, { uSmear: { value: opts.wet.smear }, uNearShare: { value: opts.wet.nearShare }, uHorizonFade: { value: opts.wet.horizonFade } });
+    if (opts.haze) {
+      defines.HAZE = 1;
+      Object.assign(uniforms, { uHazeBand: { value: opts.haze.band }, uHazeAbove: { value: opts.haze.above }, uHazeScale: { value: opts.haze.scale }, uHazeRise: { value: opts.haze.rise } });
+    }
     this.composite = pass(COMPOSITE_FRAGMENT, uniforms, defines);
     if (opts.aa === 'fxaa') {
       this.ldrRT = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false, depthBuffer: false });
@@ -146,8 +163,9 @@ export class PostFx {
     const w = Math.max(1, s.x);
     const h = Math.max(1, s.y);
     this.sceneRT.setSize(w, h);
-    this.down.forEach((t, i) => t.setSize(Math.max(1, w >> (i + 1)), Math.max(1, h >> (i + 1))));
-    this.up.forEach((t, i) => t.setSize(Math.max(1, w >> (i + 2)), Math.max(1, h >> (i + 2))));
+    const k = this.bloomShift;
+    this.down.forEach((t, i) => t.setSize(Math.max(1, w >> (i + k)), Math.max(1, h >> (i + k))));
+    this.up.forEach((t, i) => t.setSize(Math.max(1, w >> (i + k + 1)), Math.max(1, h >> (i + k + 1))));
     this.ldrRT?.setSize(w, h);
     this.fxaa?.uniforms.resolution.value.set(1 / w, 1 / h);
     this.composite.uniforms.uAspect.value = w / h;
@@ -172,9 +190,17 @@ export class PostFx {
       u.uBlur.value = bb.reach * this.boost * fast;
     }
     const wet = this.opts.wet;
+    const haze = this.opts.haze;
+    // Both lie along the road's horizon line; looking straight down there is none, and neither shows.
+    const onScreen = wet || haze ? this.horizon(camera, f.roadUp) : false;
+    if (haze) {
+      this.time += f.dt;
+      u.uTime.value = this.time;
+      u.uHaze.value = onScreen ? haze.amount : 0;
+    }
     if (wet) {
       this.flat += ((f.curling ? 0 : 1) - this.flat) * (1 - Math.exp(-wet.curlResponse * f.dt));
-      u.uWet.value = this.horizon(camera, f.roadUp) ? wet.reflection * this.flat : 0;
+      u.uWet.value = onScreen ? wet.reflection * this.flat : 0;
     }
 
     this.quad.material = this.composite;
@@ -190,7 +216,7 @@ export class PostFx {
     r.info.autoReset = autoReset;
   }
 
-  /** Runs the glow chain and returns the 1/4-resolution result the composite adds. */
+  /** Runs the glow chain and returns the result the composite adds (1/4 resolution at the default shift). */
   private bloom(pre: THREE.ShaderMaterial, down: THREE.ShaderMaterial, up: THREE.ShaderMaterial): THREE.Texture {
     const r = this.renderer;
     const texel = (m: THREE.ShaderMaterial, t: THREE.WebGLRenderTarget) => m.uniforms.uTexel.value.set(1 / t.width, 1 / t.height);

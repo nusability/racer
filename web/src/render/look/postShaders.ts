@@ -68,9 +68,9 @@ void main() {
 }`;
 
 /**
- * The composite: boost blur on the scene, bloom and wet-road reflections added, then exposure,
- * ACES, the colour grade, sRGB encoding and a dither (the night sky is one long dark gradient;
- * 8-bit output bands it). The defines switch whole features out of the program.
+ * The composite: heat haze and boost blur on the scene, bloom and wet-road reflections added,
+ * then exposure, ACES, the colour grade, sRGB encoding and a dither (the night sky is one long
+ * dark gradient; 8-bit output bands it). The defines switch whole features out of the program.
  */
 export const COMPOSITE_FRAGMENT = /* glsl */ `
 uniform sampler2D tScene;
@@ -91,6 +91,12 @@ uniform float uWet;
 uniform float uSmear;
 uniform float uNearShare;
 uniform float uHorizonFade;
+uniform float uHaze;
+uniform float uHazeBand;
+uniform float uHazeAbove;
+uniform float uHazeScale;
+uniform float uHazeRise;
+uniform float uTime;
 varying vec2 vUv;
 
 // three.js's ACES filmic fit (tonemapping_pars_fragment), with the exposure passed in.
@@ -113,9 +119,30 @@ float hash12(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 void main() {
-  vec4 scene = texture2D(tScene, vUv);
+  vec2 uv = vUv;
+#ifdef HAZE
+  // Heat shimmer along the road's horizon: strongest on the line (the far road and ground),
+  // gone within a few screen percent of it, so nothing near enough to dodge ever wobbles. The
+  // noise is stretched across (heat swims in horizontal bands), rises, and moves the image
+  // mostly up and down.
+  vec2 hp = vec2(vUv.x * uAspect, vUv.y);
+  float hside = dot(uHorizon.xy, hp) + uHorizon.z;
+  float hmask = uHaze * (hside < 0.0 ? exp(hside / uHazeBand) : exp(-hside / uHazeAbove));
+  if (hmask > 1e-5) {
+    vec2 q = hp * uHazeScale * vec2(0.5, 1.6) - vec2(0.0, uTime * uHazeRise);
+    vec2 o = vec2(vnoise(q + 17.3), vnoise(q)) - 0.5;
+    uv += o * vec2(0.6 / uAspect, 2.0) * hmask;
+  }
+#endif
+  vec4 scene = texture2D(tScene, uv);
   vec3 c = scene.rgb;
 
 #ifdef BOOST_BLUR

@@ -1,10 +1,11 @@
 import type { AoLook } from '../look/lookTuning.ts';
+import { ARCH_DEPTH } from './features.ts';
 import type { RibbonView } from './shape.ts';
 
 // Baked ambient occlusion for the course, worked out once at build time (free per frame):
 // how much of each road sample lies under another road (a flyover, a deck, a knot crossing
-// itself). The corridor darkens those samples' vertex colours, plus the road edges at the foot
-// of walls; see Corridor.buildRoad.
+// itself) or under a rock arch. The corridor darkens those samples' vertex colours, plus the
+// road edges at the foot of walls; see Corridor.buildRoad.
 
 /** Ground grid for finding road samples near one another, metres. */
 const CELL = 16;
@@ -54,6 +55,15 @@ export function roadCover(views: RibbonView[], ao: AoLook): Float32Array[] {
         }
       }
     });
+    // Rock arches span the whole road over their depth.
+    const span = Math.ceil(ARCH_DEPTH / 2 / r.step);
+    for (const a of r.arches) {
+      const at = Math.round(a.s / r.step);
+      for (let d = -span; d <= span; d++) {
+        const j = r.closed ? (((at + d) % n) + n) % n : Math.max(0, Math.min(n - 1, at + d));
+        hit[j] = 1;
+      }
+    }
     // Soft ends: a box blur over the neighbouring samples.
     const soft = new Float32Array(n);
     const m = ao.coverSoften;

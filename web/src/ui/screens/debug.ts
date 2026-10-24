@@ -1,6 +1,6 @@
 // The hidden debug menu (long-press the title logo, or tap the build label in Settings 7
 // times): progress cheats through Career's debug methods, per-device debug flags, the build
-// stamp, the world-look switches, and the last race logs to copy or share.
+// stamp, the graphics benchmark, the world-look switches, and the last race logs to copy or share.
 import type { UpgradeId } from '../../core/types.ts';
 import { racerById, RACERS } from '../../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES } from '../../data/upgrades.ts';
@@ -8,8 +8,9 @@ import { clearTelemetry, loadTelemetry, telemetrySummary, telemetryToText } from
 import type { RaceTelemetry } from '../../game/telemetry.ts';
 import { canShare, copyText, shareText } from '../clipboard.ts';
 import { loadDebugFlags, saveDebugFlags } from '../debugFlags.ts';
-import { button, confirmButton, formatTime, h, header, panel, segmented, stepper } from '../kit.ts';
+import { button, confirmButton, formatTime, h, header, panel, segmented, stepper, toast } from '../kit.ts';
 import type { LookFlags } from '../../render/look/look.ts';
+import { graphicsLevel } from '../../game/graphics.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 const CREDIT_GRANTS = [10_000, 100_000];
@@ -18,13 +19,8 @@ export function debugScreen(ctx: AppCtx): Screen {
   const career = ctx.career;
   const root = h('div', 'screen screen--debug');
   let upgradeRacer = career.save.selectedRacer;
-  const toast = h('div', 'debug__toast');
-  toast.setAttribute('aria-live', 'polite');
-
-  function say(msg: string): void {
-    toast.textContent = msg;
-    toast.animate([{ opacity: 1 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: 2200, fill: 'forwards' });
-  }
+  const note = toast();
+  const say = (msg: string) => note.say(msg);
 
   function flagsPanel(): HTMLElement {
     const flags = loadDebugFlags(ctx.store);
@@ -51,16 +47,40 @@ export function debugScreen(ctx: AppCtx): Screen {
         segmented<'on' | 'off'>(`debug_look_${key}`, aria, [{ value: 'on', label: 'ON' }, { value: 'off', label: 'OFF' }], look[key] ? 'on' : 'off', (v) => set({ [key]: v === 'on' })));
     return panel(
       'WORLD LOOK',
-      h('p', 'note', 'Neon Meridian only. Applies from the next race; low quality skips the post effects.'),
+      h('p', 'note', 'Every world. Applies from the next race; graphics LOW skips the post effects. LEVEL anti-aliases as the graphics level does.'),
       onOff('world', 'LOOK PASS', 'World look pass'),
       onOff('post', 'POST FX', 'Post-processing: tone map and grade'),
       onOff('bloom', 'BLOOM', 'Bloom'),
       h('div', 'setting', h('span', 'setting__label', 'ANTI-ALIAS'),
-        segmented<LookFlags['aa']>('debug_look_aa', 'Anti-aliasing', [{ value: 'fxaa', label: 'FXAA' }, { value: 'msaa', label: 'MSAA' }, { value: 'off', label: 'OFF' }], look.aa, (v) => set({ aa: v }))),
+        segmented<LookFlags['aa']>('debug_look_aa', 'Anti-aliasing', [{ value: 'level', label: 'LEVEL' }, { value: 'fxaa', label: 'FXAA' }, { value: 'msaa', label: 'MSAA' }, { value: 'off', label: 'OFF' }], look.aa, (v) => set({ aa: v }))),
       onOff('blur', 'BOOST BLUR', 'Boost blur'),
       onOff('wet', 'WET ROAD', 'Wet road'),
       onOff('gliders', 'GLIDER SHINE', 'Reflective gliders'),
       onOff('ao', 'BAKED SHADOW', 'Baked ambient occlusion'),
+      onOff('haze', 'HEAT HAZE', 'Desert heat shimmer'),
+    );
+  }
+
+  /** The graphics benchmark's last result on this device, and a button to run it again. */
+  function graphicsPanel(): HTMLElement {
+    const s = career.save.settings;
+    const b = s.benchmark;
+    const testing = ctx.graphics.testing;
+    const line = (label: string, value: string) => h('div', 'debug__stat', h('span', 'setting__label', label), h('span', 'debug__value', value));
+    return panel(
+      'GRAPHICS',
+      line('SETTING', s.graphics === 'auto' ? `AUTO → ${graphicsLevel(s).toUpperCase()}` : `${s.graphics.toUpperCase()} (by hand)`),
+      b ? line('BENCHMARK', `${b.lowerBound ? '> ' : ''}${b.ms.toFixed(1)} ms/frame → ${b.measured.toUpperCase()}${b.level !== b.measured ? `, stepped down to ${b.level.toUpperCase()}` : ''}`) : line('BENCHMARK', 'not run yet'),
+      line('GPU', ctx.graphics.deps.gpu),
+      b ? line('MEASURED ON', b.gpu === ctx.graphics.deps.gpu ? b.build : `${b.gpu} · ${b.build}`) : null,
+      button({
+        id: 'debug_benchmark_button',
+        label: testing ? 'TESTING…' : 'RE-RUN BENCHMARK',
+        aria: 'Run the graphics benchmark again (sets graphics to auto)',
+        variant: 'primary',
+        disabled: testing,
+        onTap: () => void ctx.graphics.retest().then(() => say(`Graphics: auto → ${graphicsLevel(career.save.settings).toUpperCase()}`)),
+      }),
     );
   }
 
@@ -177,12 +197,12 @@ export function debugScreen(ctx: AppCtx): Screen {
     const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
-      h('div', 'debug__body list-scroll', flagsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
-      toast,
+      h('div', 'debug__body list-scroll', flagsPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
+      note.el,
     );
     root.querySelector('.debug__body')?.scrollTo(0, scroll);
   }
 
   render();
-  return { el: root, backdrop: 'sunset' };
+  return { el: root, backdrop: 'sunset', dispose: ctx.graphics.subscribe(render) };
 }

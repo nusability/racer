@@ -75,6 +75,8 @@ export class SmoothBuilder {
   private readonly uv: number[] = [];
   private readonly idx: number[] = [];
   private readonly nrm: number[] = [];
+  /** How slick the surface is at each vertex (0..1), for the road's wet look (look/wetRoad.ts). */
+  private readonly slick: number[] = [];
 
   get vertexCount(): number {
     return this.pos.length / 3;
@@ -83,9 +85,10 @@ export class SmoothBuilder {
     return this.idx.length / 3;
   }
 
-  /** Pass a normal for every vertex or none: given normals replace the computed ones. */
-  vertex(p: P3, c: THREE.Color, u = 0, v = 0, n?: P3): number {
+  /** Pass a normal (and a slickness) for every vertex or none: given normals replace the computed ones. */
+  vertex(p: P3, c: THREE.Color, u = 0, v = 0, n?: P3, slick?: number): number {
     if (n) this.nrm.push(n.x, n.y, n.z);
+    if (slick !== undefined) this.slick.push(slick);
     this.pos.push(p.x, p.y, p.z);
     this.col.push(c.r, c.g, c.b);
     this.uv.push(u, v);
@@ -106,6 +109,8 @@ export class SmoothBuilder {
     if (this.nrm.length === 0) g.computeVertexNormals();
     else if (this.nrm.length === this.pos.length) g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     else throw new Error('SmoothBuilder: normals given for some vertices but not all');
+    if (this.slick.length === this.pos.length / 3) g.setAttribute('slick', new THREE.Float32BufferAttribute(this.slick, 1));
+    else if (this.slick.length > 0) throw new Error('SmoothBuilder: slickness given for some vertices but not all');
     g.computeBoundingSphere();
     return g;
   }

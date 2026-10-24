@@ -1,8 +1,9 @@
-// What every screen gets: the career, audio, showroom, navigation and the race launcher.
+// What every screen gets: the career, audio, showroom, graphics benchmark, navigation and the race launcher.
 import type { GameAudio } from '../../audio/audio.ts';
 import type { Career, RaceReport } from '../../game/career.ts';
 import type { KeyValueStore } from '../../game/save.ts';
 import type { RaceRequest, ShowroomApi } from '../../game/types.ts';
+import type { GraphicsAuto } from '../graphicsAuto.ts';
 
 export type Nav =
   | { screen: 'title' }
@@ -22,6 +23,8 @@ export interface AppCtx {
   store: KeyValueStore;
   audio: GameAudio;
   showroom: ShowroomApi;
+  /** The automatic graphics level's benchmark. */
+  graphics: GraphicsAuto;
   go(nav: Nav): void;
   /** Hands the race to the runtime; quitting returns to `back`. */
   race(req: RaceRequest, back: Nav): void;

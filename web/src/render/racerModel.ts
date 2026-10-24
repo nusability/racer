@@ -20,7 +20,7 @@ import type { GliderFinishLook } from './look/lookTuning.ts';
 
 /**
  * A world look's paint-over-metal finish: the hull and canopy reflect `envMap` (a PMREM of the
- * world, look/cityEnv.ts). High detail only; without it the craft is drawn as it always was.
+ * world, look/env.ts). High detail only; without it the craft is drawn as it always was.
  */
 export interface GliderFinish {
   envMap: THREE.Texture;

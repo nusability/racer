@@ -1,10 +1,10 @@
-import type { BiomeId } from '../../data/worlds.ts';
-import { CITY_NEON } from '../facade.ts';
+import type { GraphicsLevel } from '../graphicsTuning.ts';
 
 // Per-world look: the "premium stylised" pass (post-processing, reflective gliders, wet road,
-// baked occlusion, boost blur). A world without an entry draws exactly as before the pass:
-// no tone mapping, no render targets, its palettes tuned for NoToneMapping. Only a world that
-// opts in here changes, so each world can be judged (look and frame rate) before the next.
+// baked occlusion, boost blur, heat haze). The shapes of its tuning and what each graphics
+// level affords; each world's own tuning is in worldLooks.ts. A world without an entry draws
+// exactly as before the pass: no tone mapping, no render targets, its palettes tuned for
+// NoToneMapping.
 
 export type AaMode = 'fxaa' | 'msaa' | 'off';
 
@@ -24,6 +24,11 @@ export interface BloomLook {
 export interface GradeLook {
   /** Tone-mapping exposure (ACES); the scene is lit for NoToneMapping, which ACES darkens in the mid-tones. */
   exposure: number;
+  /**
+   * Exposure when tone mapping runs in the materials (no post pass, so no grade): it stands in
+   * for the grade's gain, which daylight worlds lean on to bring ACES's whites back to white.
+   */
+  materialExposure: number;
   /** Lift / gamma / gain per channel (after tone mapping, display-referred 0..1). */
   lift: readonly [number, number, number];
   gamma: readonly [number, number, number];
@@ -68,6 +73,16 @@ export interface WetRoadLook {
   sheen: number;
   sheenPower: number;
   sheenColor: number;
+  /**
+   * How wet ordinary road is (0..1): the share of the mirrored reflections it shows. Slick
+   * stretches (ice, grip below 1) are fully wet, so the wet look also says "slippery here".
+   */
+  baseWet: number;
+  /** The sheen on slick stretches, times `sheen`. */
+  slickSheen: number;
+  /** Sun glare on the road where it mirrors the sun (strength, Phong power), in the sun's colour; 0 is none. */
+  sunGlint: number;
+  sunGlintPower: number;
 }
 
 /** Thruster light pooled on the road under each glider (glowPools.ts). */
@@ -94,22 +109,73 @@ export interface GliderFinishLook {
   canopyRoughness: number;
 }
 
+/** Lit towers with neon edges standing round the reflected horizon (the city's skyline). */
+export interface EnvTowersLook {
+  /** How many, their brightness (linear HDR), how tall (radians). */
+  count: number;
+  gain: number;
+  height: readonly [number, number];
+  /** Neon colours a tower may wear (sRGB). */
+  neon: readonly number[];
+}
+
+/** A ring of hills, mesas or peaks standing on the reflected horizon. */
+export interface EnvRidgeLook {
+  /** Its colour (sRGB) and how far it melts into the horizon haze (0..1). */
+  color: number;
+  haze: number;
+  /** Height range (radians) and how many crests run round the horizon. */
+  height: readonly [number, number];
+  crests: number;
+  /** The face toward the sun is this much brighter (share), the far face as much darker. */
+  sunSide: number;
+}
+
+/** The world the gliders reflect, painted once per race (env.ts). */
 export interface EnvLook {
-  /** Night sky above the neon (zenith), the haze band at the horizon, and the street below (sRGB). */
+  /** Sky at the zenith, the haze band at the horizon, and the ground below (sRGB). */
   zenith: number;
   haze: number;
-  street: number;
+  ground: number;
   /** Haze band brightness (linear HDR) and its height above the horizon (radians). */
   hazeGain: number;
   hazeHeight: number;
-  /** Towers of lit windows and neon round the horizon: how many, their brightness, how tall (radians). */
-  towers: number;
-  towerGain: number;
-  towerHeight: readonly [number, number];
-  /** Neon colours a tower may wear (sRGB). */
-  neon: readonly number[];
+  /** The ground mirrors the haze near the horizon: this share, falling off this fast below it (1/rad). */
+  groundHaze: number;
+  groundHazeFalloff: number;
+  /** The sun (sRGB) as a bright disc a hull can glint with, and its glow; null for a world without one. */
+  sun: { color: number; gain: number; radius: number; glow: number; glowPower: number } | null;
+  ridge: EnvRidgeLook | null;
+  towers: EnvTowersLook | null;
   /** Equirect canvas the environment is painted on before PMREM (power of two, 2:1). */
   width: number;
+}
+
+/**
+ * Heat shimmer: a screen-space wobble of the scene in a band along the road's horizon (the far
+ * road and ground), fading fast toward the viewer so the road, hazards and pads near enough to
+ * act on never move.
+ */
+export interface HeatHazeLook {
+  /** Largest displacement, as a share of the screen height; 0 is none. */
+  amount: number;
+  /** Below the horizon line it fades over this many screen heights; above it, over `above`. */
+  band: number;
+  above: number;
+  /** Noise cells per screen height (finer is a busier shimmer) and how fast it rises (cells/s). */
+  scale: number;
+  rise: number;
+}
+
+/** The look's water (biomes/water.ts): sky mirrored by a Fresnel term and HDR sun glints for the bloom. */
+export interface SeaLook {
+  /** Share of the Fresnel-weighted sky reflection, the glint's peak brightness (linear HDR) and tightness. */
+  reflection: number;
+  glint: number;
+  glintPower: number;
+  /** Sparkle: tiny sun facets on the ripples, how many (0..1 of cells) and how bright (HDR). */
+  sparkle: number;
+  sparkleGain: number;
 }
 
 export interface AoLook {
@@ -137,16 +203,30 @@ export interface WorldLook {
   gliders: GliderFinishLook;
   env: EnvLook;
   ao: AoLook;
+  /** Null for a world without shimmering heat. */
+  heatHaze: HeatHazeLook | null;
+  /** Null for a world without open water. */
+  sea: SeaLook | null;
+  /** World direction toward the sun (from the track's palette): the road's glint and the env's sun. */
+  sunDir: readonly [number, number, number];
 }
 
-/** Which effects a quality level can afford; the debug flags can only switch these off. */
+/** Which effects a graphics level can afford; the debug flags can only switch these off. */
 export interface LookBudget {
   /** The render-target pipeline (tone map + grade in one pass); without it tone mapping runs in the materials. */
   post: boolean;
   bloom: boolean;
-  /** An anti-aliasing pass (the mode is the debug menu's: FXAA by default, MSAA to compare). */
-  aa: boolean;
+  /**
+   * The bloom chain starts at 1/2^shift of the drawing buffer (1: half resolution, the designed
+   * glow). The chain always ends at the same size, so the glow reaches as far at any shift; a
+   * lower shift only makes its core crisper, at the fill cost of one more, larger pass.
+   */
+  bloomShift: 0 | 1 | 2;
+  /** The anti-aliasing pass (the debug menu can force another mode, or none). */
+  aa: AaMode;
   boostBlur: boolean;
+  /** The heat shimmer: a little noise in the composite, no extra pass. */
+  heatHaze: boolean;
   /** Mirrored road glow (drawn from the bloom chain); the sheen is in the road material and needs nothing. */
   wetReflections: boolean;
   wetSheen: boolean;
@@ -154,55 +234,17 @@ export interface LookBudget {
   ao: boolean;
 }
 
-export const LOOK_BUDGET: Record<'low' | 'high', LookBudget> = {
-  // Low stays at today's cost: no render target, so no bloom, blur or AA pass (the canvas keeps
-  // its own MSAA). Tone mapping, the sheen, the env-mapped player glider and the baked
-  // occlusion cost next to nothing per frame.
-  low: { post: false, bloom: false, aa: false, boostBlur: false, wetReflections: false, wetSheen: true, gliders: true, ao: true },
-  high: { post: true, bloom: true, aa: true, boostBlur: true, wetReflections: true, wetSheen: true, gliders: true, ao: true },
-};
-
-const CITY_LOOK: WorldLook = {
-  bloom: { threshold: 0.6, knee: 0.25, strength: 1.2, clamp: 6, levels: 3 },
-  grade: {
-    // ACES darkens the mid-tones of a scene lit for NoToneMapping; this keeps the asphalt and
-    // walls near where the palette had them while neon rolls off instead of clipping. Higher
-    // washes the unlit neon (kerbs, signs) toward white and loses its colour.
-    exposure: 1.15,
-    // Cool shadows (blue lift), magenta-warm highlights (gain), a little punch in saturation.
-    // Stronger lift or saturation turns the asphalt violet and the road loses its grey.
-    lift: [0, 0, 0.008],
-    gamma: [1, 1, 1.02],
-    gain: [1.04, 0.99, 1.03],
-    saturation: 1.06,
-  },
-  boostBlur: { reach: 0.075, inner: 0.22, outer: 0.75, chroma: 0.008, response: 5, speedFrom: 0.5 },
-  wetRoad: { reflection: 0.9, smear: 0.09, nearShare: 0.3, horizonFade: 0.08, curlLookAhead: 160, curlResponse: 4, sheen: 0.06, sheenPower: 5, sheenColor: 0x6c78b0 },
-  // About a glider's footprint, centred under the thrusters; bright enough to bloom when boosting,
-  // dim enough cruising that the road's lines still read through it.
-  glowPool: { length: 11, width: 7, behind: 2, lift: 0.08, intensity: 0.6, boostIntensity: 1.1, fadeHeight: 6 },
-  gliders: { metalness: 0.55, roughness: 0.3, envIntensity: 1.1, canopyMetalness: 0.7, canopyRoughness: 0.06 },
-  env: {
-    zenith: 0x080a1e,
-    haze: 0x6a2a8c,
-    street: 0x0c0c12,
-    hazeGain: 1.6,
-    hazeHeight: 0.22,
-    towers: 48,
-    towerGain: 3,
-    towerHeight: [0.08, 0.5],
-    neon: CITY_NEON,
-    width: 256,
-  },
-  ao: { wall: 0.42, reach: 2.4, wallFoot: 0.5, cover: 0.5, coverClear: [3.5, 24], coverSoften: 4, buildingBase: 0.55, buildingHeight: 7 },
-};
-
-/** The look each world opts into; null draws the world as it was before the look pass. */
-export const WORLD_LOOK: Record<BiomeId, WorldLook | null> = {
-  desert: null,
-  beach: null,
-  ice: null,
-  jungle: null,
-  city: CITY_LOOK,
-  space: null,
+export const LOOK_BUDGET: Record<GraphicsLevel, LookBudget> = {
+  // Low stays at the cost from before the look pass: no render target, so no bloom, blur or AA
+  // pass (the canvas keeps its own MSAA). Tone mapping, the sheen, the env-mapped player glider
+  // and the baked occlusion cost next to nothing per frame.
+  low: { post: false, bloom: false, bloomShift: 1, aa: 'off', boostBlur: false, heatHaze: false, wetReflections: false, wetSheen: true, gliders: true, ao: true },
+  // The glow is most of what the look adds to a night city, so medium keeps it, starting at a
+  // quarter of the resolution (a quarter of high's bloom fill). The mirrored reflections and
+  // the boost blur are full-resolution taps per pixel for a subtler gain, so they go.
+  medium: { post: true, bloom: true, bloomShift: 2, aa: 'fxaa', boostBlur: false, heatHaze: true, wetReflections: false, wetSheen: true, gliders: true, ao: true },
+  high: { post: true, bloom: true, bloomShift: 1, aa: 'fxaa', boostBlur: true, heatHaze: true, wetReflections: true, wetSheen: true, gliders: true, ao: true },
+  // Tile GPUs resolve MSAA on chip, so a GPU with room to spare smooths geometry edges properly
+  // instead of FXAA's blur, and the glow starts at full resolution.
+  ultra: { post: true, bloom: true, bloomShift: 0, aa: 'msaa', boostBlur: true, heatHaze: true, wetReflections: true, wetSheen: true, gliders: true, ao: true },
 };

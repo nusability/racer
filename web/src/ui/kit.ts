@@ -1,5 +1,5 @@
 // The small UI kit every screen builds from: element builder, buttons, panels, stat bars,
-// level pips, segmented controls and the screen header. Screens never hand-roll these.
+// level pips, segmented controls, toasts and the screen header. Screens never hand-roll these.
 
 type Child = Node | string | null | undefined | false;
 
@@ -210,4 +210,23 @@ export function confirmButton(o: ButtonOpts): HTMLButtonElement {
   });
   const label = b.querySelector('.btn__label') as HTMLElement;
   return b;
+}
+
+/** How long a toast stays up, ms: a short confirmation, and a sentence the player should read. */
+const TOAST_MS = 2200;
+const TOAST_LONG_MS = 4500;
+/** Share of a toast's time it holds fully visible before fading. */
+const TOAST_HOLD = 0.8;
+
+/** A one-line message at the bottom of its container that fades out on its own. */
+export function toast(): { el: HTMLElement; say(msg: string, long?: boolean): void } {
+  const el = h('div', 'toast');
+  el.setAttribute('aria-live', 'polite');
+  return {
+    el,
+    say(msg, long = false) {
+      el.textContent = msg;
+      el.animate([{ opacity: 1 }, { opacity: 1, offset: TOAST_HOLD }, { opacity: 0 }], { duration: long ? TOAST_LONG_MS : TOAST_MS, fill: 'forwards' });
+    },
+  };
 }
