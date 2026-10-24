@@ -5,9 +5,13 @@ import { cityKit } from './city.ts';
 import { desertKit } from './desert.ts';
 import { iceKit } from './ice.ts';
 import type { BiomeKit } from './kit.ts';
+import type { AoLook } from '../../look/lookTuning.ts';
 
-/** The look of a track's world, from its scenery (which names the biome). */
-export function biomeKit(scenery: TrackScenery, palette: TrackPalette): BiomeKit {
+/**
+ * The look of a track's world, from its scenery (which names the biome). `ao` is the world
+ * look's baked occlusion when on; only kits with buildings of their own use it.
+ */
+export function biomeKit(scenery: TrackScenery, palette: TrackPalette, ao: AoLook | null): BiomeKit {
   switch (scenery.biome) {
     case 'desert':
       return desertKit(scenery, palette);
@@ -16,7 +20,7 @@ export function biomeKit(scenery: TrackScenery, palette: TrackPalette): BiomeKit
     case 'ice':
       return iceKit(scenery, palette);
     case 'city':
-      return cityKit(scenery, palette);
+      return cityKit(scenery, palette, ao);
   }
 }
 

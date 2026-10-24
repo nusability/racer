@@ -52,6 +52,8 @@ export interface FacadeOptions {
   palette: TrackPalette;
   /** The three neon colours a crown may take (sRGB hex). */
   neon: readonly [number, number, number];
+  /** Baked occlusion at the street: walls darken by `amount` toward their base over `height` metres; null for none. */
+  baseShade: { amount: number; height: number } | null;
 }
 
 const VERTEX_PARS = /* glsl */ `
@@ -79,6 +81,7 @@ uniform float uGlow;
 uniform vec3 uWarm;
 uniform vec3 uCool;
 uniform vec3 uNeon[3];
+uniform vec2 uBaseShade;
 float fcHash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }`;
@@ -110,6 +113,8 @@ if (vFacadeWall > 0.5) {
   vec3 neon = hue < 0.34 ? uNeon[0] : hue < 0.67 ? uNeon[1] : uNeon[2];
   totalEmissiveRadiance += neon * crown * ${CROWN_GLOW.toFixed(2)};
   diffuseColor.rgb *= 1.0 - crown;
+  // Occlusion where the wall meets the street (lit shopfronts are emissive, so they stay lit).
+  diffuseColor.rgb *= 1.0 - uBaseShade.x * (1.0 - smoothstep(0.0, uBaseShade.y, vFacade.y));
 }`;
 
 /** Lambert facades with shader-drawn windows, shopfronts and neon crowns (see the header). */
@@ -122,6 +127,8 @@ export function facadeMaterial(o: FacadeOptions): THREE.MeshLambertMaterial {
     uWarm: { value: new THREE.Color(WARM) },
     uCool: { value: new THREE.Color(COOL) },
     uNeon: { value: o.neon.map((c) => new THREE.Color(c)) },
+    // amount 0 multiplies by exactly 1: the facade is unchanged where the look is off.
+    uBaseShade: { value: o.baseShade ? new THREE.Vector2(o.baseShade.amount, o.baseShade.height) : new THREE.Vector2(0, 1) },
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);

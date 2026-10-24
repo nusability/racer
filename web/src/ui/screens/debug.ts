@@ -1,6 +1,6 @@
 // The hidden debug menu (long-press the title logo, or tap the build label in Settings 7
 // times): progress cheats through Career's debug methods, per-device debug flags, the build
-// stamp, and the last race logs to copy or share.
+// stamp, the world-look switches, and the last race logs to copy or share.
 import type { UpgradeId } from '../../core/types.ts';
 import { racerById, RACERS } from '../../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES } from '../../data/upgrades.ts';
@@ -9,6 +9,7 @@ import type { RaceTelemetry } from '../../game/telemetry.ts';
 import { canShare, copyText, shareText } from '../clipboard.ts';
 import { loadDebugFlags, saveDebugFlags } from '../debugFlags.ts';
 import { button, confirmButton, formatTime, h, header, panel, segmented, stepper } from '../kit.ts';
+import type { LookFlags } from '../../render/look/look.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 const CREDIT_GRANTS = [10_000, 100_000];
@@ -35,6 +36,31 @@ export function debugScreen(ctx: AppCtx): Screen {
       h('div', 'debug__build', __BUILD__),
       row('DEBUG MODE', onOff('debug_mode', 'Debug mode', flags.enabled, (v) => saveDebugFlags(ctx.store, { ...loadDebugFlags(ctx.store), enabled: v }))),
       row('PERF READOUT', onOff('debug_perf', 'Race performance readout', flags.perfOverlay, (v) => saveDebugFlags(ctx.store, { ...loadDebugFlags(ctx.store), perfOverlay: v }))),
+    );
+  }
+
+  /** Switches for each part of a world's look, so the owner can A/B its look and frame rate. */
+  function lookPanel(): HTMLElement {
+    const look = loadDebugFlags(ctx.store).look;
+    const set = (patch: Partial<LookFlags>) => {
+      const f = loadDebugFlags(ctx.store);
+      saveDebugFlags(ctx.store, { ...f, look: { ...f.look, ...patch } });
+    };
+    const onOff = (key: Exclude<keyof LookFlags, 'aa'>, label: string, aria: string) =>
+      h('div', 'setting', h('span', 'setting__label', label),
+        segmented<'on' | 'off'>(`debug_look_${key}`, aria, [{ value: 'on', label: 'ON' }, { value: 'off', label: 'OFF' }], look[key] ? 'on' : 'off', (v) => set({ [key]: v === 'on' })));
+    return panel(
+      'WORLD LOOK',
+      h('p', 'note', 'Neon Meridian only. Applies from the next race; low quality skips the post effects.'),
+      onOff('world', 'LOOK PASS', 'World look pass'),
+      onOff('post', 'POST FX', 'Post-processing: tone map and grade'),
+      onOff('bloom', 'BLOOM', 'Bloom'),
+      h('div', 'setting', h('span', 'setting__label', 'ANTI-ALIAS'),
+        segmented<LookFlags['aa']>('debug_look_aa', 'Anti-aliasing', [{ value: 'fxaa', label: 'FXAA' }, { value: 'msaa', label: 'MSAA' }, { value: 'off', label: 'OFF' }], look.aa, (v) => set({ aa: v }))),
+      onOff('blur', 'BOOST BLUR', 'Boost blur'),
+      onOff('wet', 'WET ROAD', 'Wet road'),
+      onOff('gliders', 'GLIDER SHINE', 'Reflective gliders'),
+      onOff('ao', 'BAKED SHADOW', 'Baked ambient occlusion'),
     );
   }
 
@@ -151,7 +177,7 @@ export function debugScreen(ctx: AppCtx): Screen {
     const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
-      h('div', 'debug__body list-scroll', flagsPanel(), progressPanel(), glidersPanel(), logsPanel()),
+      h('div', 'debug__body list-scroll', flagsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
       toast,
     );
     root.querySelector('.debug__body')?.scrollTo(0, scroll);

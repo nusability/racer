@@ -100,7 +100,7 @@ export class Showroom implements ShowroomApi {
     const key = `${visual.style}:${visual.primary}:${visual.secondary}:${visual.accent}:${visual.glow}`;
     let model = this.models.get(key);
     if (!model) {
-      model = createRacerModel(visual, { detail: 'high' });
+      model = createRacerModel(visual, { detail: 'high', finish: null });
       this.models.set(key, model);
       this.turntable.add(model.root);
     }

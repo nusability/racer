@@ -115,7 +115,7 @@ function lineup(): (dt: number, t: number) => void {
     camera.updateProjectionMatrix();
   };
   RACERS.forEach((r) => {
-    const m = createRacerModel(r.visual, { detail });
+    const m = createRacerModel(r.visual, { detail, finish: null });
     scene.add(m.root);
     models.push(m);
   });
@@ -176,7 +176,7 @@ function chase(): (dt: number, t: number) => void {
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.3, 1500);
   scene.add(camera);
   const racer = RACERS[racerIndex];
-  const model = createRacerModel(racer.visual, { detail });
+  const model = createRacerModel(racer.visual, { detail, finish: null });
   scene.add(model.root);
   const effects = new Effects(scene, detail);
   const lines = new SpeedLines(camera);
@@ -270,7 +270,7 @@ function stats(): (dt: number, t: number) => void {
     for (const r of RACERS) {
       const scene = new THREE.Scene();
       addLights(scene);
-      const model = createRacerModel(r.visual, { detail });
+      const model = createRacerModel(r.visual, { detail, finish: null });
       scene.add(model.root);
       // Damage on so the smoke pool is live, as in the worst case.
       const v = viewState(r.base.topSpeed, 1);

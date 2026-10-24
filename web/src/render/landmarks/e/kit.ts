@@ -48,7 +48,7 @@ export class Facades {
   build(kit: Kit, opts: LandmarkOptions): void {
     if (this.list.length === 0) return;
     const geo = facadeBox();
-    const mat = facadeMaterial({ palette: opts.palette, neon: CITY_NEON });
+    const mat = facadeMaterial({ palette: opts.palette, neon: CITY_NEON, baseShade: null });
     const mesh = new THREE.InstancedMesh(geo, mat, this.list.length);
     this.list.forEach((b, i) => {
       mesh.setMatrixAt(i, b.m);

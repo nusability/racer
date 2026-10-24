@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { Race } from '../core/race.ts';
-import { Track } from '../core/track.ts';
+import { makeFrame, Track } from '../core/track.ts';
 import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
@@ -17,6 +17,10 @@ import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
 import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } from '../render/racerPose.ts';
 import { DRAFT_STREAKS, SpeedLines } from '../render/speedLines.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/trackScene.ts';
+import { describeLook, resolveLook, type ActiveLook } from '../render/look/look.ts';
+import { cityEnvironment } from '../render/look/cityEnv.ts';
+import { PostFx } from '../render/look/postFx.ts';
+import { worldOfTrack } from '../data/worlds.ts';
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
@@ -159,6 +163,14 @@ export class RaceSession {
   private wreckBannerShown = false;
   private readonly wreckAt = new THREE.Vector3();
   private readonly wreckDir = new THREE.Vector3();
+  /** The world's live look (null: drawn as before the look pass), its post pipeline and glider reflections. */
+  private readonly look: ActiveLook | null;
+  private readonly post: PostFx | null;
+  private readonly gliderEnv: { texture: THREE.Texture; dispose(): void } | null;
+  /** The shared renderer's tone mapping before this race, restored for the garage after it. */
+  private readonly toneMappingBefore: { mapping: THREE.ToneMapping; exposure: number };
+  private readonly roadFrame = makeFrame();
+  private readonly roadUp = new THREE.Vector3();
 
   constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null) => void) {
     this.ctx = ctx;
@@ -169,13 +181,35 @@ export class RaceSession {
     this.race = this.newRace();
     this.telemetry = new TelemetryRecorder(request, ctx.settings, __BUILD__);
 
+    const renderer = ctx.renderer;
+    this.look = resolveLook(worldOfTrack(def.id).biome, ctx.settings.quality, loadDebugFlags(ctx.store).look, PostFx.supported(renderer));
+    this.toneMappingBefore = { mapping: renderer.toneMapping, exposure: renderer.toneMappingExposure };
+    const look = this.look;
+    if (look && !look.post) {
+      // No render target: the materials tone-map themselves on the way to the canvas.
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = look.look.grade.exposure;
+    }
+    this.post = look?.post
+      ? new PostFx(renderer, {
+          bloom: look.bloom ? look.look.bloom : null,
+          grade: look.look.grade,
+          boostBlur: look.boostBlur ? look.look.boostBlur : null,
+          wet: look.wetReflections ? look.look.wetRoad : null,
+          aa: look.aa,
+        })
+      : null;
+    this.gliderEnv = look?.gliders ? cityEnvironment(renderer, look.look.env) : null;
+    const finish = this.gliderEnv && look ? { envMap: this.gliderEnv.texture, look: look.look.gliders } : null;
+
     this.env = applyEnvironment(this.scene, def.palette, ctx.settings.quality);
-    this.trackScene = buildTrackScene(this.track, ctx.settings.quality);
+    this.trackScene = buildTrackScene(this.track, ctx.settings.quality, look);
     this.scene.add(this.trackScene.group);
 
     for (const e of request.entrants) {
       const model = createRacerModel(racerById(e.racerId).visual, {
         detail: e.isPlayer || ctx.settings.quality === 'high' ? 'high' : 'low',
+        finish,
       });
       this.scene.add(model.root);
       this.views.push({
@@ -239,6 +273,7 @@ export class RaceSession {
 
   resize(width: number, height: number) {
     this.cam.resize(width / height);
+    this.post?.resize();
   }
 
   pause() {
@@ -598,12 +633,18 @@ export class RaceSession {
       countdown: this.countdown,
       finished: p.finishTime !== null,
     });
-    this.ctx.renderer.render(this.scene, this.cam.camera);
+    if (this.post) {
+      const up = this.track.ribbon(pv.branch).frameAt(pv.s, this.roadFrame).up;
+      this.roadUp.set(up.x, up.y, up.z);
+      this.post.render(this.scene, this.cam.camera, { dt, boosting: p.boosting && !this.playerWreck, speedFrac, roadUp: this.roadUp });
+    } else {
+      this.ctx.renderer.render(this.scene, this.cam.camera);
+    }
     if (this.perf) {
       const info = this.ctx.renderer.info.render;
       const fps = dt > 0 ? 1 / dt : 0;
       this.fpsSmoothed += (fps - this.fpsSmoothed) * SESSION_FPS_SMOOTHING;
-      this.perf.update({ fps: this.fpsSmoothed, drawCalls: info.calls, triangles: info.triangles });
+      this.perf.update({ fps: this.fpsSmoothed, drawCalls: info.calls, triangles: info.triangles, look: describeLook(this.look) });
     }
   }
 
@@ -651,6 +692,10 @@ export class RaceSession {
     for (const v of this.views) v.model.dispose();
     this.trackScene.dispose();
     this.env.dispose();
+    this.post?.dispose();
+    this.gliderEnv?.dispose();
+    this.ctx.renderer.toneMapping = this.toneMappingBefore.mapping;
+    this.ctx.renderer.toneMappingExposure = this.toneMappingBefore.exposure;
   }
 }
 

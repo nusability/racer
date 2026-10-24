@@ -9,6 +9,8 @@ export interface PerfSample {
   fps: number;
   drawCalls: number;
   triangles: number;
+  /** Which world-look effects the race is paying for (look/look.ts describeLook). */
+  look: string;
 }
 
 export interface PerfOverlay {
@@ -28,7 +30,7 @@ export function createPerfOverlay(root: HTMLElement): PerfOverlay {
       const now = performance.now();
       if (now - lastWrite < REFRESH_MS) return;
       lastWrite = now;
-      el.textContent = `${d.fps.toFixed(0)} fps (min ${minFps.toFixed(0)})\n${d.drawCalls} calls  ${(d.triangles / 1000).toFixed(1)}k tris`;
+      el.textContent = `${d.fps.toFixed(0)} fps (min ${minFps.toFixed(0)})\n${d.drawCalls} calls  ${(d.triangles / 1000).toFixed(1)}k tris\n${d.look}`;
       minFps = Infinity;
     },
     dispose() {

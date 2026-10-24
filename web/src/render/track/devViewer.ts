@@ -3,9 +3,14 @@ import { Track, type Ribbon } from '../../core/track.ts';
 import { TRACKS, trackById } from '../../data/tracks/index.ts';
 import { applyEnvironment, buildTrackScene } from '../trackScene.ts';
 import { FOG_FAR, type Quality } from './config.ts';
+import { worldOfTrack } from '../../data/worlds.ts';
+import { LOOK_FLAGS_ON, resolveLook, type LookFlags } from '../look/look.ts';
+import { PostFx } from '../look/postFx.ts';
 
 // Developer-only fly-through of a track (track-viewer.html, never linked from the game).
-// Query: ?track=id&quality=high|low&s=metres&speed=m/s&view=fly|orbit|top&pause=1
+// Query: ?track=id&quality=high|low&s=metres&speed=m/s&view=fly|orbit|top&pause=1&look=0|1&off=bloom,wet&aa=msaa
+// (look: the world's look pass as a race draws it, every effect on; 0 draws it without. off and aa
+// switch single effects as the debug menu's WORLD LOOK switches do).
 
 const params = new URLSearchParams(location.search);
 const quality: Quality = params.get('quality') === 'low' ? 'low' : 'high';
@@ -29,7 +34,38 @@ const track = new Track(def);
 applyEnvironment(scene, def.palette, quality);
 /** Terrain more than this above the road or run-off counts as a sand bank you fly through. */
 const GROUND_RISE_MAX = 0.5;
-const ts = buildTrackScene(track, quality);
+const lookFlags: LookFlags = { ...LOOK_FLAGS_ON, world: params.get('look') !== '0' };
+for (const k of (params.get('off') ?? '').split(',').filter((x) => x)) {
+  if (!(k in lookFlags) || k === 'aa') throw new Error(`track viewer: unknown look switch "${k}" in off=`);
+  lookFlags[k as Exclude<keyof LookFlags, 'aa'>] = false;
+}
+const aa = params.get('aa');
+if (aa !== null) {
+  if (aa !== 'fxaa' && aa !== 'msaa' && aa !== 'off') throw new Error(`track viewer: aa=${aa} is not fxaa, msaa or off`);
+  lookFlags.aa = aa;
+}
+const worldLook = resolveLook(worldOfTrack(def.id).biome, quality, lookFlags, PostFx.supported(renderer));
+if (worldLook && !worldLook.post) {
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = worldLook.look.grade.exposure;
+}
+const post = worldLook?.post
+  ? new PostFx(renderer, {
+      bloom: worldLook.bloom ? worldLook.look.bloom : null,
+      grade: worldLook.look.grade,
+      boostBlur: null,
+      wet: worldLook.wetReflections ? worldLook.look.wetRoad : null,
+      aa: worldLook.aa,
+    })
+  : null;
+const roadUp = new THREE.Vector3();
+/** One frame through the look's post pipeline when there is one; `dt` eases its effects. */
+function drawScene(dt: number) {
+  if (!post) return renderer.render(scene, camera);
+  const up = ribbon.frameAt(s).up;
+  post.render(scene, camera, { dt, boosting: false, speedFrac: 0, roadUp: roadUp.set(up.x, up.y, up.z) });
+}
+const ts = buildTrackScene(track, quality, worldLook);
 scene.add(ts.group);
 const buildMs = performance.now() - t0;
 // Ground audit: terrain must never stand in the drivable width (a craft would fly through it).
@@ -121,6 +157,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  post?.resize();
 });
 
 const look = new THREE.Vector3();
@@ -169,7 +206,7 @@ function frame(now: number) {
   }
   placeCamera();
   ts.update(raceTime ?? now / 1000, camera.position);
-  renderer.render(scene, camera);
+  drawScene(dt);
   if (frames++ % 10 === 0) {
     const i = renderer.info.render;
     hud.textContent =
@@ -211,7 +248,7 @@ Object.assign(window, {
       if (next.dist !== undefined) orbit.dist = next.dist;
       placeCamera();
       ts.update(raceTime ?? performance.now() / 1000, camera.position);
-      renderer.render(scene, camera);
+      drawScene(0);
     },
     collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => ts.collectCell(item, branch, cell),
     resetCells: () => ts.resetCells(),

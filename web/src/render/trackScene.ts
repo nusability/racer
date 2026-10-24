@@ -22,6 +22,9 @@ import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
 import { biomeKit } from './track/biomes/index.ts';
 import { buildPadBeacons } from './track/padBeacons.ts';
 import { worldOfTrack } from '../data/worlds.ts';
+import type { ActiveLook } from './look/look.ts';
+import { makeRoadWet } from './look/wetRoad.ts';
+import { roadCover } from './track/ao.ts';
 
 export { applyEnvironment } from './track/environment.ts';
 
@@ -57,12 +60,14 @@ const PAD_REPEATS = 3;
 /** Crowd stands on the outside of the tightest corners. */
 const CORNER_STANDS = { low: 1, high: 3 } as const;
 
-export function buildTrackScene(track: Track, quality: Quality): TrackScene {
+/** `look`: the world's live look (look/look.ts), or null to draw the course as it always was. */
+export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook | null): TrackScene {
   const def = track.def;
   const scenery = sceneryById(def.id);
   const biome = worldOfTrack(def.id).biome;
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
-  const kit = biomeKit(scenery, def.palette);
+  const ao = look?.ao ? look.look.ao : null;
+  const kit = biomeKit(scenery, def.palette, ao);
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
   const ground = new Ground(views, kit.ground, def.seed);
@@ -70,7 +75,8 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   const landmarks = placeLandmarks(track, scenery, ground, quality);
   const glow = new FlatBuilder();
   const scatter: Scatter = { pylons: [], lights: [], buoys: [] };
-  const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter));
+  const cover = ao ? roadCover(views, ao) : null;
+  const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter, ao && cover ? { look: ao, cover: cover[i] } : null));
   for (const c of corridors) {
     buildHazards(c);
     buildRockFeatures(c, def.seed);
@@ -105,6 +111,9 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     pad: new THREE.MeshBasicMaterial({ map: tex.pad, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 }),
     sign: new THREE.MeshBasicMaterial({ map: tex.sign, side: THREE.DoubleSide }),
   };
+  if (look && (look.wetSheen || look.wetReflections)) {
+    for (const m of [mats.road, mats.branchRoad]) makeRoadWet(m, look.look.wetRoad, { sheen: look.wetSheen, mask: look.wetReflections });
+  }
   const add = (geo: THREE.BufferGeometry | null, mat: THREE.Material, name: string) => {
     if (!geo) return null;
     const m = new THREE.Mesh(geo, mat);

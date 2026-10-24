@@ -16,6 +16,16 @@ import { SoftPointBuffer } from './softPoints.ts';
 import { ParticlePool } from './particlePool.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
 import { WreckSim, type WreckKind } from './racerWreck.ts';
+import type { GliderFinishLook } from './look/lookTuning.ts';
+
+/**
+ * A world look's paint-over-metal finish: the hull and canopy reflect `envMap` (a PMREM of the
+ * world, look/cityEnv.ts). High detail only; without it the craft is drawn as it always was.
+ */
+export interface GliderFinish {
+  envMap: THREE.Texture;
+  look: GliderFinishLook;
+}
 
 export interface RacerViewState {
   speed: number;
@@ -155,8 +165,9 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-export function createRacerModel(visual: RacerVisual, opts: { detail: 'high' | 'low' }): RacerModel {
-  return new SkimmerModel(visual, opts.detail);
+/** `finish` applies to high detail only (low-detail hulls are Lambert, which has no roughness to blur a reflection). */
+export function createRacerModel(visual: RacerVisual, opts: { detail: 'high' | 'low'; finish: GliderFinish | null }): RacerModel {
+  return new SkimmerModel(visual, opts.detail, opts.detail === 'high' ? opts.finish : null);
 }
 
 /** Hull material whose facets char toward black as `uScorch` (damage) passes their threshold. */
@@ -207,16 +218,23 @@ class SkimmerModel implements RacerModel {
   private sprayCarry = 0;
   private smokeCarry = 0;
 
-  constructor(visual: RacerVisual, detail: 'high' | 'low') {
+  constructor(visual: RacerVisual, detail: 'high' | 'low', finish: GliderFinish | null) {
     this.detail = detail;
     this.bp = buildBlueprint(visual, detail);
     this.glowColor = new THREE.Color(visual.glow);
+    const f = finish?.look;
     this.hullMat = scorchable(detail === 'high'
-      ? new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.5, metalness: 0.2, side: THREE.DoubleSide })
+      ? new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: f ? f.roughness : 0.5, metalness: f ? f.metalness : 0.2, side: THREE.DoubleSide })
       : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }), this.scorch);
     this.canopyMat = detail === 'high'
-      ? new THREE.MeshStandardMaterial({ color: 0x3f6a86, roughness: 0.12, metalness: 0.4, flatShading: true, emissive: 0x0e2230 })
+      ? new THREE.MeshStandardMaterial({ color: 0x3f6a86, roughness: f ? f.canopyRoughness : 0.12, metalness: f ? f.canopyMetalness : 0.4, flatShading: true, emissive: 0x0e2230 })
       : new THREE.MeshLambertMaterial({ color: 0x3f6a86, flatShading: true, emissive: 0x0e2230 });
+    if (finish && this.hullMat instanceof THREE.MeshStandardMaterial && this.canopyMat instanceof THREE.MeshStandardMaterial) {
+      for (const m of [this.hullMat, this.canopyMat]) {
+        m.envMap = finish.envMap;
+        m.envMapIntensity = finish.look.envIntensity;
+      }
+    }
     this.glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
     // Additive blending is order independent, so double-sided needs no separate back-face pass.
     const additive = () => new THREE.MeshBasicMaterial({

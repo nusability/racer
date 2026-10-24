@@ -24,6 +24,7 @@ import { quadFacing, rockQuad, type Paint } from './paint.ts';
 import { sideIndex, type RibbonView } from './shape.ts';
 import { portal, tunnelStrip } from './tunnel.ts';
 import { buildSupports, deckStrip, dropFace } from './deck.ts';
+import type { AoLook } from '../look/lookTuning.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
 const TUNNEL_ROAD_SHADE = 0.42;
@@ -44,6 +45,8 @@ const ROUGH_KERB = 0.05;
  * (a base batter plus this), and none of the rock's lumpy noise.
  */
 const CONCRETE_LEAN = { base: 0.25, perMetre: 0.03 } as const;
+/** Shade of a wall's lowest face (it faces the road, out of the sky); the faces above take 0.92. */
+const WALL_BASE_SHADE = 0.75;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
 
@@ -77,6 +80,13 @@ interface Profile {
   hidden: boolean;
 }
 
+/** Baked occlusion for one corridor (a world's look opts in): the tuning and its roads' cover. */
+export interface CorridorAo {
+  look: AoLook;
+  /** Per sample, 0 open sky … 1 under another road (track/ao.ts). */
+  cover: Float32Array;
+}
+
 /** The dressed corridor of one ribbon, in chunks for culling. */
 export class Corridor {
   readonly chunks: Chunk[] = [];
@@ -96,6 +106,7 @@ export class Corridor {
     quality: Quality,
     readonly glow: FlatBuilder,
     readonly scatter: Scatter,
+    readonly ao: CorridorAo | null,
   ) {
     this.ribbon = view.ribbon;
     this.n = this.ribbon.samples.length;
@@ -199,8 +210,10 @@ export class Corridor {
 
   private buildRoad(c: Chunk) {
     const shade = new THREE.Color();
+    const tmp = new THREE.Color();
     const branch = this.view.branch;
     const towardMain = branch ? -branch.side : 0;
+    const ao = this.ao;
     let prev: number[] | null = null;
     for (let k = c.k0; k <= c.k1; k++) {
       if (this.gap(k)) {
@@ -210,7 +223,8 @@ export class Corridor {
       const smp = this.ribbon.samples[this.idx(k)];
       const half = smp.width / 2;
       const v = (k * this.ribbon.step) / ROAD_TEXTURE_LENGTH;
-      shade.setScalar((this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1) * (1 - ROUGH_ROAD_SHADE * smp.rough));
+      const cover = ao ? 1 - ao.look.cover * ao.cover[this.idx(k)] : 1;
+      shade.setScalar((this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1) * (1 - ROUGH_ROAD_SHADE * smp.rough) * cover);
       // Paved road on u 0..split; each run-off strip maps across the sand half of the atlas.
       const extL = towardMain < 0 && this.open(k, -1) ? JUNCTION_OVERLAP : 0;
       const extR = towardMain > 0 && this.open(k, 1) ? JUNCTION_OVERLAP : 0;
@@ -223,18 +237,31 @@ export class Corridor {
       // A deck's run-off is part of the deck, level with the road.
       const lip = (run: number) => (run > RUNOFF_MIN && !this.deck(k) ? -RUNOFF_DROP : 0);
       const y = -this.shape.sink[this.idx(k)];
+      // Occlusion at the foot of whatever bounds each side: the run-off's outer edge, and the
+      // road edge itself where a wall stands right at it. Open edges and junctions have none.
+      const wallShade = ao ? 1 - ao.look.wall : 1;
+      const walled = (side: number) => !bare && !this.open(k, side) && !this.drop(k, side);
+      const foot = (side: number) => (walled(side) ? wallShade : 1);
+      const edgeShade = (side: number, run: number) => (walled(side) && run < RUNOFF_MIN ? wallShade : 1);
+      const at = (x: number, yy: number, mult: number, u: number) =>
+        c.road.vertex(this.banked(k, x, yy), mult === 1 ? shade : tmp.copy(shade).multiplyScalar(mult), u, v);
+      // Across the paved road: the edges and the centre, plus (with occlusion) the inner edge of
+      // the darkening, so it hugs the wall instead of fading over half the road.
+      const reach = ao ? Math.min(ao.look.reach, half / 2) : 0;
+      const xs = ao ? [-half, -half + reach, 0, half - reach, half] : [-half, 0, half];
+      const road = xs.map((x) => at(x, y, x === -half ? edgeShade(-1, runL) : x === half ? edgeShade(1, runR) : 1, (S * (x + half)) / smp.width));
       const row = [
-        c.road.vertex(this.banked(k, -half - runL, y + lip(runL)), shade, 1, v),
-        c.road.vertex(this.banked(k, -half, y), shade, S, v),
-        c.road.vertex(this.banked(k, -half, y), shade, 0, v),
-        c.road.vertex(this.banked(k, 0, y), shade, S / 2, v),
-        c.road.vertex(this.banked(k, half, y), shade, S, v),
-        c.road.vertex(this.banked(k, half, y), shade, S, v),
-        c.road.vertex(this.banked(k, half + runR, y + lip(runR)), shade, 1, v),
+        at(-half - runL, y + lip(runL), foot(-1), 1),
+        at(-half, y, edgeShade(-1, runL), S),
+        ...road,
+        at(half, y, edgeShade(1, runR), S),
+        at(half + runR, y + lip(runR), foot(1), 1),
       ];
       if (prev) {
-        // Pairs: [0-1] left run-off, [2-3] [3-4] road, [5-6] right run-off.
-        for (const [i, j] of [[0, 1], [2, 3], [3, 4], [5, 6]]) {
+        // Pairs: the left run-off, the road's strips, the right run-off.
+        const last = row.length - 1;
+        const pairs = [[0, 1], ...road.slice(1).map((_, i) => [i + 2, i + 3]), [last - 1, last]];
+        for (const [i, j] of pairs) {
           c.road.tri(prev[i], prev[j], row[j]);
           c.road.tri(prev[i], row[j], row[i]);
         }
@@ -386,8 +413,13 @@ export class Corridor {
     const target = both ? c.sand : c.rock;
     for (let i = 0; i < 6; i++) {
       const lipFace = i < 3;
-      if (!A.sand && !B.sand && i < 4) {
-        rockQuad(c.rock, this.paint, A.pts[i], B.pts[i], B.pts[i + 1], A.pts[i + 1], dir, i === 0 ? 0.75 : 0.92);
+      if (!A.sand && !B.sand && i === 0 && this.ao) {
+        // Occlusion: the wall's lowest face darkens toward the road it meets.
+        const top = this.paint.strata((A.pts[0].y + B.pts[1].y) / 2, WALL_BASE_SHADE, new THREE.Color());
+        const bottom = top.clone().multiplyScalar(1 - this.ao.look.wallFoot);
+        quadFacing(c.rock, A.pts[0], B.pts[0], B.pts[1], A.pts[1], dir, bottom, bottom, top, top);
+      } else if (!A.sand && !B.sand && i < 4) {
+        rockQuad(c.rock, this.paint, A.pts[i], B.pts[i], B.pts[i + 1], A.pts[i + 1], dir, i === 0 ? WALL_BASE_SHADE : 0.92);
       } else if (!both && lipFace) {
         quadFacing(c.rock, A.pts[i], A.pts[i + 1], B.pts[i + 1], B.pts[i], dir, A.cols[i], A.cols[i + 1], B.cols[i + 1], B.cols[i]);
       } else {

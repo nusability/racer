@@ -50,7 +50,7 @@ export function wreckMode(renderer: THREE.WebGLRenderer, params: URLSearchParams
   });
   const effects = new Effects(scene, 'high');
   const models: RacerModel[] = RACERS.map((r) => {
-    const m = createRacerModel(r.visual, { detail: 'high' });
+    const m = createRacerModel(r.visual, { detail: 'high', finish: null });
     m.root.visible = false;
     scene.add(m.root);
     return m;

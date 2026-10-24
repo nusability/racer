@@ -10,6 +10,7 @@ import { concreteTexture, pavingTexture } from '../textures.ts';
 import { CITY_NEON, facadeBox, facadeMaterial } from '../../facade.ts';
 import { neonSigns, signBoards } from '../../neonSigns.ts';
 import type { BiomeKit, DressContext, Dressing } from './kit.ts';
+import type { AoLook } from '../../look/lookTuning.ts';
 
 // Neon Meridian: a night city. Dark asphalt streets and pale plazas off the course, blocks of
 // lit towers standing back from it on a street grid, a skyline of taller towers ringing the
@@ -91,7 +92,8 @@ const DUST = 0x9a989a;
 const LITTER = 0xe8e4f0;
 const SPRAY_CONCRETE = 0xa8a6a4;
 
-export function cityKit(scenery: CityScenery, palette: TrackPalette): BiomeKit {
+/** `ao`: the world look's baked occlusion (darkens the buildings' street level), or null. */
+export function cityKit(scenery: CityScenery, palette: TrackPalette, ao: AoLook | null): BiomeKit {
   const asphalt = ASPHALT.clone().lerp(new THREE.Color(palette.road), 0.3);
   const plaza = PLAZA.clone().lerp(new THREE.Color(palette.sand), 0.25);
   const berm = BERM.clone().lerp(new THREE.Color(palette.rock), 0.3);
@@ -111,13 +113,13 @@ export function cityKit(scenery: CityScenery, palette: TrackPalette): BiomeKit {
     roadLight: ROAD_LIGHT,
     masonry: 'concrete',
     detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: concreteTexture(seed, quality) }),
-    dress: (ctx) => dressCity(ctx, scenery, palette),
+    dress: (ctx) => dressCity(ctx, scenery, palette, ao),
     spray: { road: palette.road, runoff: SPRAY_CONCRETE, water: SPRAY_CONCRETE },
     debris: { color: STEEL, glow: 0, dust: DUST, streak: LITTER, shape: 'girder' },
   };
 }
 
-function dressCity(ctx: DressContext, scenery: CityScenery, palette: TrackPalette): Dressing {
+function dressCity(ctx: DressContext, scenery: CityScenery, palette: TrackPalette, ao: AoLook | null): Dressing {
   const rng = mulberry32(ctx.seed ^ 0xc17e);
   const keep = ctx.quality === 'high' ? 1 : LOW_SHARE;
   const boxes: THREE.Matrix4[] = [];
@@ -133,7 +135,7 @@ function dressCity(ctx: DressContext, scenery: CityScenery, palette: TrackPalett
   const objects: THREE.Object3D[] = [];
   const owned: { dispose(): void }[] = [];
   const geo = facadeBox();
-  const mat = facadeMaterial({ palette, neon: CITY_NEON });
+  const mat = facadeMaterial({ palette, neon: CITY_NEON, baseShade: ao ? { amount: ao.buildingBase, height: ao.buildingHeight } : null });
   owned.push(geo, mat);
   if (boxes.length > 0) {
     const city = new THREE.InstancedMesh(geo, mat, boxes.length);
