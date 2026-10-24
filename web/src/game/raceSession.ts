@@ -20,6 +20,7 @@ import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/tr
 import { describeLook, resolveLook, type ActiveLook } from '../render/look/look.ts';
 import { cityEnvironment } from '../render/look/cityEnv.ts';
 import { PostFx } from '../render/look/postFx.ts';
+import { GlowPools } from '../render/look/glowPools.ts';
 import { worldOfTrack } from '../data/worlds.ts';
 import { createHud } from '../ui/hud.ts';
 import { createInput } from '../ui/input.ts';
@@ -167,6 +168,8 @@ export class RaceSession {
   private readonly look: ActiveLook | null;
   private readonly post: PostFx | null;
   private readonly gliderEnv: { texture: THREE.Texture; dispose(): void } | null;
+  /** Thruster light on the road under each glider; part of the wet road, so it follows that switch. */
+  private readonly glowPools: GlowPools | null;
   /** The shared renderer's tone mapping before this race, restored for the garage after it. */
   private readonly toneMappingBefore: { mapping: THREE.ToneMapping; exposure: number };
   private readonly roadFrame = makeFrame();
@@ -205,6 +208,10 @@ export class RaceSession {
     this.env = applyEnvironment(this.scene, def.palette, ctx.settings.quality);
     this.trackScene = buildTrackScene(this.track, ctx.settings.quality, look);
     this.scene.add(this.trackScene.group);
+    this.glowPools = look?.wetSheen
+      ? new GlowPools(this.track, request.entrants.map((e) => racerById(e.racerId).visual.glow), look.look.glowPool)
+      : null;
+    if (this.glowPools) this.scene.add(this.glowPools.mesh);
 
     for (const e of request.entrants) {
       const model = createRacerModel(racerById(e.racerId).visual, {
@@ -557,6 +564,7 @@ export class RaceSession {
         poseObject(this.track, v.draw, v.model.root);
         v.model.root.visible = i === pi || v.model.root.position.distanceTo(this.cam.camera.position) >= CAM_HIDE_NEAR;
       }
+      this.glowPools?.update(i, v.draw, r.boosting, v.wrecked);
       const stats = this.request.entrants[i].stats;
       v.model.update(dt, this.clock, {
         speed: r.speed,
@@ -694,6 +702,7 @@ export class RaceSession {
     this.env.dispose();
     this.post?.dispose();
     this.gliderEnv?.dispose();
+    this.glowPools?.dispose();
     this.ctx.renderer.toneMapping = this.toneMappingBefore.mapping;
     this.ctx.renderer.toneMappingExposure = this.toneMappingBefore.exposure;
   }

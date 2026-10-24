@@ -57,6 +57,21 @@ export interface WetRoadLook {
   sheenColor: number;
 }
 
+/** Thruster light pooled on the road under each glider (glowPools.ts). */
+export interface GlowPoolLook {
+  /** Pool size on the road, metres along and across, and how far behind the craft's centre it sits. */
+  length: number;
+  width: number;
+  behind: number;
+  /** Lifted this far off the road surface (plus polygon offset) so it never sinks into it. */
+  lift: number;
+  /** Brightness of the glow colour cruising and boosting (above 1 feeds the bloom). */
+  intensity: number;
+  boostIntensity: number;
+  /** Height above the road at which the pool has faded out (jumps). */
+  fadeHeight: number;
+}
+
 export interface GliderFinishLook {
   /** Paint over metal: how metallic and how rough the hull, and how strongly it reflects the city. */
   metalness: number;
@@ -105,6 +120,7 @@ export interface WorldLook {
   grade: GradeLook;
   boostBlur: BoostBlurLook;
   wetRoad: WetRoadLook;
+  glowPool: GlowPoolLook;
   gliders: GliderFinishLook;
   env: EnvLook;
   ao: AoLook;
@@ -149,6 +165,9 @@ const CITY_LOOK: WorldLook = {
   },
   boostBlur: { reach: 0.075, inner: 0.22, outer: 0.75, chroma: 0.008, response: 5, speedFrom: 0.5 },
   wetRoad: { reflection: 0.9, smear: 0.09, nearShare: 0.3, sheen: 0.06, sheenPower: 5, sheenColor: 0x6c78b0 },
+  // About a glider's footprint, centred under the thrusters; bright enough to bloom when boosting,
+  // dim enough cruising that the road's lines still read through it.
+  glowPool: { length: 11, width: 7, behind: 2, lift: 0.08, intensity: 0.6, boostIntensity: 1.1, fadeHeight: 6 },
   gliders: { metalness: 0.55, roughness: 0.3, envIntensity: 1.1, canopyMetalness: 0.7, canopyRoughness: 0.06 },
   env: {
     zenith: 0x080a1e,
