@@ -114,10 +114,12 @@ export const frozenharbor: TrackDef = {
         { x: -560, z: 980, y: 3 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.28, lateral: 0, count: 4, spacing: 28 },
+        // Broken pack ice around the ice pillars.
         { kind: 'slick', from: 1.5, to: 4.5, grip: 0.6 },
         { kind: 'pillar', at: 3.0, lateral: -4, radius: 2 },
         { kind: 'pillar', at: 3.5, lateral: 4, radius: 2 },
+        { kind: 'rough', from: 2.1, to: 2.9, amount: 1 },
+        { kind: 'rough', from: 3.8, to: 4.4, amount: 1 },
       ],
     },
   ],

@@ -123,10 +123,10 @@ export const boardwalk: TrackDef = {
         { x: -1110, z: -300, y: 5 },
       ],
       features: [
-        { kind: 'boostCells', at: 4.87, lateral: 0, count: 4, spacing: 28 },
+        // Storm-broken planking up to the pillars.
         { kind: 'pillar', at: 5.4, lateral: -4, radius: 2 },
         { kind: 'pillar', at: 5.8, lateral: 4, radius: 2 },
-        { kind: 'boostPad', at: 7.4, lateral: 0 },
+        { kind: 'rough', from: 2.6, to: 3.9, amount: 1 },
       ],
     },
   ],

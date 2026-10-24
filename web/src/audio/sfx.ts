@@ -17,6 +17,7 @@ export type OneShotName =
   | 'tankEmpty'
   | 'falseStart'
   | 'perfectStart'
+  | 'slingshot'
   | 'repair'
   | 'wreck'
   | 'lap'
@@ -143,6 +144,12 @@ export function playSfx(a: LiveAudio, name: OneShotName, intensity: number, st: 
       p.tone(wet, { wave: 'sine', f0: 1568, dur: 0.5, gain: 0.08, delay: 0.12 }, k);
       p.noise(dry, { filter: 'bandpass', f0: 500, f1: 4000, dur: 0.6, gain: 0.3 }, k);
       for (let n = 0; n < SPARKLES; n++) p.tone(wet, { wave: 'sine', f0: rand(SPARKLE_HZ[0], SPARKLE_HZ[1]), dur: 0.18, gain: 0.04, delay: 0.15 + n * 0.05, pan: rand(-0.9, 0.9) }, k);
+      break;
+    case 'slingshot':
+      // Thrown out of a wake: the air tears past with a rising whoosh, panned off the side it
+      // pulled out to, and a faint lifting tone.
+      p.noise(dry, { filter: 'bandpass', f0: 700, f1: 3800, dur: 0.55, gain: 0.26, q: 1.2, pan: -0.4, panTo: 0.4 }, k);
+      p.tone(wet, { wave: 'sine', f0: 660, f1: 990, dur: 0.4, gain: 0.06 }, k);
       break;
     case 'lap':
       // Glassy two-tone ping, echoing left-right-left down the hall.

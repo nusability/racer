@@ -110,9 +110,9 @@ export const rattlesnake: TrackDef = {
         { x: 180, z: -1034, y: 19 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.68, lateral: 0, count: 4, spacing: 28 },
+        // Scree all along the spine, round the pillar.
         { kind: 'pillar', at: 4.0, lateral: 3, radius: 1.8 },
-        { kind: 'boostPad', at: 5.6, lateral: 0 },
+        { kind: 'rough', from: 2.3, to: 4.6, amount: 1 },
       ],
     },
   ],

@@ -78,6 +78,17 @@ export function rivalEntrant(rival: RivalDef, player?: RaceEntrant): RaceEntrant
 }
 
 /**
+ * How much faster the cup's field is than `player`, as a fraction (0.02 = 2 % faster), or 0
+ * when the player's machine is at or above it. The fastest roster machine sets the floor
+ * rivals never drop below, so an under-upgraded glider faces a faster field; menus say so
+ * up front rather than letting the race feel rigged.
+ */
+export function fieldEdge(cup: CupDef, player: RaceEntrant): number {
+  const floor = Math.max(...cup.rivals.map((r) => performanceIndex(liftedMachine(r, 0).stats)));
+  return Math.max(0, floor / performanceIndex(player.stats) - 1);
+}
+
+/**
  * Race 1: rivals strongest-first, player at the back. Later races: reverse standings, so the
  * leader starts last and has to fight through. Ties keep the roster order.
  */

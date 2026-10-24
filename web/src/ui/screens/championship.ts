@@ -18,6 +18,13 @@ const WORLD_CARD_THUMBS = 3;
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
+/** "Field is 2% faster than your Dustwing", or null when the player's glider keeps up. */
+function fieldWarning(ctx: AppCtx, cup: CupDef): string | null {
+  const pct = Math.round(ctx.career.fieldEdge(cup) * 100);
+  if (pct < 1) return null;
+  return `⚠ Field is ${pct}% faster than your ${racerById(ctx.career.save.selectedRacer).name}`;
+}
+
 function prizeLine(cup: CupDef): string {
   const p = racePayout({ mode: 'championship', place: 1, cup, laps: 1, standardLaps: 1, cupWin: { firstTime: true } });
   return `1st pays ${formatCredits(p.race)} · Cup win +${formatCredits(p.cupBonus)}`;
@@ -91,8 +98,10 @@ export function worldScreen(ctx: AppCtx, worldId: string): Screen {
     card.append(
       h('span', 'cupcard__blurb', cup.blurb),
       h('span', 'cupcard__prize', prizeLine(cup)),
-      h('span', 'cupcard__status', status),
     );
+    const warning = unlocked ? fieldWarning(ctx, cup) : null;
+    if (warning) card.append(h('span', 'cupcard__warn', warning));
+    card.append(h('span', 'cupcard__status', status));
     return card;
   });
   const el = h(
@@ -148,6 +157,8 @@ export function cupScreen(ctx: AppCtx, cupId: string): Screen {
   );
 
   const actions = h('div', 'actions');
+  const warning = fieldWarning(ctx, cup);
+  if (warning) actions.append(h('p', 'note note--warn', `${warning}. Upgrade in the garage to match it.`));
   if (live) {
     const t = trackById(cup.trackIds[live.raceIndex]);
     actions.append(

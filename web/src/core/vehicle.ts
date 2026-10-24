@@ -5,7 +5,8 @@
 
 import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats } from './types.ts';
 import { gustAt } from './hazards.ts';
-import { cornerPull, currentTopSpeed, steerRate } from './handling.ts';
+import { cornerPull, currentTopSpeed, roughOverspeed, roughWear, steerRate } from './handling.ts';
+import { mulberry32, type Rng } from './rng.ts';
 import type { Ribbon } from './track.ts';
 import {
   ACCEL_TAPER_EXP,
@@ -60,6 +61,9 @@ import {
   RACER_RADIUS,
   REPAIR_VALUE,
   ROLL_PER_LATERAL_SPEED,
+  ROUGH_JOLT_FULL,
+  ROUGH_JOLT_RATE,
+  ROUGH_JOLT_SPEED,
   SAND_DRAG,
   SAND_TOP_SPEED,
   SCRAPE_BASE_INTENSITY,
@@ -99,6 +103,8 @@ export class Vehicle {
   lapStart: number;
   /** Top-speed factor the race sets for catch-up (1 = the stats as they are). */
   pace = 1;
+  /** Top-speed bonus (fraction) the race sets from the slipstream (src/core/slipstream.ts). */
+  slip = 0;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
   /** Seconds since the tank was last spent from: the trickle refill waits a moment. */
@@ -115,9 +121,12 @@ export class Vehicle {
    * obstacle itself, or for a scheduled hazard (rebuilt every step) its id and place.
    */
   private touching: unknown = null;
+  /** The racer's own seeded stream for what the ground does to it (rough-ground jolts). */
+  private readonly rng: Rng;
 
-  constructor(id: string, stats: RacerStats, ribbon: Ribbon, s: number, x: number, distance: number) {
+  constructor(id: string, stats: RacerStats, ribbon: Ribbon, s: number, x: number, distance: number, seed: number) {
     this.stats = stats;
+    this.rng = mulberry32(seed);
     this.state = {
       id,
       branch: -1,
@@ -140,6 +149,7 @@ export class Vehicle {
       place: 0,
       bestLap: null,
       steer: 0,
+      draft: 0,
     };
     this.drive = { crashes: { destroyed: 0, fell: 0, offEdge: 0, loopStall: 0, obstacle: 0, hazard: 0 }, scrapeTime: 0, offroadTime: 0 };
     this.targetX = x;
@@ -204,6 +214,7 @@ export class Vehicle {
     this.boostPads(ribbon, sOld, events);
     this.cells(ribbon, sOld, events);
     this.sand(ribbon, events);
+    this.roughGround(ribbon, events);
     if (st.damage >= 1) {
       this.crash('destroyed', events);
       return;
@@ -236,7 +247,7 @@ export class Vehicle {
   /** Auto-throttle toward the current top speed; sand caps it lower and drags. */
   private updateSpeed(ribbon: Ribbon, brake: boolean) {
     const st = this.state;
-    let top = currentTopSpeed(this.stats, st, st.boosting) * this.pace;
+    let top = currentTopSpeed(this.stats, st, st.boosting) * this.pace * (1 + this.slip);
     if (this.offroad) top *= SAND_TOP_SPEED;
     let dv: number;
     if (brake) dv = -BRAKE_DECEL;
@@ -287,7 +298,7 @@ export class Vehicle {
       this.damage(Math.max(0, vn - BOUNDARY_DAMAGE_FREE_SPEED) * BOUNDARY_DAMAGE_PER_SPEED);
       st.vx = -side * vn * BOUNDARY_RESTITUTION;
     } else if (vn > 0) st.vx = 0;
-    const top = currentTopSpeed(this.stats, st, st.boosting) * this.pace;
+    const top = currentTopSpeed(this.stats, st, st.boosting) * this.pace * (1 + this.slip);
     const thrust = this.stats.accel * (st.boosting ? BOOST_ACCEL_MULT : 1);
     if (st.speed > top * BOUNDARY_GRIND_SPEED) {
       const grind = thrust * (1 - BOUNDARY_GRIND_SPEED ** ACCEL_TAPER_EXP);
@@ -308,6 +319,25 @@ export class Vehicle {
       this.offroad = on;
       events.push({ type: 'offroad', id: st.id, on });
     }
+  }
+
+  /**
+   * Rough ground batters a racer skimming it faster than the safe speed: hull by the second,
+   * steeply more the faster it goes, and jolts that kick it sideways. In the air it is spared.
+   */
+  private roughGround(ribbon: Ribbon, events: RaceEvent[]) {
+    const st = this.state;
+    const rough = ribbon.roughAt(st.s);
+    if (rough <= 0 || !this.grounded) return;
+    events.push({ type: 'rough', id: st.id, intensity: Math.min(1, (rough * st.speed) / this.stats.topSpeed) });
+    const over = roughOverspeed(this.stats, st.speed);
+    if (over <= 0) return;
+    this.damage(roughWear(this.stats, st.speed, rough) * SIM_DT);
+    if (this.rng() >= ROUGH_JOLT_RATE * rough * over * SIM_DT) return;
+    const intensity = Math.min(1, (rough * over) / ROUGH_JOLT_FULL);
+    // Either way with even odds: a kick the pilot can't anticipate.
+    st.vx += (this.rng() < 0.5 ? -1 : 1) * ROUGH_JOLT_SPEED * intensity;
+    events.push({ type: 'jolt', id: st.id, intensity });
   }
 
   private vertical(ribbon: Ribbon, sOld: number, sdot: number, events: RaceEvent[]) {

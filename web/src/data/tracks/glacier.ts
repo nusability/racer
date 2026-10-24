@@ -123,9 +123,9 @@ export const glacier: TrackDef = {
         { x: 1084, z: -1176, y: 22 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.53, lateral: 0, count: 4, spacing: 28 },
+        // Seracs and broken ice along the crevasse edge.
         { kind: 'drop', from: 1.8, to: 4.2 },
-        { kind: 'boostPad', at: 4.4, lateral: 0 },
+        { kind: 'rough', from: 2.2, to: 3.6, amount: 0.8 },
       ],
     },
   ],

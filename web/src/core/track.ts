@@ -261,6 +261,7 @@ export class Ribbon {
         dropR: shape.dropR[k],
         magnet: shape.magnet[k],
         grip: shape.grip[k],
+        rough: shape.rough[k],
         stretch: shape.stretch[k],
       });
     }
@@ -379,6 +380,10 @@ export class Ribbon {
   /** Surface grip multiplier at s (1 = normal). */
   gripAt(s: number): number {
     return this.sampleAt(s).grip;
+  }
+  /** Rough ground at s, 0..1 (0 = smooth road). */
+  roughAt(s: number): number {
+    return this.sampleAt(s).rough;
   }
   /** World metres per metre of s (inside a loop > 1). */
   stretchAt(s: number): number {
@@ -587,6 +592,7 @@ export class Ribbon {
       case 'loop':
       case 'corkscrew':
       case 'slick':
+      case 'rough':
       case 'hazard':
       case 'crossing':
         break;

@@ -85,15 +85,16 @@ export const seastacks: TrackDef = {
       runoff: 0,
       points: [
         { x: 250, z: -2170, y: 6 },
-        { x: -250, z: -2060, y: 4 },
-        { x: -650, z: -1850, y: 3 },
+        { x: -270, z: -1920, y: 4 },
+        { x: -600, z: -2030, y: 3 },
         { x: -900, z: -1650, y: 2 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.02, lateral: 0, count: 4, spacing: 28 },
+        // Fallen stack rubble past the arches.
         { kind: 'arch', at: 3.3, opening: 12, offset: -3, height: 12 },
         { kind: 'arch', at: 3.8, opening: 12, offset: 3, height: 12 },
-        { kind: 'boostPad', at: 4.7, lateral: 0 },
+        { kind: 'rough', from: 4.1, to: 5.4, amount: 0.6 },
+        { kind: 'boulders', from: 4.3, to: 4.9, count: 3, radius: 1.3 },
       ],
     },
   ],

@@ -92,9 +92,9 @@ export const bonecanyon: TrackDef = {
         { x: 1670, z: -3010, y: 8 },
       ],
       features: [
-        { kind: 'boostCells', at: 2.68, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 2.5, lateral: 0 },
+        // The leap lands on a field of broken bone and rock.
         { kind: 'jump', at: 3.0, rampLength: 60, rampHeight: 5, gapLength: 50 },
+        { kind: 'rough', from: 4.0, to: 4.8, amount: 1 },
       ],
     },
   ],

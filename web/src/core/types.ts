@@ -82,6 +82,13 @@ export type TrackFeature =
   | { kind: 'loop'; at: TrackParam; radius: number; span: number; shift: number; settle: number }
   /** A slippery surface (ice, wet rock): the craft answers steering with `grip` (0..1) of its usual bite. */
   | { kind: 'slick'; from: TrackParam; to: TrackParam; grip: number }
+  /**
+   * Broken, rocky ground (rubble, cracked slabs, pressure ridges): skimming over it faster than
+   * the safe speed batters the hull, steeply more the faster you go. `amount` (0..1] scales the
+   * damage and the jolts. Lifting or braking through it is cheap; flat out it is the price of a
+   * shortcut.
+   */
+  | { kind: 'rough'; from: TrackParam; to: TrackParam; amount: number }
   /** The road rolls through `turns` full barrel rolls between from and to; racers are held to it. */
   | { kind: 'corkscrew'; from: TrackParam; to: TrackParam; turns: number }
   /**
@@ -227,6 +234,8 @@ export interface TrackSample {
   magnet: boolean;
   /** Surface grip multiplier (1 = normal; ice < 1). */
   grip: number;
+  /** Rough ground 0..1 (0 = smooth): hull damage and jolts at speed (see the 'rough' feature). */
+  rough: number;
   /**
    * World metres per metre of s (≥ 1). Inside a loop the road is longer than the s span it
    * occupies; the simulation advances s by speed / stretch so speeds stay true.
@@ -401,6 +410,8 @@ export interface RacerState {
   bestLap: number | null;
   /** Steer rate command applied this step (-1..1), for presentation. */
   steer: number;
+  /** Slipstream built up riding a racer's wake, 0..1 (see src/core/slipstream.ts). */
+  draft: number;
 }
 
 export type RaceEvent =
@@ -408,6 +419,17 @@ export type RaceEvent =
   | { type: 'scrape'; id: string; side: -1 | 1; intensity: number }
   /** Entered (on: true) or left (on: false) the sand run-off beyond the road edge. */
   | { type: 'offroad'; id: string; on: boolean }
+  /**
+   * Every step a racer skims rough ground: `intensity` 0..1 is the rough amount times its
+   * share of top speed (a rumble even when lifting), for sound and camera shake.
+   */
+  | { type: 'rough'; id: string; intensity: number }
+  /** Rough ground kicked the racer sideways (a jolt), `intensity` 0..1. */
+  | { type: 'jolt'; id: string; intensity: number }
+  /** Started (on: true) or stopped (on: false) riding another racer's slipstream. */
+  | { type: 'draft'; id: string; on: boolean }
+  /** Pulled out of a full draft: the slipstream's speed lingers a moment for the pass. */
+  | { type: 'slingshot'; id: string }
   | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number }
   /**
    * A wreck: the racer is out of this race (no respawn). destroyed = hull gone, fell = into a

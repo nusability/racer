@@ -40,6 +40,8 @@ let tankFill = 0.5;
 const FAKE_WEAR_PER_S = 0.09;
 const FAKE_REPAIR_EVERY_S = 5;
 const FAKE_REPAIR = 0.2;
+/** Fake slipstream: a wake ridden for part of every cycle, so the gauge fills, glows and fades. */
+const FAKE_DRAFT_CYCLE_S = 6;
 const wreckWhenEmpty = params.get('wreck') === '1';
 let hullDamage = 0;
 let wrecked = false;
@@ -103,6 +105,7 @@ function frame(now: number): void {
     boost: tankFill,
     damage: hullDamage,
     boosting: inp.boost && tankFill > 0,
+    draft: racing ? Math.max(0, Math.sin((t / FAKE_DRAFT_CYCLE_S) * 2 * Math.PI)) : 0,
     countdown: racing ? null : Math.max(0, Math.ceil(countdownLeft - 1)),
     finished: false,
   };

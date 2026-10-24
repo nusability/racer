@@ -50,9 +50,11 @@ export const FALSE_START_STALL = 1;
 /** How long the field may keep racing after the player finishes, seconds. */
 export const FINISH_GRACE = 20;
 /**
- * Catch-up: keeps races close without lying about who is faster. AIs well ahead of the player
- * ease off, AIs well behind push, as a top-speed factor ramped in by distance gap. Off when
- * there is no player and once the player has finished.
+ * Catch-up: a small invisible nudge that keeps races close. AIs well ahead of the player ease
+ * off, AIs well behind push, as a top-speed factor ramped in by distance gap. Off when there is
+ * no player and once the player has finished. The slipstream (below) is now the main rubber
+ * band: it is visible, works for the player too and is earned by driving, so this one stays
+ * small. A strong push (it was 0.15) read as rivals simply being faster.
  */
 /** Gap (metres along the lap) where the catch-up starts to act. */
 export const CATCHUP_START_GAP = 60;
@@ -60,9 +62,39 @@ export const CATCHUP_START_GAP = 60;
 export const CATCHUP_FULL_GAP = 450;
 /** Top speed an AI far ahead gives up (fraction). */
 export const CATCHUP_EASE = 0.03;
-/** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats. A
- * strong push keeps a fast player from lapping the field; behind like that, AIs also boost freely. */
-export const CATCHUP_PUSH = 0.15;
+/** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats outside a
+ * slipstream. Small, so a pack reeling the player in does it in the player's wake, not by magic;
+ * behind like that, AIs still boost freely. */
+export const CATCHUP_PUSH = 0.05;
+
+// Slipstream (src/core/slipstream.ts): every racer, player and AI alike, rides the wake of a
+// racer just ahead of it on the same ribbon. Distances along s are bumper to bumper.
+/** Closest gap that drafts, metres: nearer than this is a bump, not a wake. */
+export const DRAFT_MIN_GAP = 4;
+/** Farthest gap that drafts, metres: about a quarter second at race speed. */
+export const DRAFT_MAX_GAP = 40;
+/** Half-width of the wake at the closest gap, metres: a little over a craft's half-width. */
+export const DRAFT_HALF_WIDTH_NEAR = 2.5;
+/** Half-width of the wake at the farthest gap, metres: far back, only a dead-straight line rides it. */
+export const DRAFT_HALF_WIDTH_FAR = 1.2;
+/** Seconds to build a full draft in the wake, and to lose it out of it: quick, never instant. */
+export const DRAFT_BUILD_TIME = 0.5;
+export const DRAFT_DECAY_TIME = 0.4;
+/** Top speed gained at full draft (fraction): enough to close on an equal rival and pass. */
+export const DRAFT_TOP_SPEED = 0.06;
+/** Tank refilled per second at full draft: a bit over the passive trickle, and it needs no pause. */
+export const DRAFT_BOOST_REFILL = 0.02;
+/** Draft at or above this counts as full (charging a slingshot). */
+export const DRAFT_FULL = 0.9;
+/** Seconds of full draft that charge a slingshot. */
+export const DRAFT_SLINGSHOT_CHARGE = 0.8;
+/** A charged slingshot is lost when the draft fades below this while still in the wake (dropping back). */
+export const DRAFT_CHARGE_KEEP = 0.5;
+/** Seconds the full draft bonus lingers after pulling out of a charged wake, so pulling out to pass works. */
+export const DRAFT_SLINGSHOT_TIME = 0.6;
+/** The 'draft' event turns on at this draft and off below the lower mark, so the edge of a wake doesn't flicker. */
+export const DRAFT_EVENT_ON = 0.3;
+export const DRAFT_EVENT_OFF = 0.1;
 /** Skill of the AI that drives the player's racer after the finish (and in headless runs). */
 export const AUTOPILOT_SKILL = 0.85;
 
@@ -336,6 +368,26 @@ export const AI_REPAIR_WANT = 0.35;
 export const AI_REPAIR_DETOUR = 20;
 /** AIs at or above this skill steer around rivals; below it they bump and barge. */
 export const AI_AVOID_RACERS_SKILL = 0.5;
+/** How far toward a rival's line an AI tucks in to draft it (0..1 of the offset): aces ride wakes. */
+export const AI_DRAFT_TUCK_LO = 0;
+export const AI_DRAFT_TUCK_HI = 1;
+/** Only on a straight: no bend sharper than this (1/m) within AI_DRAFT_STRAIGHT_TIME of travel. */
+export const AI_DRAFT_MAX_CURVATURE = 1 / 1200;
+export const AI_DRAFT_STRAIGHT_TIME = 1.5;
+/** An AI only moves over for a wake this far across from where it is, metres. */
+export const AI_DRAFT_CATCH = 8;
+/** Never sits in line closer than this, metres bumper to bumper (at least DRAFT_MIN_GAP): a rear-end costs hull. */
+export const AI_DRAFT_TUCK_MIN_GAP = 6;
+/** In line and due to reach that gap within this many seconds, it pulls out to pass. */
+export const AI_DRAFT_PASS_TIME = 1.5;
+/** Room it leaves beside the rival it passes, metres beyond touching; the lane must be free of others too. */
+export const AI_DRAFT_PASS_CLEARANCE = 1.5;
+/**
+ * How fast tucking in and pulling out move the AI sideways, m/s: under a racer contact's
+ * damage-free closing speed (RACER_DAMAGE_FREE_SPEED), so a pull-out that does touch a rival
+ * rubs rather than rams.
+ */
+export const AI_DRAFT_SHIFT_RATE = 6;
 /** Arrival-time window (s) inside which an AI yields to cross traffic at a flat crossing. */
 export const AI_CROSSING_WINDOW_LO = 0;
 export const AI_CROSSING_WINDOW_HI = 0.7;
@@ -344,12 +396,52 @@ export const AI_SHORTCUT_LO = 0;
 export const AI_SHORTCUT_HI = 0.8;
 /** The AI decides on a shortcut and lines up for it this many seconds before its entry. */
 export const AI_SHORTCUT_LOOK_TIME = 2;
+/**
+ * An AI skips a shortcut once its hull damage reaches this: rookies gamble on a battered hull
+ * (and can wreck in the rough), aces keep a margin for a flat-out mistake.
+ */
+export const AI_SHORTCUT_HULL_LO = 0.8;
+export const AI_SHORTCUT_HULL_HI = 0.5;
+/**
+ * The share of top speed an AI lifts to on rough ground. Aces sit just over the safe speed
+ * (ROUGH_SAFE_SPEED, a scratch of hull); rookies stay quicker and pay for it.
+ */
+export const AI_ROUGH_LIFT_LO = 0.9;
+export const AI_ROUGH_LIFT_HI = 0.73;
+/** Chance, times (1 − skill)², that an AI charges a shortcut's rough ground without lifting. */
+export const AI_ROUGH_RECKLESS = 0.35;
 
 // --- Shortcuts (src/core/track.ts) ---
 /** Length of the side-by-side run where a branch leaves or rejoins the main road. */
 export const BRANCH_JUNCTION_LENGTH = 60;
 /** Distance over which the main loop's run-off narrows to meet a branch junction and widens after it. */
 export const BRANCH_EDGE_FADE = 150;
+
+// --- Rough ground (the 'rough' feature; src/core/vehicle.ts) ---
+// Rough ground is what makes a shortcut a trade-off rather than a free cut: flat out it costs a
+// third of a stock hull, lifted through it costs time instead.
+/** A rough stretch ramps up over this many metres at each end, so its damage never steps. */
+export const ROUGH_BLEND = 20;
+/**
+ * Up to this share of the glider's (unboosted, undamaged) top speed, rough ground does no
+ * damage: lifting off to it is the safe way through, and costs a real slice of the saving.
+ */
+export const ROUGH_SAFE_SPEED = 0.7;
+/**
+ * Hull per second (before armour, at amount 1) at full top speed: a third of a stock hull for
+ * 250 m of rubble taken flat out. The rate grows with the speed above the safe speed
+ * (normalised so top speed = 1) to the power ROUGH_DAMAGE_EXP, so boosting through costs
+ * several times what holding top speed does, and lifting most of the way costs little.
+ */
+export const ROUGH_DAMAGE = 0.2;
+/** Steepness of the damage curve: a 25% boost on top of top speed costs about 2.5× the hull. */
+export const ROUGH_DAMAGE_EXP = 1.5;
+/** Jolts (sideways kicks) per second at full top speed on amount 1; more when faster. */
+export const ROUGH_JOLT_RATE = 3;
+/** Sideways speed a full-strength jolt kicks the craft with, m/s: enough to need a correction. */
+export const ROUGH_JOLT_SPEED = 7;
+/** Normalised overspeed at which a jolt is at full strength (about boosting at top speed). */
+export const ROUGH_JOLT_FULL = 2;
 
 // --- Hazards (src/core/hazards.ts) ---
 /** Seconds between successive objects of one dropper landing. */

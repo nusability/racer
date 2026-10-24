@@ -121,12 +121,10 @@ export const glasssea: TrackDef = {
         { x: 2565, z: -660, y: 4 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.16, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 2.2, lateral: 0 },
-        { kind: 'boostPad', at: 2.24, lateral: 0 },
-        { kind: 'boostPad', at: 3.6, lateral: 0 },
+        // Shattered glass before the leap and a squeeze after it.
         { kind: 'jump', at: 3.9, rampLength: 70, rampHeight: 5, gapLength: 50 },
-        { kind: 'boostPad', at: 6.0, lateral: 0 },
+        { kind: 'rough', from: 2.3, to: 3.3, amount: 1 },
+        { kind: 'narrow', from: 5.4, to: 7.0, width: 18 },
       ],
     },
   ],

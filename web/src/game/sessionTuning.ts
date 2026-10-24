@@ -13,6 +13,11 @@ export const SESSION_SHAKE_HIT = 0.6;
 /** Landing closing speed (m/s) treated as a full-strength impact for shake, sound and dust. */
 export const SESSION_HARD_LANDING = 50;
 export const SESSION_SHAKE_LAND = 0.5;
+/** Camera shake per step on rough ground (by how hard it batters), and per jolt (by its strength). */
+export const SESSION_SHAKE_ROUGH = 0.05;
+export const SESSION_SHAKE_JOLT = 0.45;
+/** A jolt's hit sound and grit spray as a share of a full-strength impact. */
+export const SESSION_JOLT_IMPACT = 0.5;
 /** Dust multiplier while a racer is on the sand run-off. */
 export const SESSION_OFFROAD_DUST = 2.5;
 /** Nozzle glow the racer model shows while boosting / cruising (its old heat input). */

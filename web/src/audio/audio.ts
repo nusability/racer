@@ -38,7 +38,19 @@ const REVERB_RETURN = 0.8;
 const WIND_HZ: [number, number] = [300, 2100];
 const WIND_GAIN = 0.2;
 const SCRAPE_HZ: [number, number] = [2200, 4400];
+/** Slipstream: an airy hiss above the speed rush that swells as the draft builds, then its band and level at full draft. */
+const DRAFT_HZ: [number, number] = [1400, 3600];
+const DRAFT_Q = 1.4;
+const DRAFT_GAIN = 0.14;
+/** Seconds the draft swell takes to follow: soft, never a click when a wake is entered. */
+const DRAFT_SMOOTH_S = 0.2;
 const SCRAPE_GAIN = 0.45;
+/** Rough ground: a low gravelly rumble under the engine, its band and level at full battering. */
+const RUMBLE_HZ: [number, number] = [140, 520];
+const RUMBLE_Q = 0.9;
+const RUMBLE_GAIN = 0.5;
+/** Fast enough to follow the stretch's ends, slow enough that per-step jitter never clicks. */
+const RUMBLE_SMOOTH_S = 0.05;
 
 interface NoiseLoop {
   src: AudioBufferSourceNode;
@@ -66,6 +78,8 @@ export class GameAudio {
   private engineLast = -1;
   private windLoop: NoiseLoop | null = null;
   private scrape: NoiseLoop | null = null;
+  private draftLoop: NoiseLoop | null = null;
+  private rumble: NoiseLoop | null = null;
   private lastShot = new Map<OneShotName, number>();
   private readonly sfx: SfxState = { pickupChain: 0, lastPickup: -1 };
   /** The world around the camera: biome bed, landmarks, hazard warnings, rival fly-bys. */
@@ -197,6 +211,28 @@ export class GameAudio {
     w.gain.gain.setTargetAtTime(WIND_GAIN * i * i, a.ctx.currentTime, 0.15);
   }
 
+  /** Riding a slipstream, 0..1 with the draft: a soft airy swell; 0 silences it. */
+  draft(intensity: number): void {
+    const a = this.live();
+    if (!a) return;
+    if (intensity <= 0 && !this.draftLoop) return;
+    const d = (this.draftLoop ??= this.noiseLoop(a, 'bandpass', DRAFT_Q));
+    const i = clamp01(intensity);
+    d.filter.frequency.setTargetAtTime((DRAFT_HZ[0] + (DRAFT_HZ[1] - DRAFT_HZ[0]) * i) * a.pitch, a.ctx.currentTime, DRAFT_SMOOTH_S);
+    d.gain.gain.setTargetAtTime(DRAFT_GAIN * i * i, a.ctx.currentTime, DRAFT_SMOOTH_S);
+  }
+
+  /** Skimming rough ground, 0..1 with how hard it batters the craft; 0 silences it. */
+  rumbleLoop(intensity: number): void {
+    const a = this.live();
+    if (!a) return;
+    if (intensity <= 0 && !this.rumble) return;
+    const r = (this.rumble ??= this.noiseLoop(a, 'lowpass', RUMBLE_Q));
+    const i = clamp01(intensity);
+    r.filter.frequency.setTargetAtTime((RUMBLE_HZ[0] + (RUMBLE_HZ[1] - RUMBLE_HZ[0]) * i) * a.pitch, a.ctx.currentTime, RUMBLE_SMOOTH_S);
+    r.gain.gain.setTargetAtTime(RUMBLE_GAIN * i, a.ctx.currentTime, RUMBLE_SMOOTH_S);
+  }
+
   /** Continuous wall scrape; 0 stops it. */
   scrapeLoop(intensity: number): void {
     const a = this.live();
@@ -217,13 +253,15 @@ export class GameAudio {
     const t = r.ctx.currentTime;
     this.engineVoice?.stop();
     this.engineVoice = null;
-    for (const loop of [this.windLoop, this.scrape]) {
+    for (const loop of [this.windLoop, this.scrape, this.draftLoop, this.rumble]) {
       if (!loop) continue;
       loop.gain.gain.setTargetAtTime(0, t, 0.06);
       loop.src.stop(t + 0.25);
     }
     this.windLoop = null;
     this.scrape = null;
+    this.draftLoop = null;
+    this.rumble = null;
   }
 
   // --- One-shots ------------------------------------------------------------------------------

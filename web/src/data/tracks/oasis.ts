@@ -110,11 +110,9 @@ export const oasis: TrackDef = {
         { x: -890, z: -880, y: 0 },
       ],
       features: [
-        { kind: 'boostCells', at: 3.93, lateral: 0, count: 4, spacing: 28 },
-        { kind: 'boostPad', at: 2.3, lateral: 0 },
-        { kind: 'boostPad', at: 2.34, lateral: 0 },
-        { kind: 'boostPad', at: 5.6, lateral: 0 },
+        // Rubble of the old market before the arch.
         { kind: 'arch', at: 4.45, opening: 14, offset: 2, height: 9 },
+        { kind: 'rough', from: 2.4, to: 3.4, amount: 1 },
       ],
     },
   ],

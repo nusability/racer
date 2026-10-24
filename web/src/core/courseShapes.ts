@@ -4,7 +4,7 @@
 
 import type { TrackFeature, Vec3 } from './types.ts';
 import { cross, normalize, smoothstep, vec3 } from './geom.ts';
-import { SLICK_BLEND_FRACTION } from '../data/tuning.ts';
+import { ROUGH_BLEND, SLICK_BLEND_FRACTION } from '../data/tuning.ts';
 
 export interface ShapeHelpers {
   paramToS(u: number): number;
@@ -19,6 +19,8 @@ export interface CourseShape {
   dropL: boolean[];
   dropR: boolean[];
   grip: number[];
+  /** Rough ground 0..1 per sample (see the 'rough' feature). */
+  rough: number[];
   /** Extra bank (radians) a corkscrew adds on top of the curvature bank. */
   bankAdd: number[];
   /**
@@ -46,6 +48,7 @@ export function shapeCourse(
     dropL: new Array<boolean>(n).fill(false),
     dropR: new Array<boolean>(n).fill(false),
     grip: new Array<number>(n).fill(1),
+    rough: new Array<number>(n).fill(0),
     bankAdd: new Array<number>(n).fill(0),
     loopRight: new Array<Vec3 | null>(n).fill(null),
   };
@@ -70,6 +73,19 @@ export function shapeCourse(
           shape.grip[k] = 1 + (f.grip - 1) * smoothstep(edge);
         });
         break;
+      case 'rough': {
+        if (!(f.amount > 0 && f.amount <= 1)) throw new Error(`rough ${f.from}..${f.to}: amount ${f.amount} outside (0, 1]`);
+        // Gathered first: the stretch's length (it may wrap the start line) sets the end ramps.
+        const span: [number, number][] = [];
+        h.forRange(h.paramToS(f.from), h.paramToS(f.to), (k, _t, ds) => span.push([k, ds]));
+        const len = span.length > 0 ? span[span.length - 1][1] : 0;
+        for (const [k, ds] of span) {
+          // A short ramp at each end, so the damage rate never steps from nothing to full.
+          const edge = Math.min(1, Math.min(ds, len - ds) / ROUGH_BLEND);
+          shape.rough[k] = Math.max(shape.rough[k], f.amount * smoothstep(edge));
+        }
+        break;
+      }
       case 'corkscrew':
         h.forRange(h.paramToS(f.from), h.paramToS(f.to), (k, t) => {
           // Ease the roll in and out so the road doesn't snap into its first quarter turn.

@@ -8,6 +8,9 @@ import {
   DAMAGE_TOP_SPEED_LOSS,
   GRIP_REF,
   HANDLING_REF,
+  ROUGH_DAMAGE,
+  ROUGH_DAMAGE_EXP,
+  ROUGH_SAFE_SPEED,
   STEER_TARGET_RATE,
 } from '../data/tuning.ts';
 
@@ -31,4 +34,17 @@ export function currentTopSpeed(stats: RacerStats, state: RacerState, boosting: 
   let top = stats.topSpeed * (1 - DAMAGE_TOP_SPEED_LOSS * state.damage);
   if (boosting) top *= 1 + stats.boostPower;
   return top;
+}
+
+/**
+ * How far over the safe speed for rough ground a racer is, normalised so the glider's own top
+ * speed is 1 (boosting goes past it); 0 at or under the safe speed.
+ */
+export function roughOverspeed(stats: RacerStats, speed: number): number {
+  return Math.max(0, (speed / stats.topSpeed - ROUGH_SAFE_SPEED) / (1 - ROUGH_SAFE_SPEED));
+}
+
+/** Hull per second (before armour) that rough ground of this amount costs at this speed. */
+export function roughWear(stats: RacerStats, speed: number, rough: number): number {
+  return ROUGH_DAMAGE * rough * roughOverspeed(stats, speed) ** ROUGH_DAMAGE_EXP;
 }

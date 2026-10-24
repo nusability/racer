@@ -35,6 +35,10 @@ export const ROAD_ATLAS_SPLIT = 0.5;
 const HIDE_PROBE = 2;
 /** Walls at least this far into a canyon are never hidden by a landmark. */
 const CANYON_KEEP = 0.05;
+/** Rough ground darkens the road by up to this share: dust and broken surface, readable at fog distance. */
+const ROUGH_ROAD_SHADE = 0.6;
+/** Rough amount past which the wall kerb is painted as a hazard. */
+const ROUGH_KERB = 0.05;
 /** Run-off sand reads a little lower than the road so the paved edge has a lip to it. */
 const RUNOFF_DROP = 0.12;
 
@@ -201,7 +205,7 @@ export class Corridor {
       const smp = this.ribbon.samples[this.idx(k)];
       const half = smp.width / 2;
       const v = (k * this.ribbon.step) / ROAD_TEXTURE_LENGTH;
-      shade.setScalar(this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1);
+      shade.setScalar((this.tunnel(k) ? TUNNEL_ROAD_SHADE : 1) * (1 - ROUGH_ROAD_SHADE * smp.rough));
       // Paved road on u 0..split; each run-off strip maps across the sand half of the atlas.
       const extL = towardMain < 0 && this.open(k, -1) ? JUNCTION_OVERLAP : 0;
       const extR = towardMain > 0 && this.open(k, 1) ? JUNCTION_OVERLAP : 0;
@@ -387,7 +391,10 @@ export class Corridor {
     if (!A.sand && !B.sand) {
       const block = Math.floor((((ka + kb) / 2) * this.ribbon.step) / KERB_BLOCK) % 2 === 0;
       const lift = (p: P3, y: number): P3 => ({ x: p.x - side * this.shape.rx[kk] * 0.05, y: p.y + y, z: p.z - side * this.shape.rz[kk] * 0.05 });
-      quadFacing(this.glow, lift(A.pts[0], 0), lift(B.pts[0], 0), lift(B.pts[0], 1.1), lift(A.pts[0], 1.1), dir, block ? this.paint.accent : this.paint.white);
+      // Along rough ground the kerb turns hazard yellow and black: the stretch reads from afar.
+      const rough = this.ribbon.samples[kk].rough > ROUGH_KERB;
+      const [on, off] = rough ? [this.paint.hazard, this.paint.black] : [this.paint.accent, this.paint.white];
+      quadFacing(this.glow, lift(A.pts[0], 0), lift(B.pts[0], 0), lift(B.pts[0], 1.1), lift(A.pts[0], 1.1), dir, block ? on : off);
     }
   }
 }
