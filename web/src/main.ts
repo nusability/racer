@@ -7,6 +7,7 @@ import { graphicsLevel } from './game/graphics.ts';
 import { RaceSession } from './game/raceSession.ts';
 import { loadSettings } from './game/save.ts';
 import type { RaceLauncher, ShowroomApi } from './game/types.ts';
+import { enableOffline } from './offline.ts';
 import { runBenchmark } from './render/benchmark.ts';
 import { gpuName, pixelRatioFor } from './render/graphics.ts';
 import { Showroom } from './render/showroom.ts';
@@ -68,6 +69,8 @@ const showroomApi: ShowroomApi = {
   },
   hide: () => showroom.hide(),
 };
+
+enableOffline();
 
 startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, graphics: { gpu: gpuName(renderer.getContext()), benchmark: runBenchmark } });
 

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800;900&display=swap');
+@import './fonts.css';
 
 /* Design tokens: the desert-sunset vocabulary every screen, the HUD and the touch controls use. */
 :root {
