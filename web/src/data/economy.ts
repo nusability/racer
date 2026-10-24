@@ -15,10 +15,12 @@ export const PLACE_PAYOUT: number[] = [1400, 1050, 770, 560, 350, 210];
 export const TIER_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];
 
 /**
- * Payout multiplier per world, by its index in WORLDS (desert, coast, ...). A new world appends
- * one entry; a world without one is an error, not a silent default.
+ * Payout multiplier per world, by its index in WORLDS (desert, coast, ice, city). A new world
+ * appends one entry; a world without one is an error, not a silent default. From the coast on
+ * each world pays 1.5x the one before (city: a Neon Cup win pays 5040 against the Frost Cup's
+ * 3360), so a new world is felt in the garage without its rookie cup out-paying the last elite.
  */
-export const WORLD_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4];
+export const WORLD_PAYOUT_MULTIPLIER: number[] = [1, 1.6, 2.4, 3.6];
 
 /** Bonus for winning a cup, per tier (index = tier - 1), before the world multiplier. */
 export const CUP_WIN_BONUS: number[] = [1200, 2400, 4000];

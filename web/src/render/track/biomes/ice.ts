@@ -65,6 +65,8 @@ export function iceKit(scenery: IceScenery, palette: TrackPalette): BiomeKit {
       },
     },
     road: { surface: 'packed', runoff: 'sand' },
+    roadLight: 0,
+    masonry: 'sandstone',
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];
@@ -86,7 +88,7 @@ export function iceKit(scenery: IceScenery, palette: TrackPalette): BiomeKit {
       };
     },
     spray: { road: palette.road, runoff: palette.sand, water: SNOW_WHITE.getHex() },
-    debris: { color: ICE_BLUE.getHex(), glow: 0, dust: SNOW_WHITE.getHex(), streak: SNOW_WHITE.getHex() },
+    debris: { color: ICE_BLUE.getHex(), glow: 0, dust: SNOW_WHITE.getHex(), streak: SNOW_WHITE.getHex(), shape: 'rock' },
   };
 }
 

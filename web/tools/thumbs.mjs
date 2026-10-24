@@ -66,6 +66,12 @@ const SHOTS = {
   icefalls: { at: 46, ds: -150, why: 'the frozen falls' },
   avalanche: { at: 24.6, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the corkscrew on stilts' },
   auroracrown: { at: 43.2, ds: -60, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 90, why: 'the loop under the aurora' },
+  downtown: { at: 2.09, ds: -100, why: 'the loop on the start boulevard' },
+  harborbridge: { at: 60.5, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the suspension bridge over the harbour road' },
+  neonspiral: { at: 4.88, view: 'orbit', yaw: 0.9, pitch: 0.5, dist: 150, why: 'the spiral ramp crossing over the avenue' },
+  undercity: { at: 19.5, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the viaduct over the old town' },
+  skyway: { at: 1.68, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the double loop on the ring road' },
+  zenithtower: { at: 12.67, ds: -60, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 120, why: 'the double loop off the west flyover' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];

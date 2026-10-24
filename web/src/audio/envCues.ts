@@ -22,8 +22,21 @@ export type CueName =
   | 'liftoff'
   | 'gust'
   | 'hiss'
-  | 'tick';
+  | 'tick'
+  | 'honk'
+  | 'siren'
+  | 'buzz'
+  | 'chime'
+  | 'whoosh'
+  | 'clang'
+  | 'collapse';
 
+/** A distant siren's wail: rise-fall cycles and their length, seconds. */
+const SIREN_CYCLES = 3;
+const SIREN_CYCLE_S = 0.9;
+/** A transit chime: three falling notes (Hz), this far apart. */
+const CHIME_NOTES = [988, 784, 659];
+const CHIME_GAP_S = 0.28;
 /** Footfalls in a stomp cue, and the gap between them, seconds. */
 const STOMP_STEPS = 3;
 const STOMP_GAP_S = 0.42;
@@ -107,6 +120,43 @@ export function playCue(p: ShotPlayer, out: AudioNode, name: CueName, g: number,
       // A tinkle of ice: two quick high pings.
       p.tone(out, { wave: 'sine', f0: 3800 + Math.random() * 2000, dur: 0.08, gain: 0.05 * g, pan }, k);
       p.tone(out, { wave: 'sine', f0: 4200 + Math.random() * 2000, dur: 0.1, gain: 0.04 * g, delay: 0.07, pan: -pan }, k);
+      break;
+    case 'honk':
+      // Two cars somewhere down the block: short square blasts through a box-like resonance.
+      p.tone(out, { wave: 'square', f0: 392, dur: 0.22, gain: 0.07 * g, filter: 'bandpass', filterHz: 900, q: 2, pan }, k);
+      p.tone(out, { wave: 'square', f0: 466, dur: 0.35, gain: 0.06 * g, delay: 0.3, filter: 'bandpass', filterHz: 1000, q: 2, pan: -pan * 0.5 }, k);
+      break;
+    case 'siren':
+      for (let i = 0; i < SIREN_CYCLES; i++) {
+        p.tone(out, { wave: 'triangle', f0: 620, f1: 980, dur: SIREN_CYCLE_S / 2, gain: 0.05 * g, delay: i * SIREN_CYCLE_S, pan }, k);
+        p.tone(out, { wave: 'triangle', f0: 980, f1: 620, dur: SIREN_CYCLE_S / 2, gain: 0.05 * g, delay: i * SIREN_CYCLE_S + SIREN_CYCLE_S / 2, pan }, k);
+      }
+      break;
+    case 'buzz':
+      // A neon tube arcing: a mains-hum saw crackling through a narrow band.
+      p.tone(out, { wave: 'sawtooth', f0: 120, dur: 0.45, gain: 0.1 * g, filter: 'bandpass', filterHz: 2400, q: 4, pan }, k);
+      p.noise(out, { filter: 'highpass', f0: 4000, dur: 0.12, gain: 0.12 * g, delay: 0.1, pan }, k);
+      break;
+    case 'chime':
+      CHIME_NOTES.forEach((f0, i) => p.tone(out, { wave: 'sine', f0, dur: 0.6, gain: 0.14 * g, delay: i * CHIME_GAP_S, pan }, k));
+      break;
+    case 'whoosh':
+      // A maglev going by: a rising then falling air rush and a glassy linear-motor whine.
+      p.noise(out, { filter: 'bandpass', f0: 500, f1: 2600, q: 0.8, dur: 1.4, gain: 0.7 * g, attack: 0.5, pan: -pan, panTo: pan }, k);
+      p.tone(out, { wave: 'sine', f0: 1200, f1: 600, dur: 1.4, gain: 0.08 * g, attack: 0.4, pan: -pan, panTo: pan }, k);
+      break;
+    case 'clang':
+      // Steel on asphalt: inharmonic ringing partials over a thud.
+      p.tone(out, { wave: 'sine', f0: 90, f1: 40, dur: 0.4, gain: 0.6 * g, pan }, k);
+      p.tone(out, { wave: 'triangle', f0: 523, dur: 1.2, gain: 0.12 * g, pan }, k);
+      p.tone(out, { wave: 'triangle', f0: 1397, dur: 0.9, gain: 0.07 * g, pan }, k);
+      p.noise(out, { filter: 'highpass', f0: 2600, dur: 0.15, gain: 0.35 * g, pan }, k);
+      break;
+    case 'collapse':
+      // A facade coming down: a crack, then masonry thundering on for seconds.
+      p.noise(out, { filter: 'highpass', f0: 2200, dur: 0.15, gain: 0.5 * g, pan }, k);
+      p.noise(out, { filter: 'lowpass', f0: 1200, f1: 160, dur: 2.6, gain: 0.95 * g, attack: 0.1, delay: 0.1, pan }, k);
+      p.tone(out, { wave: 'sine', f0: 55, f1: 30, dur: 2.2, gain: 0.6 * g, delay: 0.15, pan }, k);
       break;
   }
 }

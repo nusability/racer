@@ -64,6 +64,19 @@ export const BIOME_BEDS: Record<Biome, BiomeBed> = {
     cues: ['creak', 'tick', 'creak'],
     gap: [4, 10],
   },
+  // Traffic humming on every street round the course, the mains hum of a lit city under it,
+  // and its life: horns down a block, a siren far off, a neon tube arcing.
+  city: {
+    loop: {
+      noise: { filter: 'lowpass', hz: 320, q: 0.6, gain: 0.8 },
+      tone: { wave: 'sawtooth', hz: 50, gain: 0.05 },
+      lfo: { wave: 'sine', hz: 0.06, amp: 0.35, filterHz: 120 },
+      gain: 0.35,
+      wet: 0.55,
+    },
+    cues: ['honk', 'honk', 'siren', 'buzz'],
+    gap: [3, 9],
+  },
 };
 
 const crowd: SoundFamily = {
@@ -126,6 +139,19 @@ const burners: SoundFamily = {
   near: 80,
   far: 500,
 };
+// Neon: the mains buzz of tubes and transformers, crackling now and then.
+const neonBuzz: SoundFamily = {
+  loop: { tone: { wave: 'sawtooth', hz: 120, gain: 0.14 }, noise: { filter: 'bandpass', hz: 3200, q: 5, gain: 0.25 }, lfo: { wave: 'square', hz: 0.7, amp: 0.25 }, gain: 0.3, wet: 0.3 },
+  near: 50,
+  far: 300,
+  pass: 'buzz',
+};
+// Wind in a bridge's cables: a steady sung chord.
+const cables: SoundFamily = {
+  loop: { tone: { wave: 'sine', hz: 220, gain: 0.12 }, noise: { filter: 'bandpass', hz: 900, q: 6, gain: 0.4 }, lfo: { wave: 'sine', hz: 0.25, cents: 15, filterHz: 200 }, gain: 0.3, wet: 0.6 },
+  near: 80,
+  far: 500,
+};
 const iceGroan: SoundFamily = {
   loop: { noise: { filter: 'bandpass', hz: 1100, q: 6, gain: 0.6 }, tone: { wave: 'sawtooth', hz: 40, gain: 0.08 }, lfo: { wave: 'triangle', hz: 0.5, filterHz: 500 }, gain: 0.35, wet: 0.6 },
   near: 80,
@@ -147,6 +173,14 @@ const strider: LoopRecipe = { tone: { wave: 'square', hz: 36, gain: 0.3 }, noise
 const rocket: LoopRecipe = { tone: { wave: 'sawtooth', hz: 32, gain: 0.4 }, noise: { filter: 'lowpass', hz: 420, q: 0.5, gain: 1.1 }, lfo: { wave: 'sine', hz: 6, amp: 0.25 }, gain: 0.7, wet: 0.45 };
 const whaleSong: LoopRecipe = { tone: { wave: 'sine', hz: 240, gain: 0.35 }, noise: { filter: 'lowpass', hz: 500, q: 0.6, gain: 0.25 }, lfo: { wave: 'sine', hz: 0.15, cents: 400 }, gain: 0.5, wet: 0.7 };
 const jets: LoopRecipe = { tone: { wave: 'sawtooth', hz: 160, gain: 0.15 }, noise: { filter: 'bandpass', hz: 1800, q: 1, gain: 0.9 }, lfo: { wave: 'sine', hz: 0.5, cents: 60 }, gain: 0.55, wet: 0.4 };
+// A linear motor singing up and down under the rush of the train's air.
+const maglevWhine: LoopRecipe = { tone: { wave: 'sine', hz: 660, gain: 0.18 }, noise: { filter: 'bandpass', hz: 1500, q: 0.8, gain: 0.8 }, lfo: { wave: 'sine', hz: 0.35, cents: 300, filterHz: 600 }, gain: 0.55, wet: 0.35 };
+// A crane's slewing motor and its winch, ratcheting.
+const craneWinch: LoopRecipe = { tone: { wave: 'square', hz: 55, gain: 0.2 }, noise: { filter: 'bandpass', hz: 800, q: 3, gain: 0.6 }, lfo: { wave: 'sawtooth', hz: 7, amp: -0.5 }, gain: 0.5, wet: 0.35 };
+// Demolition: compressors and the groan of a structure about to go.
+const condemned: LoopRecipe = { tone: { wave: 'sawtooth', hz: 38, gain: 0.25 }, noise: { filter: 'lowpass', hz: 300, q: 1, gain: 0.8 }, lfo: { wave: 'triangle', hz: 0.4, amp: 0.4, filterHz: 150 }, gain: 0.55, wet: 0.45 };
+// An airship's ducted fans: a deep throb under a broad roar of moving air.
+const airshipFans: LoopRecipe = { tone: { wave: 'sawtooth', hz: 42, gain: 0.3 }, noise: { filter: 'bandpass', hz: 450, q: 0.9, gain: 1 }, lfo: { wave: 'sawtooth', hz: 6.5, amp: -0.4 }, gain: 0.6, wet: 0.45 };
 const lava: LoopRecipe = { tone: { wave: 'sine', hz: 28, gain: 0.5 }, noise: { filter: 'lowpass', hz: 140, q: 0.7, gain: 1 }, lfo: { wave: 'sine', hz: 0.2, amp: 0.4 }, gain: 0.65, wet: 0.5 };
 
 /** A hazard's voice: its loop, the level at rest, and the cues that telegraph it. */
@@ -186,6 +220,10 @@ const BOUND: Partial<Record<LandmarkKind, HazardSound>> = {
   invasion: { loop: strider, idle: 0.2, lead: 1.5, warn: 'stomp' },
   volcano: { loop: lava, idle: 0.3, lead: 1, warn: 'whistle', land: 'impact' },
   whales: { loop: whaleSong, idle: 0.2, lead: 1, warn: 'song', strike: 'splash' },
+  maglev: { loop: maglevWhine, idle: 0.05, lead: 2, warn: 'chime', strike: 'whoosh' },
+  crane: { loop: craneWinch, idle: 0.2, lead: 1.2, warn: 'clank', land: 'clang' },
+  demolition: { loop: condemned, idle: 0.15, lead: 1.5, warn: 'siren', strike: 'collapse' },
+  cargoAirship: { loop: airshipFans, idle: 0.35, lead: 1.5, warn: 'horn', strike: 'gust' },
 };
 
 /** A hazard with no landmark bound to it (a plain rockfall) gets a generic voice by type. */
@@ -237,4 +275,14 @@ export const LANDMARK_SOUNDS: Record<LandmarkKind, SoundFamily | null> = {
   frozenFalls: waterfall,
   auroraSky: ethereal,
   snowcatConvoy: { loop: diesel, near: 60, far: 400 },
+  maglev: { loop: maglevWhine, near: 60, far: 400 },
+  crane: { loop: craneWinch, near: 60, far: 400 },
+  demolition: { loop: condemned, near: 60, far: 400 },
+  cargoAirship: { loop: airshipFans, near: 120, far: 700 },
+  skyscrapers: null,
+  neonBillboards: neonBuzz,
+  stadium: crowd,
+  hologramDragon: scifi,
+  suspensionBridge: cables,
+  skyTram: machine,
 };

@@ -63,7 +63,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   const biome = worldOfTrack(def.id).biome;
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
   const kit = biomeKit(scenery, def.palette);
-  const paint = makePaint(def.palette);
+  const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
   const ground = new Ground(views, kit.ground, def.seed);
   // Landmarks first: they level the ground the corridor and terrain then read.
@@ -92,9 +92,11 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
     sign: signTexture(track.branches.map((b) => ({ name: b.def.name, side: b.side })), def.palette.accent),
   };
   const mats = {
-    road: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true }),
+    // A kit's road light glows the road's own texture (lines and kerbs included), so the road
+    // still reads where it faces away from the sun: the far side of a loop, a rolled corkscrew.
+    road: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, emissive: new THREE.Color().setScalar(kit.roadLight), emissiveMap: tex.road }),
     // Branch roads overlap the main road's edge in junctions; they win the depth tie.
-    branchRoad: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    branchRoad: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, emissive: new THREE.Color().setScalar(kit.roadLight), emissiveMap: tex.road, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     sand: new THREE.MeshLambertMaterial({ map: tex.sand, vertexColors: true }),
     rock: new THREE.MeshLambertMaterial({ map: tex.rock, vertexColors: true }),
     plain: new THREE.MeshLambertMaterial({ vertexColors: true }),

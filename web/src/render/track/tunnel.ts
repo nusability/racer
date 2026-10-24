@@ -36,9 +36,11 @@ function tunnelRing(cor: Corridor, k: number): { inner: P3[]; outer: P3[]; axis:
   const smp = cor.ribbon.samples[kk];
   const h = smp.width / 2;
   const c = smp.ceiling;
-  const top = c + TUNNEL_ROCK_ABOVE * (0.85 + 0.3 * Math.abs(cor.noise(kk * 0.01, 7)));
+  // A concrete underpass is a straight cast box; only rock is lumpy.
+  const lumpy = cor.paint.masonry === 'sandstone' ? 1 : 0;
+  const top = c + TUNNEL_ROCK_ABOVE * (0.85 + 0.3 * Math.abs(cor.noise(kk * 0.01, 7)) * lumpy);
   const w = TUNNEL_ROCK_WIDTH;
-  const wobble = (i: number) => cor.noise(kk * 0.06 + i, i * 2.3) * 4;
+  const wobble = (i: number) => cor.noise(kk * 0.06 + i, i * 2.3) * 4 * lumpy;
   const inner: [number, number][] = [
     [-h, 0],
     [-h, c * TUNNEL_WALL_FRACTION],

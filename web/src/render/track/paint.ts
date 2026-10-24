@@ -7,6 +7,19 @@ import type { FlatBuilder, P3 } from './builder.ts';
 
 /** Thickness of one sandstone stratum, metres. */
 const STRATUM = 4.2;
+/** Height of one concrete pour (the lift between formwork joints), metres. */
+const POUR = 3;
+/** Concrete pours vary this little in tone: cast walls read as one material, not geology. */
+const POUR_VARIATION = 0.07;
+/** Cast concrete's own grey, and how far the palette's rock tints it. */
+const CONCRETE = 0x9a9ca4;
+const CONCRETE_TINT = 0.25;
+
+/**
+ * What the course's rock is: layered sandstone (strata, crooked faces), or cast concrete
+ * (straight faces, even pours) for a city's barriers, retaining walls and underpasses.
+ */
+export type Masonry = 'sandstone' | 'concrete';
 
 function hash(n: number): number {
   const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
@@ -15,6 +28,7 @@ function hash(n: number): number {
 
 export interface Paint {
   palette: TrackPalette;
+  masonry: Masonry;
   rock: THREE.Color;
   rockDark: THREE.Color;
   rockLight: THREE.Color;
@@ -23,17 +37,20 @@ export interface Paint {
   black: THREE.Color;
   hazard: THREE.Color;
   sand: THREE.Color;
-  /** Banded sandstone at absolute height y; `shade` darkens (ambient occlusion, interiors). */
+  /** Banded rock (or concrete pours) at absolute height y; `shade` darkens (ambient occlusion, interiors). */
   strata(y: number, shade: number, out: THREE.Color): THREE.Color;
 }
 
-export function makePaint(palette: TrackPalette): Paint {
-  const rock = new THREE.Color(palette.rock);
+export function makePaint(palette: TrackPalette, masonry: Masonry): Paint {
+  // Cast concrete is pale whatever the palette's rock, so walls stand out from a dark road at
+  // night; the palette only tints it.
+  const rock = masonry === 'concrete' ? new THREE.Color(CONCRETE).lerp(new THREE.Color(palette.rock), CONCRETE_TINT) : new THREE.Color(palette.rock);
   const rockDark = rock.clone().multiplyScalar(0.62);
   const rockLight = rock.clone().lerp(new THREE.Color(palette.sand), 0.45);
   const warm = new THREE.Color(palette.sand);
   return {
     palette,
+    masonry,
     rock,
     rockDark,
     rockLight,
@@ -43,6 +60,10 @@ export function makePaint(palette: TrackPalette): Paint {
     hazard: new THREE.Color(0xffc21a),
     sand: new THREE.Color(palette.sand),
     strata(y, shade, out) {
+      if (masonry === 'concrete') {
+        const pour = Math.floor(y / POUR);
+        return out.copy(rock).multiplyScalar(shade * (1 - POUR_VARIATION / 2 + POUR_VARIATION * hash(pour)));
+      }
       const band = Math.floor(y / STRATUM);
       const h = hash(band);
       out.copy(rock);

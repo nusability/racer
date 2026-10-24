@@ -33,7 +33,7 @@ Next IDs: F-002 · US2 · FR-002 · NFR-001 · SC-002
 
 Mirage Racer is a racing game for phones. Pilots fly ground-effect skimmers (low, wide
 racing wings riding a cushion of air a hand's width above the ground, pushed by ducted
-fans) across worlds of salt pans, canyons, lagoons and sea caves at 600–800 km/h. The
+fans) across worlds of salt pans, canyons, lagoons, sea caves, glaciers and neon cities at 600–800 km/h. The
 opponents are there, but the real rival is the track: chasms to jump, kickers that throw you into the air, tunnels through
 mesas, canyons barely wider than your engines, rock arches with off-centre openings and
 fields of pillars. Learning a track's lines is how you win.
@@ -49,12 +49,15 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 ## Core Game Loop
 
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
-   open world. Each world (Mirage Desert, Coral Coast, Frostline; more to come) has six to
+   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian; more to come) has six to
    eight tracks and three cups, rookie → pro → elite. Winning a world's rookie cup opens the
    next world. Every world mixes track archetypes: a forgiving rookie loop, a technical track
    of switchbacks, a speed track with a 2–2.7 km straight, and a gimmick track (vertical loop,
    corkscrew, cliff roads with open edges); several are figure-8s or knots that cross
-   themselves on bridges or at flat X junctions with live cross-traffic.
+   themselves on bridges or at flat X junctions with live cross-traffic. Neon Meridian
+   is the stunt world: walled city roads where every track has at least two loops or
+   corkscrews and the pro and elite tracks four or more (double loops, a loop straight into a
+   corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover).
 2. **Race**: six racers, 2–3 laps. Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
    buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
@@ -64,7 +67,8 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    and green repair cells restore some. The landmarks are part of the course: scheduled
    hazards the player can read and dodge (a sand beast arching over and slamming across the
    road, a digger dropping ore, ships and rotor wash pushing racers sideways, whales and
-   freighters blocking a causeway, avalanches, calving glaciers, herds crossing). Every track
+   freighters blocking a causeway, avalanches, calving glaciers, herds crossing, a maglev train crossing the avenue, a crane dropping
+   girders, a collapsing facade, a cargo airship's downdraft). Every track
    has a walled shortcut that is a trade-off, not a free cut: rough ground (marked by hazard
    kerbs and wall stripes) batters the hull at speed, mixed with squeezes, boulders or drops.
    Flat out it saves 1.5–3.5 s for about a third of a stock hull; lifted through, it saves
@@ -107,7 +111,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
-| Laps | 2–3 per track, 9.3–10 km | Lap times 54–65 s on the starter racer |
+| Laps | 2–3 per track, 8.9–10 km | Lap times 54–65 s on the starter racer |
 | Rival parity | Every rival lifted to ≥ 98% of the player's performance index (topSpeed × (1 + 0.045 × boostPower × boostTank)) | Upgrades are a feel choice; they never trivialise a cup |
 | Cup rival fields | Skill bands per tier, shared by every world: rookie 0.44–0.32, pro 0.48–0.36, elite 0.58–0.49 (eased skill²·⁸, 0.3 s reaction delay at skill 0) | Machines at parity with the player; the cup roster is the floor, and a cup whose floor out-paces the player's glider says so ("Field is N% faster than your …") on its card and screen |
 | Catch-up | Rivals behind push up to +5% top speed (60–450 m gap); ahead ease 3% | Off once the player finishes; slipstream carries most of the catching up, visibly |
@@ -115,7 +119,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Championship pay | 1400/1050/770/560/350/210 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
 | Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s | Top glider ~28% faster than the starter |
 | Glider prices | 0 / 8k / 15k / 24k / 32k / 40k | Upgrade costs scale with glider class |
-| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
+| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 
 ## Platforms & Scope

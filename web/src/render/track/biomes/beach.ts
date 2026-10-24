@@ -47,6 +47,8 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette): BiomeKit
       },
     },
     road: { surface: scenery.road, runoff: 'wetsand' },
+    roadLight: 0,
+    masonry: 'sandstone',
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];
@@ -75,6 +77,6 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette): BiomeKit
     },
     spray: { road: palette.road, runoff: palette.sand, water: SPRAY_WATER },
     // Volcanic coasts throw lava bombs: dark rock with a molten glow.
-    debris: { color: palette.rock, glow: scenery.lava ? 1 : 0, dust: palette.sand, streak: SPRAY_WATER },
+    debris: { color: palette.rock, glow: scenery.lava ? 1 : 0, dust: palette.sand, streak: SPRAY_WATER, shape: 'rock' },
   };
 }

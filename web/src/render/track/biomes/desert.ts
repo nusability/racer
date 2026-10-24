@@ -47,6 +47,8 @@ export function desertKit(scenery: DesertScenery, palette: TrackPalette): BiomeK
       },
     },
     road: { surface: 'packed', runoff: 'sand' },
+    roadLight: 0,
+    masonry: 'sandstone',
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];
@@ -68,6 +70,6 @@ export function desertKit(scenery: DesertScenery, palette: TrackPalette): BiomeK
       };
     },
     spray: { road: palette.road, runoff: palette.sand, water: palette.sand },
-    debris: { color: palette.rock, glow: 0, dust: palette.sand, streak: palette.sand },
+    debris: { color: palette.rock, glow: 0, dust: palette.sand, streak: palette.sand, shape: 'rock' },
   };
 }

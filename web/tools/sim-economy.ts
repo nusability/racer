@@ -123,7 +123,7 @@ for (const world of WORLDS) {
 credits = shop(machine, credits, []);
 for (const g of machine.owned) if (g !== starter.id && !milestones.has(`glider:${g}`)) milestones.set(`glider:${g}`, races);
 
-console.log(`\nAfter both worlds (${races} races, ${earned} earned): ${credits} credits, owns ${machine.owned.map((g) => racerById(g).name).join(', ')}; ${label(machine)}`);
+console.log(`\nAfter every world (${races} races, ${earned} earned): ${credits} credits, owns ${machine.owned.map((g) => racerById(g).name).join(', ')}; ${label(machine)}`);
 const at = (k: string) => (milestones.has(k) ? `${milestones.get(k)} races` : 'not within these worlds');
 console.log(`Glider #2 (${gliders[1].name}): ${at(`glider:${gliders[1].id}`)}`);
 for (const g of gliders.slice(2)) console.log(`${g.name}: ${at(`glider:${g.id}`)}`);

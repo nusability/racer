@@ -14,6 +14,11 @@ const EDGE_LINE = [0.034, 0.05];
 const SEAM_SPACING = 16;
 const CENTRE_DASH = 6;
 const CENTRE_GAP = 10;
+/** Lane lines of a city street, as fractions of the road width. */
+const CITY_LANES = [1 / 3, 2 / 3];
+/** Pale concrete of a city run-off strip, and its saw-cut joints along the lap, metres. */
+const CONCRETE = 0xb4b2ae;
+const CONCRETE_JOINT = 4;
 
 function rgb(hex: number, k = 1): [number, number, number] {
   const ch = (shift: number) => Math.min(255, ((hex >> shift) & 255) * k);
@@ -69,8 +74,8 @@ function wrapStroke(h: number, draw: (dy: number) => void) {
 
 /** What the paved road and its run-off strip are made of. */
 export interface RoadStyle {
-  surface: 'packed' | 'causeway' | 'boardwalk';
-  runoff: 'sand' | 'wetsand';
+  surface: 'packed' | 'causeway' | 'boardwalk' | 'asphalt';
+  runoff: 'sand' | 'wetsand' | 'concrete';
 }
 
 /** Boardwalk plank depth along the road, metres, and the gap between planks. */
@@ -178,8 +183,12 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     ctx.fillStyle = css(palette.road, 0.95, 0.55);
     for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
   };
-  for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
-    paint(R / 2 - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
+  // A city street is laned: two dashed lane lines instead of one centre line.
+  const lanes = style.surface === 'asphalt' ? CITY_LANES : [0.5];
+  for (const lane of lanes) {
+    for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
+      paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
+    }
   }
   for (const mirror of [false, true]) {
     const x = (u: number) => (mirror ? R - u * R : u * R);
@@ -193,9 +202,13 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     }
   }
 
-  // --- Run-off sand (u 0.5 road side → 1 boundary) ---
-  // Wet sand is the beach's run-off: darker, cooler, glossy where the tide just left.
-  const wet = style.runoff === 'wetsand';
+  if (style.runoff === 'concrete') concreteRunoff(ctx, palette, rng, R, W, H, pxPerM);
+  else sandRunoff(ctx, palette, style.runoff === 'wetsand', rng, R, W, H);
+  return finish(cv, THREE.ClampToEdgeWrapping);
+}
+
+/** Run-off sand (u 0.5 road side → 1 boundary). Wet sand is the beach's: darker, cooler, glossy. */
+function sandRunoff(ctx: CanvasRenderingContext2D, palette: TrackPalette, wet: boolean, rng: Rng, R: number, W: number, H: number) {
   const sand = (k: number, a = 1) => {
     const [r1, g1, b1] = rgb(palette.sand, wet ? 0.78 : 1);
     const [r2, g2, b2] = rgb(wet ? 0x8a9aa0 : palette.road);
@@ -235,7 +248,49 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     const w = Math.pow(rng(), 2) * R * 0.08;
     ctx.fillRect(R, rng() * H, w, 2 + rng() * 10);
   }
-  return finish(cv, THREE.ClampToEdgeWrapping);
+}
+
+/** Concrete run-off: pale slabs with saw-cut joints, tyre-dark scuffs and oil stains. */
+function concreteRunoff(ctx: CanvasRenderingContext2D, palette: TrackPalette, rng: Rng, R: number, W: number, H: number, pxPerM: number) {
+  const slab = (k: number, a = 1) => css(CONCRETE, k, a);
+  const grad = ctx.createLinearGradient(R, 0, W, 0);
+  grad.addColorStop(0, slab(0.8));
+  grad.addColorStop(0.12, slab(0.95));
+  grad.addColorStop(1, slab(1));
+  ctx.fillStyle = grad;
+  ctx.fillRect(R, 0, R, H);
+  // Each slab its own tone, cut across every few metres and once along the strip.
+  for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CONCRETE_JOINT) {
+    ctx.fillStyle = slab(0.9 + rng() * 0.16, 0.5);
+    ctx.fillRect(R, m * pxPerM, R, CONCRETE_JOINT * pxPerM);
+    ctx.fillStyle = slab(0.55, 0.9);
+    ctx.fillRect(R, m * pxPerM, R, 2);
+  }
+  ctx.fillRect(R + R * 0.5, 0, 2, H);
+  for (let i = 0; i < (R * H) / 14; i++) {
+    ctx.fillStyle = slab(0.78 + rng() * 0.35, 0.5);
+    ctx.fillRect(R + rng() * R, rng() * H, 1 + rng(), 1 + rng());
+  }
+  // Oil stains and scuffs where racers ran wide.
+  for (let i = 0; i < 30; i++) {
+    const x = R + Math.pow(rng(), 1.5) * R;
+    const y = rng() * H;
+    const r = 6 + rng() * 26;
+    ctx.fillStyle = css(palette.road, 0.6, 0.18 + rng() * 0.2);
+    wrapStroke(H, (dy) => {
+      ctx.beginPath();
+      ctx.ellipse(x, y + dy, r, r * (1.5 + rng() * 2), 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = R + Math.pow(rng(), 1.8) * R;
+    const len = 300 + rng() * H;
+    const y = rng() * H;
+    ctx.fillStyle = css(palette.road, 0.7, 0.25);
+    const w = 2 + rng() * 5;
+    wrapStroke(H, (dy) => ctx.fillRect(x, y + dy, w, len));
+  }
 }
 
 /** Near-white sand detail: rippled, grainy, tiling. */
@@ -376,4 +431,94 @@ export function signTexture(names: { name: string; side: -1 | 1 }[], accent: num
     ctx.fill();
   });
   return finish(cv, THREE.ClampToEdgeWrapping);
+}
+
+/** Paving slab size of the city's plazas and pavements, metres (SAND_TILE splits into whole slabs). */
+const PAVING_SLABS = 8;
+
+/**
+ * Near-white city ground detail: square paving slabs with dark joints, each slab its own tone,
+ * worn and stained. Tiles every SAND_TILE metres like the sand it replaces.
+ */
+export function pavingTexture(seed: number, quality: Quality): THREE.CanvasTexture {
+  const S = TEXTURE_SIZE[quality];
+  const [cv, ctx] = canvas(S, S);
+  const rng = mulberry32(seed ^ 0x9a7e);
+  const cell = S / PAVING_SLABS;
+  for (let j = 0; j < PAVING_SLABS; j++) {
+    for (let i = 0; i < PAVING_SLABS; i++) {
+      const v = Math.round(210 + rng() * 40);
+      ctx.fillStyle = `rgb(${v},${v},${Math.min(255, v + 4)})`;
+      ctx.fillRect(i * cell, j * cell, cell, cell);
+    }
+  }
+  ctx.fillStyle = 'rgba(40,40,46,0.55)';
+  for (let q = 0; q < PAVING_SLABS; q++) {
+    ctx.fillRect(q * cell, 0, Math.max(1, S / 512), S);
+    ctx.fillRect(0, q * cell, S, Math.max(1, S / 512));
+  }
+  for (let i = 0; i < (S * S) / 20; i++) {
+    const v = 160 + rng() * 95;
+    ctx.fillStyle = `rgba(${v},${v},${v},0.5)`;
+    ctx.fillRect(rng() * S, rng() * S, 1 + rng(), 1 + rng());
+  }
+  for (let i = 0; i < 18; i++) {
+    ctx.fillStyle = `rgba(30,30,36,${0.06 + rng() * 0.1})`;
+    ctx.beginPath();
+    ctx.ellipse(rng() * S, rng() * S, 10 + rng() * S * 0.08, 10 + rng() * S * 0.06, rng() * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return finish(cv, THREE.RepeatWrapping);
+}
+
+/** Formwork panels across one ROCK_TILE of cast concrete, and tie holes per panel side. */
+const FORMWORK_PANELS = 12;
+const TIE_HOLES = 3;
+
+/**
+ * Near-white cast concrete detail: formwork panel joints, rows of tie holes, faint rain streaks
+ * down the face. v is world height, as for the rock it replaces.
+ */
+export function concreteTexture(seed: number, quality: Quality): THREE.CanvasTexture {
+  const S = TEXTURE_SIZE[quality];
+  const [cv, ctx] = canvas(S, S);
+  const rng = mulberry32(seed ^ 0xc0c7);
+  const fine = periodicNoise(rng, 64);
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const value = 0.9 + fine((x / S) * 64, (y / S) * 64) * 0.05 + (rng() - 0.5) * 0.05;
+      const i = (y * S + x) * 4;
+      const c = Math.max(0, Math.min(255, value * 255));
+      img.data[i] = c;
+      img.data[i + 1] = c;
+      img.data[i + 2] = c * 1.01;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const panel = S / FORMWORK_PANELS;
+  ctx.fillStyle = 'rgba(60,60,64,0.35)';
+  for (let q = 0; q < FORMWORK_PANELS; q++) {
+    ctx.fillRect(q * panel, 0, 1.5, S);
+    ctx.fillRect(0, q * panel * 2, S, 1.5);
+  }
+  ctx.fillStyle = 'rgba(40,40,44,0.5)';
+  for (let j = 0; j < FORMWORK_PANELS / 2; j++) {
+    for (let i = 0; i < FORMWORK_PANELS; i++) {
+      for (let t = 0; t < TIE_HOLES; t++) ctx.fillRect(i * panel + panel * ((t + 0.5) / TIE_HOLES), j * panel * 2 + panel, 2, 2);
+    }
+  }
+  for (let i = 0; i < 70; i++) {
+    const x = rng() * S;
+    const y = rng() * S;
+    const len = S * (0.1 + rng() * 0.4);
+    const g = ctx.createLinearGradient(0, y, 0, y + len);
+    g.addColorStop(0, 'rgba(50,50,56,0.18)');
+    g.addColorStop(1, 'rgba(50,50,56,0)');
+    ctx.fillStyle = g;
+    const w = 1 + rng() * 4;
+    wrapStroke(S, (dy) => ctx.fillRect(x, y + dy, w, len));
+  }
+  return finish(cv, THREE.RepeatWrapping);
 }
