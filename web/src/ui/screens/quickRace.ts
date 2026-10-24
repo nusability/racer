@@ -84,6 +84,10 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
     },
   );
   worldTabs.classList.add('quick__worlds');
+  // With more worlds than fit, the tab strip scrolls: keep the chosen world's tab in view.
+  const showWorldTab = () => worldTabs.querySelector('.is-on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  worldTabs.addEventListener('click', showWorldTab);
+  requestAnimationFrame(showWorldTab);
 
   const makeLapsPicker = () =>
     stepper({

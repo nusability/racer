@@ -311,8 +311,13 @@
 .cupcard.is-won .cupcard__status { background: var(--gold); color: var(--ink); }
 .cupcard:disabled { opacity: 0.55; }
 
-.cup__body { flex: 1; display: grid; grid-template-columns: 1fr 1.3fr; gap: var(--gap); min-height: 0; }
+/* The race list needs the room for track names; the standings' short names and points need less. */
+.cup__body { flex: 1; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--gap); min-height: 0; }
 .racelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* The cup's panels hold their lists: they shrink to the screen and scroll inside, never spill. */
+.cup__body > .panel { display: flex; flex-direction: column; overflow: hidden; }
+.cup__body > .panel > :not(.panel__title) { min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.racelist__name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .racelist__row {
   display: grid;
   grid-template-columns: auto 32px 1fr auto;
@@ -368,7 +373,7 @@
 .worldcard.is-live .worldcard__status { background: var(--orange); color: var(--ink); text-shadow: none; }
 .worldcard:disabled { opacity: 0.6; filter: grayscale(0.55); }
 .quick__worlds { flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.quick__worlds .btn { font-size: 16px; white-space: nowrap; }
+.quick__worlds .btn { font-size: 16px; white-space: nowrap; flex: none; } /* tabs keep their width; the row scrolls */
 .trackcard:disabled { opacity: 0.55; }
 .thumb--pending { display: block; }
 .trackcard .thumb--pending { position: absolute; inset: 0; z-index: 0; }
