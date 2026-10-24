@@ -9,13 +9,14 @@ import type { GlowPoolLook } from './lookTuning.ts';
 // halo stays under every glider wherever the road goes. Additive and soft, it reads as light
 // on the asphalt, and the bloom pass gives it its glow.
 
-/** Corners of one pool, in pool-local (along, across) units of half length / half width. */
-const CORNERS: readonly [number, number][] = [
-  [-1, -1],
-  [-1, 1],
-  [1, 1],
-  [1, -1],
-];
+/**
+ * Grid vertices per pool along and across the road. One flat quad cuts into a twisting road (a
+ * corkscrew rolls the surface within the pool's length), so the pool is a small grid laid on the
+ * surface at every vertex.
+ */
+const GRID_ALONG = 7;
+const GRID_ACROSS = 4;
+const GRID_VERTS = GRID_ALONG * GRID_ACROSS;
 /** Radial falloff texture resolution; it is blurred by sampling, so it can be small. */
 const FALLOFF_TEXELS = 64;
 
@@ -37,16 +38,23 @@ export class GlowPools {
     this.colors = glows.map((g) => new THREE.Color(g));
     const n = glows.length;
     const geo = new THREE.BufferGeometry();
-    this.pos = new THREE.BufferAttribute(new Float32Array(n * 4 * 3), 3);
+    this.pos = new THREE.BufferAttribute(new Float32Array(n * GRID_VERTS * 3), 3);
     this.pos.setUsage(THREE.DynamicDrawUsage);
-    this.col = new THREE.BufferAttribute(new Float32Array(n * 4 * 3), 3);
+    this.col = new THREE.BufferAttribute(new Float32Array(n * GRID_VERTS * 3), 3);
     this.col.setUsage(THREE.DynamicDrawUsage);
-    const uv = new Float32Array(n * 4 * 2);
+    const uv = new Float32Array(n * GRID_VERTS * 2);
     const index: number[] = [];
     for (let i = 0; i < n; i++) {
-      CORNERS.forEach(([a, c], k) => uv.set([(a + 1) / 2, (c + 1) / 2], (i * 4 + k) * 2));
-      const o = i * 4;
-      index.push(o, o + 1, o + 2, o, o + 2, o + 3);
+      const o = i * GRID_VERTS;
+      for (let a = 0; a < GRID_ALONG; a++) {
+        for (let c = 0; c < GRID_ACROSS; c++) uv.set([a / (GRID_ALONG - 1), c / (GRID_ACROSS - 1)], (o + a * GRID_ACROSS + c) * 2);
+      }
+      for (let a = 0; a < GRID_ALONG - 1; a++) {
+        for (let c = 0; c < GRID_ACROSS - 1; c++) {
+          const v = o + a * GRID_ACROSS + c;
+          index.push(v, v + 1, v + GRID_ACROSS + 1, v, v + GRID_ACROSS + 1, v + GRID_ACROSS);
+        }
+      }
     }
     geo.setAttribute('position', this.pos);
     geo.setAttribute('color', this.col);
@@ -80,15 +88,17 @@ export class GlowPools {
     const ribbon = this.track.ribbon(pose.branch);
     const halfLen = L.length / 2;
     const halfWid = L.width / 2;
-    CORNERS.forEach(([a, c], k) => {
+    for (let a = 0; a < GRID_ALONG; a++) {
       // Centred a little behind the craft: the light comes from its thrusters.
-      let s = pose.s - L.behind + a * halfLen;
+      let s = pose.s - L.behind + (2 * a / (GRID_ALONG - 1) - 1) * halfLen;
       if (pose.branch >= 0) s = Math.min(ribbon.length, Math.max(0, s));
-      ribbon.toWorld(s, pose.x + c * halfWid, L.lift, this.tmp);
-      const v = i * 4 + k;
-      this.pos.setXYZ(v, this.tmp.x, this.tmp.y, this.tmp.z);
-      this.col.setXYZ(v, this.tint.r, this.tint.g, this.tint.b);
-    });
+      for (let c = 0; c < GRID_ACROSS; c++) {
+        ribbon.toWorld(s, pose.x + (2 * c / (GRID_ACROSS - 1) - 1) * halfWid, L.lift, this.tmp);
+        const v = i * GRID_VERTS + a * GRID_ACROSS + c;
+        this.pos.setXYZ(v, this.tmp.x, this.tmp.y, this.tmp.z);
+        this.col.setXYZ(v, this.tint.r, this.tint.g, this.tint.b);
+      }
+    }
     this.pos.needsUpdate = true;
     this.col.needsUpdate = true;
   }
