@@ -8,6 +8,7 @@ export const devilsteeth: TrackDef = {
   name: "Devil's Teeth",
   blurb: 'Thread the red fangs for a boost or swing wide on the sand. Then the Jaw.',
   difficulty: 4,
+  course: 'circuit',
   laps: 3,
   seed: 606,
   width: 46,
@@ -72,15 +73,17 @@ export const devilsteeth: TrackDef = {
     { kind: 'boostPad', at: 3.24, lateral: 0 },
     { kind: 'boostPad', at: 10.3, lateral: 0 },
     { kind: 'boostPad', at: 13.5, lateral: 0 },
-    // The bucket-wheel digger works the gulch rim and its spill rains onto the road.
+    // The bucket-wheel digger works the roadside on the left, its boom swung out over the road,
+    // and its spill rains onto the stretch under the wheel, short of Fang Alley's mouth.
     {
       kind: 'hazard',
-      hazard: { type: 'dropper', id: 'spill', from: 5.95, to: 6.7, count: 3, radius: 3.5, period: 8, warn: 2, stay: 4, phase: 1 },
+      hazard: { type: 'dropper', id: 'spill', from: 5.93, to: 6.11, count: 3, radius: 3.5, period: 8, warn: 2, stay: 4, phase: 1 },
     },
   ],
   branches: [
     {
       id: 'fangalley',
+      kind: 'shortcut',
       name: 'Fang Alley',
       side: 1,
       from: 6.1,
@@ -118,7 +121,7 @@ export const devilsteethScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
-    { kind: 'mine', at: 6.3, side: 1, distance: 150, hazard: 'spill' },
+    { kind: 'mine', at: 6.02, side: -1, distance: 60, hazard: 'spill' },
     { kind: 'wreck', at: 3.5, side: -1, distance: 5 },
     { kind: 'cliffVillage', at: 9.0, side: -1, distance: 60, scale: 1.3 },
     { kind: 'balloons', at: 12.5, side: -1, distance: 150 },

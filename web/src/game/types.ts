@@ -87,9 +87,10 @@ export interface HudView {
   speedKmh: number;
   place: number;
   racers: number;
-  lap: number; // 1-based lap the player is on (clamped to laps)
-  laps: number;
+  /** How far into the race the player is: lap n of a circuit, or sector n of a sprint (1-based, clamped to `of`). */
+  stage: { kind: 'lap' | 'sector'; n: number; of: number };
   time: number;
+  /** Best lap so far on a circuit; null on a sprint, whose one run is the race time. */
   bestLap: number | null;
   /** Boost tank fill, 0..1. */
   boost: number;
@@ -104,7 +105,7 @@ export interface HudView {
 
 export interface Hud {
   update(view: HudView): void;
-  /** Short centre-screen message, e.g. "LAP 2", "FINAL LAP", "SMUGGLER'S CUT". */
+  /** Short centre-screen message, e.g. "LAP 2", "FINAL LAP", "SECTOR 3", "SMUGGLER'S CUT". */
   flash(message: string): void;
   /** A boost cell was collected: the tank meter flashes and swells briefly. */
   pulseBoost(): void;

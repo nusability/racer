@@ -9,6 +9,7 @@ export const volcanoisle: TrackDef = {
   name: 'Volcano Isle',
   blurb: 'Loop off the line, climb the cliff road under the lava bombs, cross the summit ridge.',
   difficulty: 5,
+  course: 'circuit',
   laps: 3,
   seed: 1606,
   width: 42,
@@ -48,7 +49,7 @@ export const volcanoisle: TrackDef = {
     { kind: 'boostCells', at: 13.39, lateral: -16, count: 1, spacing: 30 },
     { kind: 'narrow', from: 0.3, to: 0.86, width: 26, blend: 70 },
     { kind: 'runoff', from: 0.33, to: 0.83, amount: 0 },
-    { kind: 'loop', at: 0.42, radius: 28, span: 124, shift: 32, settle: 140 },
+    { kind: 'loop', at: 0.42, radius: 80, span: 124, shift: 32, settle: 140 },
     { kind: 'drop', from: 3.0, to: 4.9, side: -1 },
     {
       kind: 'hazard',
@@ -79,6 +80,7 @@ export const volcanoisle: TrackDef = {
   branches: [
     {
       id: 'lavatube',
+      kind: 'shortcut',
       name: 'Lava Tube',
       side: 1,
       from: 3.4,
@@ -104,6 +106,7 @@ export const volcanoisle: TrackDef = {
     },
     {
       id: 'blackchannel',
+      kind: 'shortcut',
       name: 'Black Channel',
       side: 1,
       from: 9.0,

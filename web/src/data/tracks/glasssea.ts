@@ -2,13 +2,14 @@ import type { TrackDef } from '../../core/types.ts';
 import type { TrackScenery } from './scenery.ts';
 
 // The desert's speed track: two kilometres flat out across fused glass sand, where the sand
-// beast surfaces and throws its body across the road, then the long sweepers and the Glass
+// beast erupts in an arch and slams into the road, then the long sweepers and the Glass
 // Mile home. Beast's Gullet cuts the inside of the bend and leaps its widest crack.
 export const glasssea: TrackDef = {
   id: 'glasssea',
   name: 'Glass Sea',
-  blurb: 'Two kilometres flat out over glass, and the sand beast lies across the road.',
+  blurb: 'Two kilometres flat out over glass, and the sand beast slams into the road.',
   difficulty: 3,
+  course: 'circuit',
   laps: 2,
   seed: 505,
   width: 56,
@@ -85,11 +86,12 @@ export const glasssea: TrackDef = {
     { kind: 'boostCells', at: 43.86, lateral: -42, count: 4, spacing: 26 },
     { kind: 'boostPad', at: 1.6, lateral: -12 },
     { kind: 'boostPad', at: 1.6, lateral: 12 },
-    // The beast's crossing: the run-off pinches in so its body spans the whole course.
+    // The beast's crossing: it erupts beyond the right edge, arches over the right of the road
+    // and slams into the left. The run-off pinches in so the arch spans the whole opening.
     { kind: 'runoff', from: 4.4, to: 5.6, amount: 20 },
     {
       kind: 'hazard',
-      hazard: { type: 'blocker', id: 'beast', at: 5.0, opening: 22, offset: 18, height: 12, warn: 3, up: 4, period: 15, phase: 0 },
+      hazard: { type: 'blocker', id: 'beast', at: 5.0, opening: 42, offset: 27, height: 12, warn: 3, up: 4, period: 15, phase: 0 },
     },
     { kind: 'kicker', at: 6.6, length: 50, height: 3 },
     { kind: 'boostPad', at: 12.5, lateral: 0 },
@@ -106,6 +108,7 @@ export const glasssea: TrackDef = {
   branches: [
     {
       id: 'gullet',
+      kind: 'shortcut',
       name: "Beast's Gullet",
       side: 1,
       from: 18.6,
@@ -142,7 +145,7 @@ export const glassseaScenery: TrackScenery = {
   oases: [],
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
-    { kind: 'sandbeast', at: 5.0, side: -1, distance: 40, hazard: 'beast' },
+    { kind: 'sandbeast', at: 5.0, side: 1, distance: 40, hazard: 'beast' },
     { kind: 'skyfleet', at: 12.0, side: -1, distance: 300 },
     { kind: 'wreck', at: 37.0, side: -1, distance: 10 },
     { kind: 'balloons', at: 28.0, side: -1, distance: 200 },

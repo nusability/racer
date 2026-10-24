@@ -9,6 +9,7 @@ export const glacier: TrackDef = {
   name: 'Glacier Run',
   blurb: 'Three kilometres flat out up the blue ice, and the glacier wall calves across the road.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 2303,
   width: 54,
@@ -111,6 +112,7 @@ export const glacier: TrackDef = {
   branches: [
     {
       id: 'crevasse',
+      kind: 'shortcut',
       name: 'Crevasse Run',
       side: 1,
       from: 19.4,

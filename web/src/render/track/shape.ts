@@ -1,4 +1,5 @@
 import type { Branch, Ribbon, Track } from '../../core/track.ts';
+import type { LoopSpan } from '../../core/courseShapes.ts';
 import type { TrackFeature, TrackParam } from '../../core/types.ts';
 import { BRANCH_JUNCTION_LENGTH } from '../../data/tuning.ts';
 import {
@@ -86,7 +87,7 @@ export const sideIndex = (side: number): 0 | 1 => (side > 0 ? 1 : 0);
 export type WaterSpans = { from: TrackParam; to: TrackParam }[];
 
 export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
-  const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track, track.def.features) }];
+  const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track) }];
   const mainWater = views[0].shape.water;
   for (const w of water) {
     const s0 = track.paramToS(w.from);
@@ -94,7 +95,7 @@ export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
     for (let d = 0; d <= len; d += track.step / 2) mainWater[Math.round(track.wrap(s0 + d) / track.step) % track.samples.length] = 1;
   }
   for (const c of track.crossings) markCrossing(track, views[0].shape, c);
-  for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon, b.def.features) });
+  for (const b of track.branches) views.push({ ribbon: b.ribbon, features: b.def.features, branch: b, shape: corridorShape(b.ribbon) });
   // Junctions: each ribbon's side facing the other opens, since the other's road covers it.
   for (const b of track.branches) {
     const main = views[0].shape.open[sideIndex(b.side)];
@@ -115,7 +116,7 @@ export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
   return views;
 }
 
-export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShape {
+export function corridorShape(r: Ribbon): CorridorShape {
   const n = r.samples.length;
   const wall = new Float32Array(n);
   for (let k = 0; k < n; k++) wall[k] = r.samples[k].wallHeight;
@@ -151,7 +152,7 @@ export function corridorShape(r: Ribbon, features: TrackFeature[]): CorridorShap
     gy[k] = p.pos.y;
     gz[k] = p.pos.z;
   }
-  for (const f of features) if (f.kind === 'loop') loopBaseline(r, f.at, f.span, loop, gx, gy, gz, rx, rz);
+  for (const l of r.loops) loopBaseline(r, l, loop, gx, gy, gz, rx, rz);
   for (let k = 0; k < n; k++) {
     const smp = r.samples[k];
     const half = smp.width / 2;
@@ -267,16 +268,13 @@ function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: numbe
  * Inside a loop the ground follows the straight line from the sample before it to the one after,
  * and the side of the course is the entry's: the axis the loop turns about.
  */
-function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array, gx: Float32Array, gy: Float32Array, gz: Float32Array, rx: Float32Array, rz: Float32Array) {
-  const s0 = r.paramToS(at);
-  const k0 = Math.ceil(s0 / r.step);
-  const k1 = Math.floor((s0 + span) / r.step);
+function loopBaseline(r: Ribbon, span: LoopSpan, loop: Uint8Array, gx: Float32Array, gy: Float32Array, gz: Float32Array, rx: Float32Array, rz: Float32Array) {
+  const k0 = Math.ceil(span.s0 / r.step);
+  const k1 = Math.floor(span.s1 / r.step);
   const n = r.samples.length;
   const wrap = (k: number) => ((k % n) + n) % n;
   const a = r.samples[wrap(k0 - 1)].pos;
   const b = r.samples[wrap(k1 + 1)].pos;
-  const side = r.samples[wrap(k0 - 1)].right;
-  const l = Math.hypot(side.x, side.z);
   for (let k = k0; k <= k1; k++) {
     const t = (k - k0 + 1) / (k1 - k0 + 2);
     const q = wrap(k);
@@ -284,7 +282,7 @@ function loopBaseline(r: Ribbon, at: TrackParam, span: number, loop: Uint8Array,
     gx[q] = a.x + (b.x - a.x) * t;
     gy[q] = a.y + (b.y - a.y) * t;
     gz[q] = a.z + (b.z - a.z) * t;
-    rx[q] = side.x / l;
-    rz[q] = side.z / l;
+    rx[q] = span.right.x;
+    rz[q] = span.right.z;
   }
 }

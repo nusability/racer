@@ -2,7 +2,7 @@
 // variety; cups inside a world add difficulty, so a new world's rookie cup is about as hard as
 // the desert's. Winning a world's rookie cup opens the next world.
 
-export type BiomeId = 'desert' | 'beach' | 'ice' | 'jungle' | 'city' | 'space';
+export type BiomeId = 'desert' | 'beach' | 'ice' | 'jungle' | 'city' | 'forest' | 'space';
 
 export interface WorldDef {
   id: string;
@@ -61,6 +61,16 @@ export const WORLDS: WorldDef[] = [
     unlockedBy: 'frost',
     card: { from: 0xff2fb4, to: 0x2a1060 },
   },
+  {
+    id: 'forest',
+    name: 'Elderwood',
+    blurb: 'Point to point through a forest of giants, by whichever way through the roots you dare.',
+    biome: 'forest',
+    trackIds: ['mossway', 'timberton', 'glowmere', 'lanternfair', 'deeproot', 'thunderfall'],
+    cupIds: ['fernway', 'canopy', 'eldercrown'],
+    unlockedBy: 'neon',
+    card: { from: 0x1f5a2e, to: 0xd8a83a },
+  },
 ];
 
 export function worldById(id: string): WorldDef {
@@ -69,8 +79,15 @@ export function worldById(id: string): WorldDef {
   return w;
 }
 
+/** Dev builds only: the world each synthetic track (data/tracks/index.ts registerDevTrack) races in. */
+const DEV_TRACK_WORLDS = new Map<string, WorldDef>();
+
+export function registerDevTrackWorld(trackId: string, worldId: string): void {
+  DEV_TRACK_WORLDS.set(trackId, worldById(worldId));
+}
+
 export function worldOfTrack(trackId: string): WorldDef {
-  const w = WORLDS.find((x) => x.trackIds.includes(trackId));
+  const w = WORLDS.find((x) => x.trackIds.includes(trackId)) ?? DEV_TRACK_WORLDS.get(trackId);
   if (!w) throw new Error(`Track "${trackId}" belongs to no world`);
   return w;
 }

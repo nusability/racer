@@ -8,6 +8,7 @@ export const sunpan: TrackDef = {
   name: 'Sunpan Flats',
   blurb: 'Endless white salt, rockets lifting off, one easy leap. Learn to fly.',
   difficulty: 1,
+  course: 'circuit',
   laps: 3,
   seed: 101,
   width: 54,
@@ -74,6 +75,7 @@ export const sunpan: TrackDef = {
   branches: [
     {
       id: 'saltcut',
+      kind: 'shortcut',
       name: 'Salt Cut',
       side: 1,
       from: 6.5,

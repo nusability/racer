@@ -233,6 +233,31 @@ export const REPAIR_VALUE = 0.25;
 // Course shapes and hazards
 /** Below this speed in the upper half of a loop a racer falls out: a wreck. */
 export const LOOP_MIN_SPEED = 75;
+/**
+ * Smallest vertical loop radius, metres: the one sizing rule for loops, enforced where the
+ * course is built. At 150–220 m/s a loop smaller than this reads as a curl: the chase camera
+ * trails 10–15 m and looks 40 m ahead along the road, so on a small loop it sweeps round to the
+ * outside, and from afar the ribbon is a squashed hoop. At 80 m a loop stands 160 m tall on
+ * ~510 m of road (3.5 s for the starter); flat out the starter tops it at ~137 m/s and on
+ * throttle it climbs out even from a crawl, so only braking up the climb stalls it.
+ */
+export const LOOP_MIN_RADIUS = 80;
+/**
+ * A loop drifts forward by its span as it climbs, so its crown curls tighter than its radius:
+ * the radius of curvature at the top is (2πR − span)² / 4π²R. It stays at least this share of
+ * the radius, so the top reads as part of one round loop and not as a kink.
+ */
+export const LOOP_CROWN_MIN = 0.5;
+/**
+ * A loop's centreline is laid this finely (metres) before the road is resampled every
+ * TRACK_SAMPLE_STEP, so the resampled samples sit on the curve rather than on chords of it.
+ */
+export const LOOP_LAY_STEP = 0.5;
+/**
+ * Shortest stretch of road per full corkscrew roll, metres. At 200 m/s that is one roll a
+ * second (about an aerobatic plane's roll rate); faster reads as a spin, not a manoeuvre.
+ */
+export const CORKSCREW_MIN_TURN = 200;
 /** On an open-edge side the target may go this far past the edge: you can drive off a cliff. */
 export const DROP_OVERREACH = 8;
 /** A gust drifts the lateral target: m/s of drift per m/s² of push. */
@@ -397,8 +422,9 @@ export const AI_SHORTCUT_HI = 0.8;
 /** The AI decides on a shortcut and lines up for it this many seconds before its entry. */
 export const AI_SHORTCUT_LOOK_TIME = 2;
 /**
- * An AI skips a shortcut once its hull damage reaches this: rookies gamble on a battered hull
- * (and can wreck in the rough), aces keep a margin for a flat-out mistake.
+ * An AI skips a shortcut, and takes a fork's gentlest route, once its hull damage reaches
+ * this: rookies gamble on a battered hull (and can wreck in the rough), aces keep a margin
+ * for a flat-out mistake.
  */
 export const AI_SHORTCUT_HULL_LO = 0.8;
 export const AI_SHORTCUT_HULL_HI = 0.5;
@@ -410,8 +436,35 @@ export const AI_ROUGH_LIFT_LO = 0.9;
 export const AI_ROUGH_LIFT_HI = 0.73;
 /** Chance, times (1 − skill)², that an AI charges a shortcut's rough ground without lifting. */
 export const AI_ROUGH_RECKLESS = 0.35;
+/**
+ * A rough stretch whose worst ground is milder than this (root bumps, gravel) costs a few
+ * percent of hull flat out, less than lifting would cost in time: AIs ride it at their pace.
+ */
+export const AI_ROUGH_LIFT_MIN = 0.4;
+/**
+ * Forks: each AI picks one of a fork's routes every time it comes to it, from its own seeded
+ * draw, so the field spreads over the routes. Skill tilts the draw by up to this much (of the
+ * 0..1 pick) toward the harder routes: aces like the rough, rocky way, rookies the clear one.
+ */
+export const AI_ROUTE_LEAN = 0.25;
+/** A route's difficulty for that pick: metres of rough ground (times its amount) plus this many metres per obstacle or hazard. */
+export const AI_ROUTE_OBSTACLE_METRES = 40;
 
-// --- Shortcuts (src/core/track.ts) ---
+// --- Sprints (src/core/track.ts, src/core/race.ts) ---
+/**
+ * Straight apron the builder lays behind a sprint's start line, metres: the back of a six-car
+ * grid stands GRID_FRONT_GAP + 2 × GRID_ROW_SPACING + GRID_STAGGER = 57 m behind the line, and
+ * the chase camera trails it.
+ */
+export const SPRINT_GRID_APRON = 120;
+/**
+ * Straight run-out the builder lays beyond a sprint's finish line, metres. A finisher is held
+ * on the air brake with no boost, so BRAKE_DECEL stops even an upgraded glider crossing the
+ * line at full boost (about 340 m/s: 680 m) before the barrier at its end.
+ */
+export const SPRINT_RUNOUT = 750;
+
+// --- Branches: shortcuts and the routes of forks (src/core/track.ts) ---
 /** Length of the side-by-side run where a branch leaves or rejoins the main road. */
 export const BRANCH_JUNCTION_LENGTH = 60;
 /** Distance over which the main loop's run-off narrows to meet a branch junction and widens after it. */

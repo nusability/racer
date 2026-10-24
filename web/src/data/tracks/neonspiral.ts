@@ -10,6 +10,7 @@ export const neonspiral: TrackDef = {
   name: 'Neon Spiral',
   blurb: 'A double barrel roll, a loop into a corkscrew, and a spiral ramp back over your own road.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 3303,
   width: 46,
@@ -122,14 +123,14 @@ export const neonspiral: TrackDef = {
     { kind: 'boostPad', at: 19.49, lateral: 0 },
     { kind: 'narrow', from: 34.88, to: 37.56, width: 32, blend: 80 },
     { kind: 'runoff', from: 35.05, to: 37.46, amount: 0 },
-    { kind: 'loop', at: 35.77, radius: 28, span: 124, shift: 36, settle: 140 },
+    { kind: 'loop', at: 35.77, radius: 80, span: 124, shift: 36, settle: 140 },
     { kind: 'narrow', from: 36.63, to: 39.16, width: 34, blend: 70 },
     { kind: 'runoff', from: 36.73, to: 39.06, amount: 0 },
     { kind: 'corkscrew', from: 37.24, to: 38.55, turns: 1 },
     { kind: 'repairCells', at: 39.26, lateral: -12, count: 3, spacing: 28 },
     { kind: 'narrow', from: 51.6, to: 54, width: 32, blend: 80 },
     { kind: 'runoff', from: 51.7, to: 53.9, amount: 0 },
-    { kind: 'loop', at: 52.26, radius: 28, span: 124, shift: -36, settle: 140 },
+    { kind: 'loop', at: 52.26, radius: 80, span: 124, shift: -36, settle: 140 },
     { kind: 'boostPad', at: 55.22, lateral: 0 },
     {
       kind: 'hazard',
@@ -139,6 +140,7 @@ export const neonspiral: TrackDef = {
   branches: [
     {
       id: 'plaza',
+      kind: 'shortcut',
       name: 'Plaza Cut',
       side: -1,
       from: 39.76,

@@ -1,8 +1,9 @@
-// Runs full headless races on every track (plus a synthetic test loop) and prints how they
+// Runs full headless races on every track (plus synthetic test courses) and prints how they
 // went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, or a
-// racer pinned against a wall.
+// racer pinned against a wall; on the synthetic sprint also on a DNF, wrong placings, a racer
+// reaching the run-out's end barrier, or a fork whose field all took one way.
 //   npm run sim                 all tracks
-//   npm run sim -- sunpan       one track (simtest is the synthetic loop)
+//   npm run sim -- sunpan       one track (simtest is the synthetic loop, simsprint the sprint)
 //   npm run sim -- --ladder     also race six equal racers at different skills
 //   npm run sim -- --cups x     cup balance study even when filtering to track x
 
@@ -17,7 +18,7 @@ import { minJumpSpeed } from '../src/core/jumps.ts';
 import { currentTopSpeed } from '../src/core/handling.ts';
 import { DRAFT_FULL, DRAFT_TOP_SPEED, RACER_LENGTH, SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
-import { simDraftOval, simFigure8, simTestTrack } from './sim-test-track.ts';
+import { simDraftOval, simFigure8, simSprint, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
 
 // The project has no Node typings (the web build must not see them); this is all we use.
@@ -27,7 +28,7 @@ const SEED = 20261022;
 const FIELD = 6;
 const SKILL_LO = 0.3;
 const SKILL_HI = 0.95;
-/** A race longer than this many seconds per lap means someone is stuck. */
+/** A race longer than this many seconds per lap (or per sprint) means someone is stuck. */
 const TIMEOUT_PER_LAP = 240;
 const STARTER = 'dustwing';
 const IDLE: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
@@ -65,6 +66,8 @@ interface RunResult {
   /** Times to get from a branch's entry to its exit, on the branch and on the main road. */
   viaBranch: Traversal[];
   viaMain: Traversal[];
+  /** Per racer: the furthest main-road s it reached. */
+  maxMainS: number[];
 }
 
 type Driver = (race: Race) => PlayerInput;
@@ -81,6 +84,7 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
   const prevBranch = race.racers.map((r) => r.branch);
   const boostTime = race.racers.map(() => 0);
   const cells = race.racers.map(() => 0);
+  const maxMainS = race.racers.map((r) => r.s);
   let steps = 0;
   while (race.phase !== 'finished') {
     const stepEvents: RaceEvent[] = race.step(player === null ? IDLE : player(race));
@@ -100,6 +104,8 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
         const crossed = (at: number) => prevBranch[i] < 0 && r.branch < 0 && track.delta(prevS[i], at) > 0 && track.delta(r.s, at) <= 0;
         if (crossed(b.entryS)) Object.assign(mark, { at: race.time, onBranch: false });
         if (prevBranch[i] < 0 && r.branch === b.index && mark.at >= 0) mark.onBranch = true;
+        // Onto another branch over the same stretch (the other route of a fork): neither way of this one.
+        if (r.branch >= 0 && r.branch !== b.index && !mark.onBranch) mark.at = -1;
         const left = prevBranch[i] === b.index && r.branch < 0;
         if (mark.at >= 0 && ((mark.onBranch && left) || (!mark.onBranch && crossed(b.exitS)))) {
           (mark.onBranch ? viaBranch : viaMain).push({ branch: b.index, seconds: race.time - mark.at });
@@ -109,6 +115,7 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       }
       prevS[i] = r.s;
       prevBranch[i] = r.branch;
+      if (r.branch < 0) maxMainS[i] = Math.max(maxMainS[i], r.s);
     });
     if (++steps > maxSteps) {
       const stuck = race.racers.filter((r) => r.finishTime === null && r.crashed <= 0).map((r) => `${r.id}@lap${r.lap} s=${r.s.toFixed(0)} b=${r.branch}`);
@@ -116,7 +123,7 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       break;
     }
   }
-  return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain };
+  return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain, maxMainS };
 }
 
 /** Below this share of top speed a wall-hugging racer counts as pinned. */
@@ -168,24 +175,79 @@ function report(track: Track, res: RunResult) {
     );
     if (st.finishTime === null && st.crashed <= 0) fail(`${track.def.id}: ${e.name} neither finished nor wrecked`);
   }
+  const mean = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length;
   for (const b of track.branches) {
+    if (b.fork !== null) continue;
     const on = res.viaBranch.filter((t) => t.branch === b.index).map((t) => t.seconds);
     const off = res.viaMain.filter((t) => t.branch === b.index).map((t) => t.seconds);
-    const mean = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length;
     const gain = on.length && off.length ? `${(mean(off) - mean(on)).toFixed(2)} s gained` : 'no comparison';
     console.log(`  shortcut "${b.def.name}": taken ${on.length}x, main ${off.length}x, ${gain}`);
+  }
+  for (const f of track.forks) {
+    const ways = forkWays(track, res, f.index).map((w) => `"${w.name}" ${w.times.length}x${w.times.length ? ` ${mean(w.times).toFixed(1)} s` : ''}`);
+    console.log(`  fork "${f.name}": ${ways.join(', ')}`);
   }
   const ev = [...res.events].map(([k, v]) => `${k} ${v}`).join(', ');
   console.log(`  events: ${ev}`);
 }
 
-const defs: TrackDef[] = [simTestTrack, simFigure8, ...TRACKS];
+/** Each way through a fork and the times racers took on it, entry to exit (main road first). */
+function forkWays(track: Track, res: RunResult, fork: number): { name: string; times: number[] }[] {
+  const f = track.forks[fork];
+  // A racer staying on the main road passes every route's span: count it once, by the first route.
+  const main = res.viaMain.filter((t) => t.branch === f.routes[0]).map((t) => t.seconds);
+  const routes = f.routes.map((i) => ({ name: track.branches[i].def.name, times: res.viaBranch.filter((t) => t.branch === i).map((t) => t.seconds) }));
+  return [{ name: f.name, times: main }, ...routes];
+}
+
+/** After the last finisher, a sprint keeps running this long so the run-out can be watched to a stop, seconds. */
+const SPRINT_SETTLE = 12;
+/** Below this speed a finisher counts as stopped, m/s. */
+const SPRINT_STOPPED = 0.5;
+
+/**
+ * The sprint's own rules: everyone finishes (the synthetic sprint has nothing that must wreck),
+ * places follow finishing times, every finisher stops on the run-out short of its end barrier,
+ * and each fork's field spreads over at least two of its ways.
+ */
+function sprintCheck(track: Track, res: RunResult) {
+  const { race } = res;
+  const id = track.def.id;
+  const stoppedAt = race.racers.map(() => -1);
+  for (let n = 0; n * SIM_DT < SPRINT_SETTLE; n++) {
+    race.step(IDLE);
+    race.racers.forEach((r, i) => {
+      if (r.branch < 0) res.maxMainS[i] = Math.max(res.maxMainS[i], r.s);
+      if (stoppedAt[i] < 0 && r.speed < SPRINT_STOPPED) stoppedAt[i] = r.s;
+    });
+  }
+  const finishS = track.startS + track.raceLength;
+  const reach = race.racers.map((r, i) => `${r.id} ${(res.maxMainS[i] - finishS).toFixed(0)} m`);
+  console.log(`  run-out (${(track.length - finishS).toFixed(0)} m): stopped past the line at ${reach.join(', ')}`);
+  race.racers.forEach((r, i) => {
+    if (r.finishTime === null) fail(`${id}: ${r.id} did not finish the sprint${r.crashed > 0 ? ' (wrecked)' : ''}`);
+    if (res.maxMainS[i] >= track.length - RACER_LENGTH) fail(`${id}: ${r.id} ran the whole run-out into its end barrier`);
+    if (stoppedAt[i] < 0) fail(`${id}: ${r.id} still moving ${SPRINT_SETTLE} s after the race ended`);
+  });
+  const byTime = race.racers.filter((r) => r.finishTime !== null).sort((a, b) => (a.finishTime as number) - (b.finishTime as number));
+  byTime.forEach((r, i) => {
+    if (r.place !== i + 1) fail(`${id}: ${r.id} finished ${i + 1}th by time but is placed ${r.place}`);
+  });
+  for (const f of track.forks) {
+    const used = forkWays(track, res, f.index).filter((w) => w.times.length > 0).length;
+    if (used < 2) fail(`${id}: the whole field took one way through fork "${f.name}"`);
+  }
+}
+
+const defs: TrackDef[] = [simTestTrack, simFigure8, simSprint, ...TRACKS];
 for (const def of defs) {
   if (only.length > 0 && !only.includes(def.id)) continue;
   const track = new Track(def);
   const jumps = [track, ...track.branches.map((b) => b.ribbon)].flatMap((rb) => rb.jumps.map((j) => `${minJumpSpeed(rb, j).toFixed(0)}`));
+  const shortcuts = track.branches.filter((b) => b.fork === null).length;
+  const distance = def.course === 'sprint' ? `${track.raceLength.toFixed(0)} m sprint` : `${track.length.toFixed(0)} m x ${def.laps} laps`;
   console.log(
-    `\n${def.id} (${def.name}) ${track.length.toFixed(0)} m x ${def.laps} laps, ${track.branches.length} shortcut(s)` +
+    `\n${def.id} (${def.name}) ${distance}, ${shortcuts} shortcut(s)${track.forks.length ? `, ${track.forks.length} fork(s)` : ''}` +
       `${jumps.length ? `; jump min speeds ${jumps.join(', ')} m/s` : ''}`,
   );
   const field = Array.from({ length: FIELD }, (_, i) => entrant(i, RACERS[i % RACERS.length], spread(i, FIELD, SKILL_LO, SKILL_HI), false));
@@ -193,6 +255,7 @@ for (const def of defs) {
   report(track, a);
   const b = run(track, def.laps, SEED, field, null);
   if (a.fingerprint !== b.fingerprint) fail(`${def.id}: two runs with the same seed diverged`);
+  if (def.course === 'sprint') sprintCheck(track, a);
   wallHug(track, -1);
   wallHug(track, 1);
   if (ladder) {

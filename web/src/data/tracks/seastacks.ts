@@ -8,6 +8,7 @@ export const seastacks: TrackDef = {
   name: 'Sea Stacks',
   blurb: 'Slalom the stacks across the lagoon, bore through Gull Head, leap the tide channels.',
   difficulty: 3,
+  course: 'circuit',
   laps: 3,
   seed: 1404,
   width: 46,
@@ -77,6 +78,7 @@ export const seastacks: TrackDef = {
   branches: [
     {
       id: 'archgap',
+      kind: 'shortcut',
       name: 'Arch Gap',
       side: -1,
       from: 6.7,

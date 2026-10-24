@@ -1,11 +1,12 @@
 // Builds every track headless and prints its shape plus the checks authors design against:
 // corner radii, widths, jump clear speeds, flight paths that hit something, whether every
-// obstacle leaves an open way round, shortcut sanity and saving, and parts of the course that
-// crowd each other. Exit code 1 when any check warns.
+// obstacle leaves an open way round, shortcut sanity and saving, how evenly a fork's routes
+// race, and parts of the course that crowd each other. Exit code 1 when any check warns.
 import { TRACKS, sceneryById } from '../src/data/tracks/index.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
 import { SEA_LEVEL } from '../src/render/track/config.ts';
-import { Ribbon, Track, type Branch } from '../src/core/track.ts';
+import { Ribbon, Track, type Branch, type Fork } from '../src/core/track.ts';
+import { loopCrownRadius, type LoopSpan } from '../src/core/courseShapes.ts';
 import { Race } from '../src/core/race.ts';
 import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { racerById } from '../src/data/racers.ts';
@@ -38,8 +39,16 @@ const MIN_WIDTH = 18;
 const WALLED_WIDTH = 26;
 const SQUEEZE_MAX = 260;
 const BRANCH_WIDTH: [number, number] = [16, 22];
+/** A fork's routes are whole roads, as wide as a main road can be. */
+const ROUTE_WIDTH: [number, number] = [18, 44];
+/**
+ * Road length of a lap, metres: about a minute on the starter. Up to 10 km of ground plan, plus
+ * the road a stunt track's vertical loops add (~390 m each, three at most).
+ */
 const LAP_MIN = 6000;
-const LAP_MAX = 10000;
+const LAP_MAX = 11000;
+/** A sprint is raced once, so it runs about as far as a circuit's whole race, start line to finish. */
+const SPRINT_LENGTH: [number, number] = [14000, 24000];
 /** Gap between the hard boundaries of non-adjacent parts of the course, metres. */
 const MIN_CLEARANCE = 40;
 /** Two samples count as adjacent along a ribbon when this close in s. */
@@ -404,11 +413,9 @@ function checkCrossings(t: Track, warn: string[]) {
  * Narrowest sideways gap between the road edges of a loop's first and second half wherever
  * the two pass each other side-on (within LOOP_PASS_NEAR), measured on the built samples.
  */
-function loopPassGap(t: Ribbon, s0: number, span: number): number {
-  const entry = t.sampleAt(s0);
-  const l = Math.hypot(entry.right.x, entry.right.z);
-  const rx = entry.right.x / l;
-  const rz = entry.right.z / l;
+function loopPassGap(t: Ribbon, loop: LoopSpan): number {
+  const { s0, right } = loop;
+  const span = loop.s1 - loop.s0;
   const half = (from: number, to: number) => t.samples.filter((p) => t.delta(s0 + from, p.s) >= 0 && t.delta(p.s, s0 + to) >= 0);
   const climb = half(0, span / 2);
   const descent = half(span / 2, span);
@@ -420,7 +427,7 @@ function loopPassGap(t: Ribbon, s0: number, span: number): number {
       const dx = b.pos.x - a.pos.x;
       const dy = b.pos.y - a.pos.y;
       const dz = b.pos.z - a.pos.z;
-      const side = Math.abs(dx * rx + dz * rz);
+      const side = Math.abs(dx * right.x + dz * right.z);
       if (dx * dx + dy * dy + dz * dz - side * side > LOOP_PASS_NEAR ** 2) continue;
       gap = Math.min(gap, side - (a.width + b.width) / 2);
     }
@@ -441,12 +448,14 @@ function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: s
   };
   for (const f of features) {
     if (f.kind === 'loop') {
-      const s0 = sAt(f.at);
-      const top = Math.max(...t.samples.filter((p) => t.delta(s0, p.s) >= 0 && t.delta(p.s, s0 + f.span) >= 0).map((p) => p.pos.y)) - t.sampleAt(s0).pos.y;
-      console.log(`    loop @${f.at} radius ${f.radius} span ${f.span} shift ${f.shift}: top ${top.toFixed(0)}m up`);
-      const gap = loopPassGap(t, s0, f.span);
+      const loop = t.loops.find((l) => l.at === f.at);
+      if (!loop) throw new Error(`${label}: loop @${f.at} was not laid into the road`);
+      const { s0, s1 } = loop;
+      const top = Math.max(...t.samples.filter((p) => t.delta(s0, p.s) >= 0 && t.delta(p.s, s1) >= 0).map((p) => p.pos.y)) - t.sampleAt(s0).pos.y;
+      console.log(`    loop @${f.at} radius ${f.radius} span ${f.span} shift ${f.shift}: top ${top.toFixed(0)}m up, ${fmt(s1 - s0)}m of road, crown radius ${fmt(loopCrownRadius(f.radius, f.span))}m`);
+      const gap = loopPassGap(t, loop);
       if (gap < LOOP_PASS_GAP) w(`loop @${f.at} shift ${f.shift}: the exit passes ${gap.toFixed(1)}m beside the entry (< ${LOOP_PASS_GAP}m), its deck runs into the climb`);
-      straightAround(s0, s0 + f.span + f.settle, `loop @${f.at}`);
+      straightAround(s0, loop.settled, `loop @${f.at}`);
     }
     if (f.kind === 'corkscrew') {
       straightAround(sAt(f.from), sAt(f.to), `corkscrew @${f.from}`);
@@ -553,39 +562,53 @@ interface Measured {
   damage: number;
 }
 
-function measure(t: Track, b: Branch, mode: 'main' | 'flat' | 'lift', seed: number, hold: number): Measured {
+/**
+ * One measuring run: the driver races from the grid with `options` (holding boost on branch
+ * `boostOn`, when given) until it is back on the main road at race distance `mark`.
+ */
+function measure(t: Track, mark: number, options: AiOptions, boostOn: number | null, seed: number, hold: number): Measured {
   const stats = effectiveStats(racerById(MEASURE_RACER), noUpgrades());
   const race = new Race(t, {
     laps: t.def.laps,
     seed,
     entrants: [{ id: 'm', name: 'measure', racerId: MEASURE_RACER, stats, isPlayer: true, skill: MEASURE_EYES }],
   });
-  const options: AiOptions = mode === 'main' ? { shortcuts: false, cellDetours: true } : { shortcuts: b.def.id, cellDetours: true, rough: mode };
   const eyes = new AiDriver(MEASURE_EYES, seed, options);
   const v = race.vehicles[0];
   const r = v.state;
-  const mark = b.exitS + MEASURE_TAIL;
   for (let n = 0; n * SIM_DT < MEASURE_TIMEOUT; n++) {
     let input = WAIT;
     if (race.phase === 'racing') {
       // The driver's eyes run from GO either way, so the run only differs in when it leaves.
       input = eyes.drive(v, t, race.racers, race.time);
       if (race.time < hold) input = HOLD;
-      if (mode === 'flat' && r.branch === b.index) input = { ...input, boost: true };
+      if (boostOn !== null && r.branch === boostOn) input = { ...input, boost: true };
     }
     race.step(input);
     if (r.crashed > 0) return { time: null, damage: r.damage };
     if (r.branch < 0 && r.distance >= mark) return { time: race.time, damage: r.damage };
   }
-  throw new Error(`${t.def.id}: measuring ${b.def.id} (${mode}) never reached s=${fmt(mark)}`);
+  throw new Error(`${t.def.id}: measuring with ${JSON.stringify(options)} never reached race distance ${fmt(mark)}`);
 }
+
+/**
+ * Race distance where measuring past a rejoin at main s `exitS` stops: MEASURE_TAIL on, but
+ * never past a sprint's finish (beyond it there is only the run-out's braking).
+ */
+function measureMark(t: Track, exitS: number): number {
+  const mark = exitS - t.startS + MEASURE_TAIL;
+  return t.course === 'sprint' ? Math.min(mark, t.raceLength) : mark;
+}
+
+const MAIN_ONLY: AiOptions = { branches: false, cellDetours: true };
 
 /** Saving flat out and lifting, and the hull each costs, against the targets above. */
 function checkTradeOff(t: Track, b: Branch, label: string, warn: string[]) {
+  const mark = measureMark(t, b.exitS);
   const runs = MEASURE_RUNS.map(({ seed, hold }) => ({
-    main: measure(t, b, 'main', seed, hold),
-    flat: measure(t, b, 'flat', seed, hold),
-    lift: measure(t, b, 'lift', seed, hold),
+    main: measure(t, mark, MAIN_ONLY, null, seed, hold),
+    flat: measure(t, mark, { branches: b.def.id, cellDetours: true, rough: 'flat' }, b.index, seed, hold),
+    lift: measure(t, mark, { branches: b.def.id, cellDetours: true, rough: 'lift' }, null, seed, hold),
   }));
   // A wreck on the main road (a hazard caught out the measuring driver) says nothing about the shortcut.
   const fair = runs.filter((r) => r.main.time !== null);
@@ -618,11 +641,71 @@ function checkTradeOff(t: Track, b: Branch, label: string, warn: string[]) {
 
 const shortcutTable: string[] = [];
 
+// --- Forks: measured like shortcuts, each way by the same skilled driver at its own pace ----
+// (lifting on rough ground as its skill says). Routes are a choice of style and risk: none may
+// be a free gain, so each must race within ROUTE_TIME_BAND of the main road's way, and no way
+// may be both the quickest by a margin and no dearer on hull.
+
+/** Seconds a route may differ from the main road's way through a fork, for a skilled driver. */
+const ROUTE_TIME_BAND = 0.6;
+/** A way quickest by at least this, seconds, and within ROUTE_HULL_TIE of the least hull, dominates. */
+const ROUTE_DOMINANCE = 0.25;
+const ROUTE_HULL_TIE = 0.02;
+
+const forkTable: string[] = [];
+
+function checkFork(t: Track, f: Fork, warn: string[]) {
+  const label = `fork "${f.name}"`;
+  const mark = measureMark(t, f.exitS);
+  const ways = [{ name: f.name, options: MAIN_ONLY }, ...f.routes.map((i) => ({ name: t.branches[i].def.name, options: { branches: t.branches[i].def.id, cellDetours: true } }))];
+  const runs = MEASURE_RUNS.map(({ seed, hold }) => ways.map((w) => measure(t, mark, w.options, null, seed, hold)));
+  const fair = runs.filter((r) => r.every((m) => m.time !== null));
+  if (fair.length < MEASURE_MIN_FAIR) {
+    warn.push(`${label}: only ${fair.length} of ${runs.length} measuring runs survived every way`);
+    return;
+  }
+  const mean = (f: (r: Measured[]) => number) => fair.reduce((a, r) => a + f(r), 0) / fair.length;
+  // Time relative to the main road's way (+ = slower), and hull, per way.
+  const res = ways.map((w, k) => ({ name: w.name, dt: mean((r) => (r[k].time as number) - (r[0].time as number)), hull: mean((r) => r[k].damage) }));
+  const row = res.map((w) => `${w.name} ${w.dt >= 0 ? '+' : ''}${w.dt.toFixed(2)}s hull ${(w.hull * 100).toFixed(0)}%`).join('  ');
+  console.log(`    ways: ${row}`);
+  forkTable.push(`${t.def.id.padEnd(13)} ${row}`);
+  for (const w of res.slice(1)) {
+    if (Math.abs(w.dt) > ROUTE_TIME_BAND) warn.push(`${label}: route "${w.name}" is ${w.dt.toFixed(2)}s against the main road's way, outside ±${ROUTE_TIME_BAND}s`);
+  }
+  const quick = [...res].sort((a, b) => a.dt - b.dt);
+  const leastHull = Math.min(...res.map((w) => w.hull));
+  if (quick[1].dt - quick[0].dt >= ROUTE_DOMINANCE && quick[0].hull <= leastHull + ROUTE_HULL_TIE) {
+    warn.push(`${label}: "${quick[0].name}" dominates: quickest by ${(quick[1].dt - quick[0].dt).toFixed(2)}s and no dearer on hull`);
+  }
+  if (runs.length > fair.length) warn.push(`${label}: ${runs.length - fair.length} of ${runs.length} measuring runs wrecked on a way (${row})`);
+}
+
+/** Between their junctions, a route keeps clear of every other branch (routes of one fork split away from each other). */
+function checkRouteClearance(t: Track, warn: string[]) {
+  const between = (b: Branch) => {
+    const jEnd = b.ribbon.paramToS(1) + DIVERGE;
+    const xStart = b.ribbon.paramToS(b.def.points.length + 2) - DIVERGE;
+    return b.ribbon.samples.filter((smp, k) => k % 5 === 0 && smp.s > jEnd && smp.s < xStart);
+  };
+  for (const a of t.branches) {
+    for (const b of t.branches) {
+      if (b.index <= a.index || (a.def.kind !== 'route' && b.def.kind !== 'route')) continue;
+      let worst = Infinity;
+      for (const p of between(a)) for (const q of between(b)) worst = Math.min(worst, clearance(p, q));
+      if (worst < MIN_CLEARANCE) warn.push(`branches ${a.def.id} and ${b.def.id}: boundaries within ${fmt(worst)}m of each other`);
+    }
+  }
+}
+
 function check(def: TrackDef): string[] {
   const warn: string[] = [];
   const t = new Track(def);
-  const startR = minRadiusBetween(t, t.length - 100, 300);
-  console.log(`\n${def.id} "${def.name}" d${def.difficulty} ${def.laps} laps  lap@${STARTER_SPEED} ${(t.length / STARTER_SPEED).toFixed(0)}s`);
+  // The start (and a sprint's finish) want a straight either side of the line.
+  const raceLines = def.course === 'circuit' ? [0] : [t.startS, t.startS + t.raceLength];
+  const lineR = Math.min(...raceLines.map((s) => minRadiusBetween(t, t.wrap(s - 100), 300)));
+  const run = def.course === 'circuit' ? `${def.laps} laps  lap@${STARTER_SPEED}` : `sprint  run@${STARTER_SPEED}`;
+  console.log(`\n${def.id} "${def.name}" d${def.difficulty} ${run} ${(t.raceLength / STARTER_SPEED).toFixed(0)}s`);
   checkRibbon(t, def.features, def.points.length, 'main', warn, true);
   const mainJunctions = t.branches.flatMap((b): [number, number][] => [
     [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH],
@@ -634,8 +717,9 @@ function check(def: TrackDef): string[] {
   const allLines = lines(def.features) + t.branches.reduce((n, b) => n + lines(b.def.features), 0);
   const pads = t.boostPads.length + t.branches.reduce((n, b) => n + b.ribbon.boostPads.length, 0);
   console.log(`  pickups: ${allLines} cell lines, ${allCells} cells, ${pads} boost pads (all ribbons)`);
-  if (t.length < LAP_MIN || t.length > LAP_MAX) warn.push(`lap length ${fmt(t.length)} outside ${LAP_MIN}..${LAP_MAX}`);
-  if (startR < RUNOUT_MIN_RADIUS) warn.push(`start line not on a straight (radius ${fmt(startR)}m)`);
+  if (def.course === 'circuit' && (t.length < LAP_MIN || t.length > LAP_MAX)) warn.push(`lap length ${fmt(t.length)} outside ${LAP_MIN}..${LAP_MAX}`);
+  if (def.course === 'sprint' && (t.raceLength < SPRINT_LENGTH[0] || t.raceLength > SPRINT_LENGTH[1])) warn.push(`sprint length ${fmt(t.raceLength)} outside ${SPRINT_LENGTH.join('..')}`);
+  if (lineR < RUNOUT_MIN_RADIUS) warn.push(`${def.course === 'circuit' ? 'start line' : 'start or finish line'} not on a straight (radius ${fmt(lineR)}m)`);
   checkWorld(t, def, warn);
 
   const J = BRANCH_JUNCTION_LENGTH;
@@ -644,10 +728,12 @@ function check(def: TrackDef): string[] {
     const label = `branch ${b.def.id}`;
     const span = b.exitS - b.entryS;
     const saving = span - r.length;
-    console.log(`  ${label} "${b.def.name}" side ${b.side > 0 ? 'right' : 'left'} @${b.def.from}..${b.def.to}: skips ${fmt(span)}m, runs ${fmt(r.length)}m, saves ${fmt(saving)}m = ${(saving / RACE_SPEED).toFixed(1)}s at ${RACE_SPEED} m/s`);
-    checkRibbon(r, b.def.features, b.def.points.length + 4, label, warn, false);
-    if (b.def.width < BRANCH_WIDTH[0] || b.def.width > BRANCH_WIDTH[1]) warn.push(`${label}: width ${b.def.width} outside ${BRANCH_WIDTH.join('..')}`);
-    checkTradeOff(t, b, label, warn);
+    console.log(`  ${label} (${b.def.kind}) "${b.def.name}" side ${b.side > 0 ? 'right' : 'left'} @${b.def.from}..${b.def.to}: skips ${fmt(span)}m, runs ${fmt(r.length)}m, saves ${fmt(saving)}m = ${(saving / RACE_SPEED).toFixed(1)}s at ${RACE_SPEED} m/s`);
+    checkRibbon(r, b.def.features, b.def.points.length + 4, label, warn, b.def.kind === 'route');
+    const widths = b.def.kind === 'route' ? ROUTE_WIDTH : BRANCH_WIDTH;
+    if (b.def.width < widths[0] || b.def.width > widths[1]) warn.push(`${label}: width ${b.def.width} outside ${widths.join('..')}`);
+    // A shortcut is a trade of hull for time; a route is measured with its fork's other ways.
+    if (b.def.kind === 'shortcut') checkTradeOff(t, b, label, warn);
     const jEnd = r.paramToS(1);
     const xStart = r.paramToS(b.def.points.length + 2);
     if (jEnd > J * 1.5 || r.length - xStart > J * 1.5) warn.push(`${label}: junctions stretched (${fmt(jEnd)}m, ${fmt(r.length - xStart)}m): first/last points too far off`);
@@ -689,6 +775,8 @@ function check(def: TrackDef): string[] {
     }
     if (worst < MIN_CLEARANCE) warn.push(`${label}: comes within ${fmt(worst)}m of the main course's boundary at branch s=${fmt(worstAt)} of ${fmt(r.length)}`);
   }
+  for (const f of t.forks) checkFork(t, f, warn);
+  checkRouteClearance(t, warn);
 
   // Non-adjacent parts of the main loop, except where they cross on purpose.
   const crossed = (a: number, b: number) =>
@@ -735,5 +823,9 @@ if (only.length > 0 && chosen.length !== only.length) {
 for (const def of chosen) warnings += check(def).length;
 console.log(`\nShortcuts (stock ${MEASURE_RACER}, saving vs the main road to ${MEASURE_TAIL} m past the rejoin):`);
 for (const line of shortcutTable) console.log(`  ${line}`);
+if (forkTable.length > 0) {
+  console.log(`\nForks (stock ${MEASURE_RACER}, skill ${MEASURE_EYES}: each way's time against the main road's to ${MEASURE_TAIL} m past the rejoin, band ±${ROUTE_TIME_BAND}s):`);
+  for (const line of forkTable) console.log(`  ${line}`);
+}
 console.log(`\n${chosen.length} tracks, ${warnings} warnings`);
 process.exitCode = warnings > 0 ? 1 : 0;

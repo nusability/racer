@@ -6,11 +6,19 @@ import type { Corridor } from './corridor.ts';
 import { sideIndex } from './shape.ts';
 import { quadFacing } from './paint.ts';
 
-// Trackside furniture: the start gantry, grandstands, flags, distance markers and corner
-// chevron boards. Lit props go into one merged mesh; their faces that must pop go into glow.
+// Trackside furniture: the start gantry (and a sprint's finish gantry), grandstands, flags,
+// distance markers, corner chevron boards and the barriers closing a sprint's two ends. Lit
+// props go into one merged mesh; their faces that must pop go into glow.
 
 const GANTRY_HEIGHT = 17;
 const GANTRY_BEAM = 4;
+/** The wall closing each end of a sprint's road: height, thickness, how far past the boundaries it reaches. */
+const END_WALL_HEIGHT = 9;
+const END_WALL_DEPTH = 4;
+const END_WALL_REACH = 6;
+/** Chevron boards along an end wall's face, how many and their height. */
+const END_WALL_CHEVRONS = 7;
+const END_WALL_BOARD = 3.2;
 const STAND_TIERS = 7;
 /** Length of a crowd stand on the outside of a corner, metres. */
 const CORNER_STAND = 90;
@@ -69,21 +77,27 @@ function panel(b: FlatBuilder, B: Basis, x0: number, x1: number, y0: number, y1:
   quadFacing(b, at(B, x0, y0, z), at(B, x1, y0, z), at(B, x1, y1, z), at(B, x0, y1, z), dir, color);
 }
 
-export function buildDressing(cor: Corridor, props: FlatBuilder, seed: number, cornerStands: number): void {
+/**
+ * `lines`: main-road s of the race's lines, the start first (a circuit's one line is its start
+ * and finish; a sprint has a start and a finish), and `distance` from the start to the finish.
+ */
+export function buildDressing(cor: Corridor, props: FlatBuilder, seed: number, cornerStands: number, lines: number[], distance: number): void {
   const rng = mulberry32(seed ^ 0x7a11);
-  gantry(cor, props);
-  grandstands(cor, props, rng, cornerStands);
-  flags(cor, props);
-  markers(cor, props);
+  for (const s of lines) gantry(cor, props, s);
+  grandstands(cor, props, rng, cornerStands, lines);
+  for (const s of lines) flags(cor, props, s);
+  markers(cor, props, lines[0], distance);
   chevronBoards(cor, props);
+  if (!cor.ribbon.closed) for (const end of [-1, 1] as const) endWall(cor, props, end);
 }
 
-function gantry(cor: Corridor, props: FlatBuilder) {
+function gantry(cor: Corridor, props: FlatBuilder, s: number) {
   const p = cor.paint;
-  const s0 = cor.ribbon.samples[0];
+  const k = Math.round(s / cor.ribbon.step);
+  const s0 = cor.ribbon.samples[cor.idx(k)];
   // The gantry spans the whole course, boundary to boundary, so nothing stands on drivable sand.
   const half = Math.max(s0.edgeL, s0.edgeR);
-  const B = basisAt(cor, 0, 1, 0, s0.pos.y);
+  const B = basisAt(cor, k, 1, 0, s0.pos.y);
   B.o = { ...s0.pos };
   const dark = p.black.clone().multiplyScalar(2.2);
   for (const side of [-1, 1]) box(props, B, side * (half + 3), 0, 3, 3, -3, GANTRY_HEIGHT + 3, dark);
@@ -104,18 +118,19 @@ function gantry(cor: Corridor, props: FlatBuilder) {
   }
 }
 
-/** Stands at the start, plus crowds on the outside of the tightest corners. */
-function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, cornerStands: number) {
+/** Stands at each line, plus crowds on the outside of the tightest corners. */
+function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, cornerStands: number, lines: number[]) {
   const track = cor.ribbon;
   const p = cor.paint;
   const crowd = CROWD_COLOURS.map((c) => new THREE.Color(c));
   const concrete = p.white.clone().multiplyScalar(0.62);
   const roofCol = p.accent.clone().multiplyScalar(0.9);
-  const runs: [number, number, number][] = [
-    [-1, -START_ZONE + 40, -60],
-    [1, 40, START_ZONE - 60],
-    [1, -START_ZONE + 60, -90],
-  ];
+  const runs: [number, number, number][] = lines.flatMap((at): [number, number, number][] => [
+    [-1, at - START_ZONE + 40, at - 60],
+    [1, at + 40, at + START_ZONE - 60],
+    [1, at - START_ZONE + 60, at - 90],
+  ]);
+  const lineStands = runs.length;
   // Corner apexes: the sharpest curvature peaks, well apart, with open sand on the outside.
   const n = track.samples.length;
   const peaks: number[] = [];
@@ -128,7 +143,7 @@ function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, corne
   }
   peaks.sort((a, b) => Math.abs(track.samples[b].curvature) - Math.abs(track.samples[a].curvature));
   for (const k of peaks) {
-    if (runs.length - 3 >= cornerStands) break;
+    if (runs.length - lineStands >= cornerStands) break;
     const side = track.samples[k].curvature > 0 ? -1 : 1;
     const s = k * track.step;
     let ok = s > START_ZONE * 2 && s < track.length - START_ZONE * 2;
@@ -139,6 +154,8 @@ function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, corne
     const cells = Math.round((s1 - s0) / CROWD_CELL);
     for (let c = 0; c < cells; c++) {
       const s = s0 + (c + 0.5) * CROWD_CELL;
+      // Off the ends of an open road there is nothing to stand beside.
+      if (!track.closed && (s < 0 || s > track.length)) continue;
       const k = Math.round(track.wrap(s) / track.step);
       const B = basisAt(cor, k, side, 0);
       if (!usable(cor, k, side)) continue;
@@ -158,12 +175,14 @@ function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, corne
   }
 }
 
-function flags(cor: Corridor, props: FlatBuilder) {
+function flags(cor: Corridor, props: FlatBuilder, at: number) {
   const track = cor.ribbon;
   const p = cor.paint;
   const pole = p.white.clone().multiplyScalar(0.8);
   let i = 0;
-  for (let s = -START_ZONE; s <= START_ZONE; s += FLAG_SPACING, i++) {
+  for (let d = -START_ZONE; d <= START_ZONE; d += FLAG_SPACING, i++) {
+    const s = at + d;
+    if (!track.closed && (s < 0 || s > track.length)) continue;
     const k = Math.round(track.wrap(s) / track.step) % track.samples.length;
     for (const side of [-1, 1]) {
       if (!usable(cor, k, side)) continue;
@@ -185,14 +204,14 @@ function usable(cor: Corridor, k: number, side: number): boolean {
   return !cor.ground.inFootprint(p.x, p.z);
 }
 
-/** Posts every MARKER_SPACING: tall accent boards each kilometre, white ones between. */
-function markers(cor: Corridor, props: FlatBuilder) {
+/** Posts every MARKER_SPACING from the start line: tall accent boards each kilometre, white ones between. */
+function markers(cor: Corridor, props: FlatBuilder, start: number, distance: number) {
   const track = cor.ribbon;
   const p = cor.paint;
   const post = p.black.clone().multiplyScalar(2);
-  for (let s = MARKER_SPACING; s < track.length - START_ZONE; s += MARKER_SPACING) {
-    const k = Math.round(s / track.step);
-        const km = Math.round(s / MARKER_SPACING) % 2 === 0;
+  for (let d = MARKER_SPACING; d < distance - START_ZONE; d += MARKER_SPACING) {
+    const k = Math.round((start + d) / track.step);
+    const km = Math.round(d / MARKER_SPACING) % 2 === 0;
     for (const side of [-1, 1]) {
       if (!usable(cor, k, side)) continue;
       const B = basisAt(cor, k, side, 5);
@@ -201,6 +220,31 @@ function markers(cor: Corridor, props: FlatBuilder) {
       panel(cor.glow, B, -1.6, 1.6, h - 3, h, -0.3, km ? p.accent : p.white);
       panel(cor.glow, B, -1.2, 1.2, h - 2.2, h - 1.6, -0.35, p.black);
     }
+  }
+}
+
+/**
+ * The wall closing one end of a sprint's road (-1 behind the grid apron, 1 past the run-out):
+ * across the whole course, boundary to boundary and a little beyond, a row of hazard
+ * chevrons on the face the racers see.
+ */
+function endWall(cor: Corridor, props: FlatBuilder, end: -1 | 1) {
+  const p = cor.paint;
+  const k = end < 0 ? 0 : cor.n - 1;
+  const smp = cor.ribbon.samples[k];
+  const B = basisAt(cor, k, 1, 0, smp.pos.y);
+  B.o = { ...smp.pos };
+  const half = Math.max(smp.edgeL, smp.edgeR) + END_WALL_REACH;
+  // Standing just outside the road's end, so its face is the end of the drivable course.
+  const z = end * (END_WALL_DEPTH / 2);
+  box(props, B, 0, z, 2 * half, END_WALL_DEPTH, -2, END_WALL_HEIGHT + 2, p.strata(smp.pos.y + END_WALL_HEIGHT / 2, 0.8, new THREE.Color()));
+  const face = z - end * (END_WALL_DEPTH / 2 + 0.05);
+  const facing = -end;
+  const w = (2 * half) / END_WALL_CHEVRONS;
+  const y0 = END_WALL_HEIGHT / 2 - END_WALL_BOARD / 2;
+  for (let i = 0; i < END_WALL_CHEVRONS; i++) {
+    const x0 = -half + i * w;
+    panel(cor.glow, B, x0 + w * 0.08, x0 + w * 0.92, y0, y0 + END_WALL_BOARD, face, i % 2 ? p.black : p.hazard, facing);
   }
 }
 

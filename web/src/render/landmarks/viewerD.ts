@@ -47,7 +47,7 @@ const PLACE: Record<Kind, Placement> = {
   },
   avalancheSlope: { distance: 15, hazards: [{ type: 'dropper', id: 'snow', from: 0, to: 0, count: 6, radius: 3.5, period: 9, warn: 2.4, stay: 3, phase: 0 }] },
   glacierWall: { distance: 8, hazards: [{ type: 'blocker', id: 'calve', at: 0, opening: 8, offset: -5, height: 7, warn: 5, up: 5, period: 18, phase: 0 }] },
-  mammothHerd: { distance: 20, hazards: [sweeper('herd', 6, 9, -70, 20, 9, 3, 26)] },
+  mammothHerd: { distance: 20, hazards: [sweeper('herd', 6, 9, -70, 20, 18, 3, 50)] },
   iceStation: { distance: 20, hazards: [{ type: 'gust', id: 'wash', from: 0, to: 0, strength: -9, on: 6, period: 16, phase: 0 }] },
   skiJump: { distance: -292, hazards: [] },
   icePalace: { distance: 40, hazards: [] },

@@ -133,7 +133,7 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
     update(v: HudView): void {
       setPlace(String(v.place));
       setPlaceOf(`/${v.racers}`);
-      setLap(`LAP ${Math.min(v.lap, v.laps)}/${v.laps}`);
+      setLap(`${v.stage.kind === 'lap' ? 'LAP' : 'SECTOR'} ${Math.min(v.stage.n, v.stage.of)}/${v.stage.of}`);
       setTime(formatTime(v.time));
       setBest(v.bestLap === null ? '' : `BEST ${formatTime(v.bestLap)}`);
       setSpeed(String(Math.round(v.speedKmh)));

@@ -91,6 +91,8 @@ interface Part {
   alpha: number;
   alphas: Float32Array | null;
   bone: number;
+  /** A skin: per-vertex bone indices and colours, overriding `bone` and `color`. */
+  skin: { bones: Uint16Array; colors: Float32Array } | null;
 }
 
 export interface AddOpts {
@@ -112,6 +114,11 @@ export class Rig {
   private readonly materials: THREE.Material[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private skeleton: THREE.Skeleton | null = null;
+  /**
+   * Bounds of everything the rig moves, for frustum culling (set by build). A bound landmark
+   * whose parts follow the road only learns where that road is once placed, and widens it then.
+   */
+  readonly bounds = new THREE.Sphere();
 
   /** A new bone parented to `parent` (default the root), at a local offset. */
   bone(parent: THREE.Bone = this.root, x = 0, y = 0, z = 0): THREE.Bone {
@@ -140,7 +147,28 @@ export class Rig {
       alpha: o.alpha ?? 1,
       alphas: o.alphas ?? null,
       bone,
+      skin: null,
     });
+  }
+
+  /**
+   * Adds a part whose vertices ride different bones: a continuous hide stretched between them
+   * (a worm's body), so it bends smoothly instead of breaking into rigid pieces. `geo` must be
+   * non-indexed and authored with each vertex in the frame of its bone; `bones[v]` is that
+   * bone and `colors` holds an RGB triple per vertex. Solid layer.
+   */
+  addSkin(geo: THREE.BufferGeometry, bones: readonly THREE.Bone[], colors: Float32Array): void {
+    const n = geo.getAttribute('position').count;
+    if (geo.index || bones.length !== n || colors.length !== n * 3) {
+      throw new Error('Rig.addSkin: needs a non-indexed geometry with one bone and one colour per vertex');
+    }
+    const idx = new Uint16Array(n);
+    bones.forEach((b, v) => {
+      const i = this.index.get(b);
+      if (i === undefined) throw new Error('Rig.addSkin: bone does not belong to this rig');
+      idx[v] = i;
+    });
+    this.parts.solid.push({ geo, color: new THREE.Color(), alpha: 1, alphas: null, bone: 0, skin: { bones: idx, colors } });
   }
 
   addAll(geos: THREE.BufferGeometry[], color: THREE.ColorRepresentation, o: AddOpts = {}): void {
@@ -157,7 +185,7 @@ export class Rig {
     const skeleton = new THREE.Skeleton(this.bones, this.bones.map(() => new THREE.Matrix4()));
     this.skeleton = skeleton;
     group.add(this.root);
-    const sphere = new THREE.Sphere(new THREE.Vector3(0, height / 2, 0), Math.hypot(radius, height / 2));
+    const sphere = this.bounds.set(new THREE.Vector3(0, height / 2, 0), Math.hypot(radius, height / 2));
     for (const layer of LAYERS) {
       const parts = this.parts[layer];
       if (parts.length === 0) continue;
@@ -238,11 +266,12 @@ function mergeParts(parts: Part[], withAlpha: boolean): THREE.BufferGeometry {
       nrm[o * 3] = gn.getX(v);
       nrm[o * 3 + 1] = gn.getY(v);
       nrm[o * 3 + 2] = gn.getZ(v);
-      colr[o * cs] = p.color.r;
-      colr[o * cs + 1] = p.color.g;
-      colr[o * cs + 2] = p.color.b;
+      const c = p.skin?.colors;
+      colr[o * cs] = c ? c[v * 3] : p.color.r;
+      colr[o * cs + 1] = c ? c[v * 3 + 1] : p.color.g;
+      colr[o * cs + 2] = c ? c[v * 3 + 2] : p.color.b;
       if (withAlpha) colr[o * cs + 3] = p.alphas ? p.alphas[v] : p.alpha;
-      skinIndex[o * 4] = p.bone;
+      skinIndex[o * 4] = p.skin ? p.skin.bones[v] : p.bone;
       skinWeight[o * 4] = 1;
     }
     if (g !== p.geo) g.dispose();

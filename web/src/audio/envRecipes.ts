@@ -77,6 +77,19 @@ export const BIOME_BEDS: Record<Biome, BiomeBed> = {
     cues: ['honk', 'honk', 'siren', 'buzz'],
     gap: [3, 9],
   },
+  // Wind high in the leaves, swelling and falling, over the deep hush of a big wood; birds,
+  // a giant creaking somewhere, and now and then a call from far off between the trunks.
+  forest: {
+    loop: {
+      noise: { filter: 'bandpass', hz: 1900, q: 0.6, gain: 0.7 },
+      tone: { wave: 'sine', hz: 62, gain: 0.05 },
+      lfo: { wave: 'sine', hz: 0.12, amp: 0.6, filterHz: 700 },
+      gain: 0.32,
+      wet: 0.75,
+    },
+    cues: ['birdsong', 'birdsong', 'birdsong', 'woodcreak', 'call'],
+    gap: [2, 7],
+  },
 };
 
 const crowd: SoundFamily = {
@@ -146,6 +159,31 @@ const neonBuzz: SoundFamily = {
   far: 300,
   pass: 'buzz',
 };
+// A tree village: voices and the knock of work drifting down, wooden chimes turning in the wind.
+const canopyVillage: SoundFamily = {
+  loop: { tone: { wave: 'sine', hz: 784, gain: 0.08 }, noise: { filter: 'bandpass', hz: 1250, q: 1.1, gain: 0.5 }, lfo: { wave: 'sine', hz: 0.35, amp: 0.4, cents: 30 }, gain: 0.32, wet: 0.6 },
+  near: 70,
+  far: 420,
+};
+// A sawmill: a big blade singing through timber over its engine's chug.
+const sawmill: SoundFamily = {
+  loop: { tone: { wave: 'sawtooth', hz: 220, gain: 0.08 }, noise: { filter: 'bandpass', hz: 2400, q: 2.5, gain: 0.4 }, lfo: { wave: 'sawtooth', hz: 0.4, amp: -0.6, filterHz: 800 }, gain: 0.35, wet: 0.35 },
+  near: 70,
+  far: 450,
+  pass: 'cheer',
+};
+// Old stones humming: a low resonant tone with a faint glassy ring over it.
+const stoneHum: SoundFamily = {
+  loop: { tone: { wave: 'sine', hz: 98, gain: 0.2 }, noise: { filter: 'bandpass', hz: 3200, q: 9, gain: 0.18 }, lfo: { wave: 'sine', hz: 0.1, cents: 20, filterHz: 900 }, gain: 0.3, wet: 0.85 },
+  near: 80,
+  far: 500,
+};
+// Ropes and planks working in the wind high overhead.
+const ropes: SoundFamily = {
+  loop: { tone: { wave: 'triangle', hz: 140, gain: 0.06 }, noise: { filter: 'bandpass', hz: 480, q: 4, gain: 0.5 }, lfo: { wave: 'triangle', hz: 0.3, amp: 0.5, filterHz: 150 }, gain: 0.3, wet: 0.6 },
+  near: 80,
+  far: 450,
+};
 // Wind in a bridge's cables: a steady sung chord.
 const cables: SoundFamily = {
   loop: { tone: { wave: 'sine', hz: 220, gain: 0.12 }, noise: { filter: 'bandpass', hz: 900, q: 6, gain: 0.4 }, lfo: { wave: 'sine', hz: 0.25, cents: 15, filterHz: 200 }, gain: 0.3, wet: 0.6 },
@@ -181,6 +219,14 @@ const craneWinch: LoopRecipe = { tone: { wave: 'square', hz: 55, gain: 0.2 }, no
 const condemned: LoopRecipe = { tone: { wave: 'sawtooth', hz: 38, gain: 0.25 }, noise: { filter: 'lowpass', hz: 300, q: 1, gain: 0.8 }, lfo: { wave: 'triangle', hz: 0.4, amp: 0.4, filterHz: 150 }, gain: 0.55, wet: 0.45 };
 // An airship's ducted fans: a deep throb under a broad roar of moving air.
 const airshipFans: LoopRecipe = { tone: { wave: 'sawtooth', hz: 42, gain: 0.3 }, noise: { filter: 'bandpass', hz: 450, q: 0.9, gain: 1 }, lfo: { wave: 'sawtooth', hz: 6.5, amp: -0.4 }, gain: 0.6, wet: 0.45 };
+// A giant under strain: a slow groaning saw through a woody band, bending as it sways.
+const timberStrain: LoopRecipe = { tone: { wave: 'sawtooth', hz: 48, gain: 0.3 }, noise: { filter: 'bandpass', hz: 420, q: 4, gain: 0.5 }, lfo: { wave: 'triangle', hz: 0.35, amp: 0.5, cents: 40, filterHz: 160 }, gain: 0.5, wet: 0.55 };
+// A herd moving through the woods: quick, soft hoofbeats on deep moss.
+const hoofbeats: LoopRecipe = { tone: { wave: 'sine', hz: 70, gain: 0.6 }, noise: { filter: 'bandpass', hz: 700, q: 1.4, gain: 0.35 }, lfo: { wave: 'sawtooth', hz: 3.1, amp: -0.9 }, gain: 0.6, wet: 0.45 };
+// Logs on the move: a low rolling rumble knocking as they turn.
+const logRumble: LoopRecipe = { tone: { wave: 'sine', hz: 40, gain: 0.45 }, noise: { filter: 'lowpass', hz: 300, q: 0.8, gain: 0.9 }, lfo: { wave: 'sawtooth', hz: 4.2, amp: -0.5 }, gain: 0.6, wet: 0.5 };
+// Wind roaring through a gap in the canopy: a broad rush with the leaves' hiss on top.
+const canopyRoar: LoopRecipe = { noise: { filter: 'bandpass', hz: 1100, q: 0.7, gain: 1.2 }, tone: { wave: 'sine', hz: 55, gain: 0.08 }, lfo: { wave: 'sine', hz: 0.7, amp: 0.6, filterHz: 500 }, gain: 0.55, wet: 0.5 };
 const lava: LoopRecipe = { tone: { wave: 'sine', hz: 28, gain: 0.5 }, noise: { filter: 'lowpass', hz: 140, q: 0.7, gain: 1 }, lfo: { wave: 'sine', hz: 0.2, amp: 0.4 }, gain: 0.65, wet: 0.5 };
 
 /** A hazard's voice: its loop, the level at rest, and the cues that telegraph it. */
@@ -224,6 +270,10 @@ const BOUND: Partial<Record<LandmarkKind, HazardSound>> = {
   crane: { loop: craneWinch, idle: 0.2, lead: 1.2, warn: 'clank', land: 'clang' },
   demolition: { loop: condemned, idle: 0.15, lead: 1.5, warn: 'siren', strike: 'collapse' },
   cargoAirship: { loop: airshipFans, idle: 0.35, lead: 1.5, warn: 'horn', strike: 'gust' },
+  fallingTree: { loop: timberStrain, idle: 0.1, lead: 1.5, warn: 'woodcreak', strike: 'crash' },
+  herd: { loop: hoofbeats, idle: 0.08, lead: 1.6, warn: 'call', strike: 'hooves' },
+  logSlide: { loop: logRumble, idle: 0.05, lead: 1.2, warn: 'snap', land: 'logland' },
+  windRoar: { loop: canopyRoar, idle: 0.15, lead: 1.2, warn: 'leaves', strike: 'gust' },
 };
 
 /** A hazard with no landmark bound to it (a plain rockfall) gets a generic voice by type. */
@@ -285,4 +335,14 @@ export const LANDMARK_SOUNDS: Record<LandmarkKind, SoundFamily | null> = {
   hologramDragon: scifi,
   suspensionBridge: cables,
   skyTram: machine,
+  fallingTree: { loop: timberStrain, near: 60, far: 400 },
+  herd: { loop: hoofbeats, near: 70, far: 450 },
+  logSlide: { loop: logRumble, near: 60, far: 400 },
+  windRoar: wind,
+  treeVillage: canopyVillage,
+  lumberTown: sawmill,
+  waterfall: waterfall,
+  ruins: stoneHum,
+  glowGrove: ethereal,
+  ropeBridge: ropes,
 };

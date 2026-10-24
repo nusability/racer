@@ -3,7 +3,8 @@
 // the device only (the last few races), exported as text from the debug menu. Nothing is sent.
 
 import type { Race } from '../core/race.ts';
-import type { PlayerInput, RaceEvent, RaceResultRow, RacerStats } from '../core/types.ts';
+import type { CourseKind, PlayerInput, RaceEvent, RaceResultRow, RacerStats } from '../core/types.ts';
+import { trackById } from '../data/tracks/index.ts';
 import type { RaceOutcome, RaceRequest, Settings } from './types.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import {
@@ -18,6 +19,7 @@ import {
 export interface TelemetrySample {
   /** Race time, s. */
   t: number;
+  /** Laps completed (a sprint's is 1 once finished). */
   lap: number;
   place: number;
   /** Distance along the racer's ribbon, m: where on the course this sample is. */
@@ -55,6 +57,8 @@ export interface RaceTelemetry {
   track: string;
   mode: RaceRequest['mode'];
   cup: string | null;
+  /** A circuit raced over `laps`, or a sprint (laps 1). */
+  course: CourseKind;
   laps: number;
   seed: number;
   settings: Settings;
@@ -185,6 +189,7 @@ export class TelemetryRecorder {
       track: this.request.trackId,
       mode: this.request.mode,
       cup: this.request.cupId ?? null,
+      course: trackById(this.request.trackId).course,
       laps: this.request.laps,
       seed: this.request.seed,
       settings: this.settings,

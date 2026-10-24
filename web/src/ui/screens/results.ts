@@ -52,7 +52,9 @@ function nextStep(ctx: AppCtx, report: RaceReport): NextStep {
 
 function resultsTable(report: RaceReport): HTMLElement {
   const pts = report.cup?.pointsAwarded;
-  const head = h('tr', null, h('th', null, '#'), h('th', null, 'PILOT'), h('th', 'num', 'TIME'), h('th', 'num hide-narrow', 'BEST LAP'));
+  // A sprint's one run is its time: there is no lap to be best at.
+  const laps = trackById(report.request.trackId).course === 'circuit';
+  const head = h('tr', null, h('th', null, '#'), h('th', null, 'PILOT'), h('th', 'num', 'TIME'), laps ? h('th', 'num hide-narrow', 'BEST LAP') : null);
   if (pts) head.append(h('th', 'num', 'PTS'));
   const rows = report.results.map((r) => {
     const tr = h(
@@ -61,7 +63,7 @@ function resultsTable(report: RaceReport): HTMLElement {
       h('td', null, r.dnf ? '✕' : String(r.place)),
       h('td', null, r.name),
       r.dnf ? h('td', 'num dnf', 'WRECKED') : h('td', 'num', r.time === null ? '--' : formatTime(r.time)),
-      h('td', 'num hide-narrow', formatTime(r.bestLap)),
+      laps ? h('td', 'num hide-narrow', formatTime(r.bestLap)) : null,
     );
     if (pts) tr.append(h('td', 'num hot', `+${pts[r.id] ?? 0}`));
     return tr;
@@ -94,7 +96,7 @@ function headline(report: RaceReport): HTMLElement {
   const track = trackById(report.request.trackId);
   const sub = c
     ? `${cupById(c.cupId).name} · Race ${c.raceIndex + 1}/${c.racesTotal} · ${track.name}`
-    : `Quick race · ${track.name} · ${report.request.laps} lap${report.request.laps > 1 ? 's' : ''}`;
+    : `Quick race · ${track.name} · ${track.course === 'sprint' ? 'sprint' : `${report.request.laps} lap${report.request.laps > 1 ? 's' : ''}`}`;
   const earned = h(
     'div',
     'results__earned',

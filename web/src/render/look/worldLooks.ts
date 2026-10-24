@@ -97,6 +97,7 @@ const cityLook: WorldLookFor = (p) => ({
     sun: null,
     ridge: null,
     towers: { count: 48, gain: 3, height: [0.08, 0.5], neon: CITY_NEON },
+    canopy: null,
     width: ENV_WIDTH,
   },
   ao: AO,
@@ -145,6 +146,7 @@ const desertLook: WorldLookFor = (p) => ({
     // Mesas on the horizon, in the palette's rock, sunlit on one face.
     ridge: { color: p.rock, haze: 0.35, height: [0.015, 0.06], crests: 7, sunSide: 0.3 },
     towers: null,
+    canopy: null,
     width: ENV_WIDTH,
   },
   ao: AO,
@@ -194,6 +196,7 @@ const beachLook: WorldLookFor = (p) => ({
     // Low islands offshore.
     ridge: { color: p.rock, haze: 0.55, height: [0, 0.03], crests: 5, sunSide: 0.2 },
     towers: null,
+    canopy: null,
     width: ENV_WIDTH,
   },
   ao: AO,
@@ -244,6 +247,61 @@ const iceLook: WorldLookFor = (p) => ({
     sun: { color: p.sun, gain: 5, radius: 0.04, glow: byDusk(p, 0.3, 0.6), glowPower: byDusk(p, 18, 5) },
     ridge: { color: ICE_PEAK, haze: 0.3, height: [0.03, 0.12], crests: 9, sunSide: 0.25 },
     towers: null,
+    canopy: null,
+    width: ENV_WIDTH,
+  },
+  ao: AO,
+  heatHaze: null,
+  sea: null,
+  sunDir: sunDir(p),
+});
+
+/** Leaves and bark the gliders reflect in the forest (sRGB): the canopy overhead, trunks all round. */
+const FOREST_LEAVES = 0x2f4a26;
+const FOREST_BARK = 0x3a2a20;
+/** Under the canopy the hull mirrors mostly dark wood and leaves: a lighter touch keeps the livery's colour. */
+const FOREST_GLIDERS: GliderFinishLook = { ...DAY_GLIDERS, envIntensity: 0.8 };
+
+const forestLook: WorldLookFor = (p) => ({
+  // Under the canopy the floor is darker than sand or snow in the sun, so the glow starts lower:
+  // the light shafts, lanterns, waymarker runes and glowing mushrooms pass it, the trail does not.
+  // At dusk the woods go dark and every lamp and cap blooms.
+  bloom: { threshold: byDusk(p, 0.8, 0.55), knee: 0.3, strength: byDusk(p, 0.8, 1.15), clamp: 6, levels: 3 },
+  grade: {
+    // Under the canopy the woods are dim and green; the shafts, sun pools and clearings stand
+    // out from them, and the bloom (which starts low) lights them.
+    exposure: byDusk(p, 0.72, 0.9),
+    materialExposure: byDusk(p, 0.9, 1.05),
+    // Green in the shadows and the light by day, gold only in the brightest (the sun's own
+    // shafts); a misty blue-green by dusk.
+    lift: [0, byDusk(p, 0.01, 0.008), byDusk(p, 0.002, 0.014)],
+    gamma: [DAY_GAMMA, byDusk(p, 0.9, DAY_GAMMA), DAY_GAMMA],
+    gain: gainOf(p, [byDusk(p, 0.96, 0.92), byDusk(p, 1.04, 1.02), byDusk(p, 0.84, 1.02)]),
+    saturation: byDusk(p, 1.14, 1.02),
+  },
+  boostBlur: BOOST_BLUR,
+  wetRoad: {
+    // Damp earth: no mirror, a faint leaf-green sheen at grazing angles, dew catching a low sun.
+    reflection: 0, smear: 0.09, nearShare: 0.3, horizonFade: 0.08, curlLookAhead: 160, curlResponse: 4,
+    sheen: 0.035, sheenPower: 5, sheenColor: 0xb8d0a0,
+    baseWet: 0, slickSheen: 1.5,
+    sunGlint: byDusk(p, 0.04, 0.1), sunGlintPower: 24,
+  },
+  glowPool: { length: 11, width: 7, behind: 2, lift: 0.08, intensity: byDusk(p, 0.3, 0.6), boostIntensity: byDusk(p, 0.7, 1.1), fadeHeight: 6 },
+  gliders: FOREST_GLIDERS,
+  env: {
+    zenith: p.sky,
+    haze: p.horizon,
+    ground: p.sand,
+    hazeGain: 1,
+    hazeHeight: 0.3,
+    groundHaze: 0.35,
+    groundHazeFalloff: 10,
+    // The sun seen through leaves: dimmer than in the open, its glow wider.
+    sun: { color: p.sun, gain: 3, radius: 0.04, glow: byDusk(p, 0.2, 0.5), glowPower: 12 },
+    ridge: null,
+    towers: null,
+    canopy: { leaves: FOREST_LEAVES, from: 0.35, cover: 0.75, trunks: 40, bark: FOREST_BARK, trunkWidth: [0.03, 0.09] },
     width: ENV_WIDTH,
   },
   ao: AO,
@@ -259,5 +317,6 @@ export const WORLD_LOOK: Record<BiomeId, WorldLookFor | null> = {
   ice: iceLook,
   jungle: null,
   city: cityLook,
+  forest: forestLook,
   space: null,
 };

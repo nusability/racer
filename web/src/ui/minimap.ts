@@ -1,4 +1,5 @@
-// Minimap: the lap outline with its shortcuts, drawn once, plus racer dots each frame.
+// Minimap: the course outline (a circuit's loop or a sprint's open line, with the routes of its
+// forks and its dashed shortcuts), drawn once, plus racer dots each frame.
 import './minimap.css';
 import type { Track } from '../core/track.ts';
 import type { RacerState, Vec3 } from '../core/types.ts';
@@ -6,6 +7,7 @@ import {
   MINIMAP_BRANCH_DASH,
   MINIMAP_DOT,
   MINIMAP_LINE,
+  MINIMAP_ROUTE_LINE,
   MINIMAP_PAD,
   MINIMAP_PLAYER_DOT,
   MINIMAP_SAMPLE_EVERY,
@@ -75,15 +77,20 @@ export function createMinimap(root: HTMLElement, track: Track): Minimap {
     c.clearRect(0, 0, size, size);
     c.lineJoin = 'round';
     c.lineCap = 'round';
-    const main = track.samples.map((s) => s.pos);
-    path(c, main, true);
-    c.strokeStyle = 'rgba(20, 8, 2, 0.75)';
-    c.lineWidth = (MINIMAP_LINE + 3) * dpr;
-    c.stroke();
-    c.strokeStyle = 'rgba(255, 233, 204, 0.9)';
-    c.lineWidth = MINIMAP_LINE * dpr;
-    c.stroke();
+    // A fork's routes are road like the main road (solid, a little thinner); shortcuts are dashed.
+    const road = (pts: Vec3[], close: boolean, width: number) => {
+      path(c, pts, close);
+      c.strokeStyle = 'rgba(20, 8, 2, 0.75)';
+      c.lineWidth = (width + 3) * dpr;
+      c.stroke();
+      c.strokeStyle = 'rgba(255, 233, 204, 0.9)';
+      c.lineWidth = width * dpr;
+      c.stroke();
+    };
+    for (const b of track.branches) if (b.fork !== null) road(b.ribbon.samples.map((s) => s.pos), false, MINIMAP_ROUTE_LINE);
+    road(track.samples.map((s) => s.pos), track.closed, MINIMAP_LINE);
     for (const b of track.branches) {
+      if (b.fork !== null) continue;
       path(c, b.ribbon.samples.map((s) => s.pos), false);
       c.setLineDash([MINIMAP_BRANCH_DASH * dpr, MINIMAP_BRANCH_DASH * dpr]);
       c.strokeStyle = 'rgba(61, 252, 208, 0.95)';
@@ -91,15 +98,21 @@ export function createMinimap(root: HTMLElement, track: Track): Minimap {
       c.stroke();
       c.setLineDash([]);
     }
-    // Start line: a short bar across the road at s = 0.
-    const s0 = track.samples[0];
-    const [sx, sy] = toPx(s0.pos);
-    const rx = s0.right.x * scale * MINIMAP_START_HALF;
-    const rz = s0.right.z * scale * MINIMAP_START_HALF;
+    // Start line (a circuit's is its finish too); a sprint's finish line in white.
+    tick(c, track.startS, '#ff7a1a', dpr);
+    if (track.course === 'sprint') tick(c, track.startS + track.raceLength, '#ffffff', dpr);
+  }
+
+  /** A short bar across the road at main-road s. */
+  function tick(c: CanvasRenderingContext2D, s: number, color: string, dpr: number) {
+    const f = track.frameAt(s);
+    const [sx, sy] = toPx(f.pos);
+    const rx = f.right.x * scale * MINIMAP_START_HALF;
+    const rz = f.right.z * scale * MINIMAP_START_HALF;
     c.beginPath();
     c.moveTo(sx - rx, sy - rz);
     c.lineTo(sx + rx, sy + rz);
-    c.strokeStyle = '#ff7a1a';
+    c.strokeStyle = color;
     c.lineWidth = 3 * dpr;
     c.stroke();
   }

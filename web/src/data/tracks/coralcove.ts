@@ -8,6 +8,7 @@ export const coralcove: TrackDef = {
   name: 'Coral Cove',
   blurb: 'Skim the lagoon flat out, hop the reef channel, wave at the beach party.',
   difficulty: 1,
+  course: 'circuit',
   laps: 3,
   seed: 1101,
   width: 54,
@@ -69,6 +70,7 @@ export const coralcove: TrackDef = {
   branches: [
     {
       id: 'reefrun',
+      kind: 'shortcut',
       name: 'Reef Run',
       side: -1,
       from: 5.15,

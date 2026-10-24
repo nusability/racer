@@ -5,9 +5,11 @@ import type { FlatBuilder, P3 } from './builder.ts';
 import { RUNOFF_MIN } from './config.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing } from './paint.ts';
+import type { PillarLook } from './biomes/kit.ts';
 
-// Rock that stands on the road: arches and pillars. Their visual radius matches the collision
-// cylinders in core/track.ts so a racer never clips rock it can't see, or hits air.
+// What stands on the road: arches and pillars (rock, or in a forest giant trunks). Their visual
+// radius matches the collision cylinders in core/track.ts so a racer never clips what it can't
+// see, or hits air. Drawn here for every kit, so no kit can leave an obstacle undrawn.
 
 /** Thickness of an arch span (vertical) and its depth along the road. */
 const ARCH_THICKNESS = 6.5;
@@ -37,11 +39,13 @@ const PILLAR_RINGS: [number, number][] = [
 /** Polygon sides of legs and pillars. */
 const ROCK_SIDES = 9;
 
-export function buildRockFeatures(cor: Corridor, seed: number): void {
+export function buildRockFeatures(cor: Corridor, seed: number, pillar: PillarLook): void {
   const rng = mulberry32(seed ^ 0x51ab);
   const track = cor.ribbon;
   for (const o of track.obstacles) {
-    if (o.kind === 'pillar') column(cor, cor.chunkAt(o.s).rock, o, PILLAR_RINGS, rng);
+    if (o.kind !== 'pillar') continue;
+    if (pillar.kind === 'trunk') trunk(cor, cor.chunkAt(o.s).rock, o, pillar, rng);
+    else column(cor, cor.chunkAt(o.s).rock, o, PILLAR_RINGS, rng);
   }
   for (const a of track.arches) {
     const legs = track.obstacles.filter((o) => o.kind === 'archLeg' && Math.abs(track.delta(o.s, a.s)) < 0.01);
@@ -166,3 +170,111 @@ function span(
     quadFacing(b, E[0], E[1], E[2], E[3], { x: r.x * side, y: 0, z: r.z * side }, col);
   }
 }
+
+// --- Giant trunks (a forest's pillars) ---------------------------------------------------------
+
+/**
+ * The colliding part of a trunk: ring heights (share of the obstacle's height) and radius
+ * multipliers, all ≥ 1 so the bark covers the cylinder wherever a racer can be. The root flare
+ * at the foot is kept low and slight: a hovering craft must never sink into roots it can't hit.
+ */
+const TRUNK_LOW: [number, number][] = [
+  [-0.06, 1.3],
+  [0, 1.24],
+  [0.035, 1.08],
+  [0.12, 1.02],
+  [0.5, 1.0],
+  [1.0, 1.0],
+];
+/** Above what collides the trunk tapers on up to its crown: share of the rest of its height, radius. */
+const TRUNK_HIGH: [number, number][] = [
+  [0.4, 0.86],
+  [0.8, 0.68],
+  [1.0, 0.56],
+];
+/** Facets round a trunk: alternate ones are bark ridges and furrows. */
+const TRUNK_SIDES = 14;
+/** Furrows spiral this far (radians) per ring. */
+const TRUNK_TWIST = 0.05;
+/** Bark ridge / furrow shades, and how much moss climbs the shaded side up to this share of the height. */
+const RIDGE_SHADE = 1.12;
+const FURROW_SHADE = 0.62;
+const MOSS_REACH = 0.35;
+/** Crown clumps at the top: how many, their size (× the trunk radius) and how far out they hang. */
+const CROWN_CLUMPS = 5;
+const CROWN_SIZE = 3.2;
+const CROWN_OUT = 2.6;
+const CROWN_GREEN = 0x2f4a22;
+
+/** A giant living trunk round a pillar obstacle, following the banked road frame, crowned far above. */
+function trunk(cor: Corridor, b: FlatBuilder, o: Obstacle, look: Extract<PillarLook, { kind: 'trunk' }>, rng: () => number) {
+  const track = cor.ribbon;
+  const top = Math.max(look.height, o.height);
+  const rings: [number, number][] = [...TRUNK_LOW.map(([f, m]): [number, number] => [f * o.height, m]), ...TRUNK_HIGH.map(([f, m]): [number, number] => [o.height + f * (top - o.height), m])];
+  const bark = new THREE.Color(look.bark);
+  const moss = new THREE.Color(look.moss);
+  const twist0 = rng() * Math.PI;
+  const shades = Array.from({ length: TRUNK_SIDES }, (_, i) => (i % 2 ? FURROW_SHADE : RIDGE_SHADE) * (0.92 + rng() * 0.16));
+  // Moss climbs one side of each trunk, thickest at the foot.
+  const mossSide = Math.floor(rng() * TRUNK_SIDES);
+  const ringPts: P3[][] = rings.map(([y, m], ri) =>
+    Array.from({ length: TRUNK_SIDES }, (_, i) => {
+      const ang = twist0 + ri * TRUNK_TWIST + (i / TRUNK_SIDES) * Math.PI * 2;
+      // Facet centres sit at r·cos(π/n): push out so even flat faces cover the radius.
+      const r = (o.radius * m) / Math.cos(Math.PI / TRUNK_SIDES);
+      return track.toWorld(o.s + Math.cos(ang) * r, o.x + Math.sin(ang) * r, y);
+    }),
+  );
+  const ca = new THREE.Color();
+  const cb = new THREE.Color();
+  const tint = (out: THREE.Color, i: number, y: number) => {
+    out.copy(bark).multiplyScalar(shades[i]);
+    const d = Math.min(Math.abs(i - mossSide), TRUNK_SIDES - Math.abs(i - mossSide));
+    const climb = 1 - Math.min(1, Math.max(0, y) / (top * MOSS_REACH));
+    if (d <= 2) out.lerp(moss, climb * (1 - d / 3));
+    return out;
+  };
+  for (let r = 0; r + 1 < ringPts.length; r++) {
+    const A = ringPts[r];
+    const B = ringPts[r + 1];
+    for (let i = 0; i < TRUNK_SIDES; i++) {
+      const j = (i + 1) % TRUNK_SIDES;
+      const c = track.toWorld(o.s, o.x, (rings[r][0] + rings[r + 1][0]) / 2);
+      const mid = { x: (A[i].x + A[j].x) / 2, z: (A[i].z + A[j].z) / 2 };
+      quadFacing(b, A[i], A[j], B[j], B[i], { x: mid.x - c.x, y: 0, z: mid.z - c.z }, tint(ca, i, rings[r][0]), ca, tint(cb, i, rings[r + 1][0]), cb);
+    }
+  }
+  // Crown: leafy clumps round the top, hanging out over the road.
+  const green = new THREE.Color(CROWN_GREEN);
+  for (let k = 0; k < CROWN_CLUMPS; k++) {
+    const a = (k / CROWN_CLUMPS) * Math.PI * 2 + rng();
+    const out = o.radius * CROWN_OUT * (k === 0 ? 0.3 : 1);
+    const c = track.toWorld(o.s + Math.cos(a) * out, o.x + Math.sin(a) * out, top - o.radius * (k === 0 ? -1 : 1.5 + rng()));
+    clump(b, c, o.radius * CROWN_SIZE * (0.8 + rng() * 0.4), green.clone().multiplyScalar(0.8 + rng() * 0.4), rng);
+  }
+}
+
+/** An irregular, flattened leafy clump (an icosahedron, squashed and jittered) round c. */
+function clump(b: FlatBuilder, c: P3, r: number, col: THREE.Color, rng: () => number) {
+  const ico = new THREE.IcosahedronGeometry(1, 0);
+  const p = ico.getAttribute('position');
+  const jit = Array.from({ length: 12 }, () => 0.8 + rng() * 0.4);
+  // Shared corners get the same jitter, so the clump stays closed.
+  const key = (x: number, y: number, z: number) => Math.round(x * 97 + y * 31 + z * 7) % 12;
+  const at = (i: number): P3 => {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const k = jit[(key(x, y, z) + 12) % 12];
+    return { x: c.x + x * r * k, y: c.y + y * r * k * CLUMP_SQUASH, z: c.z + z * r * k };
+  };
+  const top = col.clone().multiplyScalar(1.25);
+  for (let i = 0; i < p.count; i += 3) {
+    const lit = p.getY(i) + p.getY(i + 1) + p.getY(i + 2) > 0;
+    b.tri(at(i), at(i + 1), at(i + 2), lit ? top : col);
+  }
+  ico.dispose();
+}
+/** Crown clumps are this much flatter than they are wide. */
+const CLUMP_SQUASH = 0.55;
+

@@ -10,6 +10,7 @@ export const stormfront: TrackDef = {
   name: 'Stormfront',
   blurb: 'A knot under the storm: two bridges, an open crossroads, and walkers stepping over the road.',
   difficulty: 5,
+  course: 'circuit',
   laps: 3,
   seed: 808,
   width: 42,
@@ -97,6 +98,7 @@ export const stormfront: TrackDef = {
   branches: [
     {
       id: 'gauntlet',
+      kind: 'shortcut',
       name: 'Gauntlet Gap',
       side: 1,
       from: 7.0,

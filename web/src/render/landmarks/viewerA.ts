@@ -35,7 +35,7 @@ const WARMUP = 15;
 const WARMUP_STEP = 1 / 30;
 const GROUND_SIZE = 12000;
 /** Each bindable kind's own hazard type, and how far from the road centre its origin stands. */
-const OWN_HAZARD: Partial<Record<Kind, ViewerHazardType>> = { sandbeast: 'sweeper', invasion: 'sweeper', mine: 'dropper', spaceport: 'gust' };
+const OWN_HAZARD: Partial<Record<Kind, ViewerHazardType>> = { sandbeast: 'blocker', invasion: 'sweeper', mine: 'dropper', spaceport: 'gust' };
 const BOUND_PLACE: Partial<Record<Kind, number>> = { sandbeast: 140, invasion: 330, mine: 330, spaceport: 300 };
 
 const params = new URLSearchParams(location.search);

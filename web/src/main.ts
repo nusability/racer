@@ -72,7 +72,21 @@ const showroomApi: ShowroomApi = {
 
 enableOffline();
 
-startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, graphics: { gpu: gpuName(renderer.getContext()), benchmark: runBenchmark } });
+const graphicsDeps = { gpu: gpuName(renderer.getContext()), benchmark: runBenchmark };
+const devTrack = import.meta.env.DEV ? new URLSearchParams(location.search).get('devtrack') : null;
+if (devTrack === null) startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, graphics: graphicsDeps, start: { screen: 'title' } });
+else {
+  // Dev builds: `?devtrack=<id>` opens Quick Race on a synthetic track (ui/devTracks.ts), with
+  // a career of its own so test races never pay into the real save.
+  const devStore = {
+    getItem: (key: string) => window.localStorage.getItem(`devtrack:${key}`),
+    setItem: (key: string, value: string) => window.localStorage.setItem(`devtrack:${key}`, value),
+  };
+  void import('./ui/devTracks.ts').then(({ loadDevTrack }) => {
+    const worldId = loadDevTrack(devTrack);
+    startApp({ root, launchRace, showroom: showroomApi, audio, store: devStore, graphics: graphicsDeps, start: { screen: 'quick', worldId, trackId: devTrack } });
+  });
+}
 
 // Dev builds expose the live session so browser automation can inspect it.
 if (import.meta.env.DEV) Object.assign(window, { __session: () => session });

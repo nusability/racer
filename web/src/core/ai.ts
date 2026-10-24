@@ -2,7 +2,7 @@
 // drives the same Vehicle model as the player, so it can only be as fast as physics allows.
 
 import type { Jump, Obstacle, PlayerInput, RacerState, RacerStats } from './types.ts';
-import type { Ribbon, Track } from './track.ts';
+import type { Fork, Ribbon, Track } from './track.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { PathPlanner, type Blocker } from './aiPlanner.ts';
 import { junctionBounds } from './junction.ts';
@@ -62,7 +62,9 @@ import {
   AI_REPAIR_WANT,
   AI_ROUGH_LIFT_HI,
   AI_ROUGH_LIFT_LO,
+  AI_ROUGH_LIFT_MIN,
   AI_ROUGH_RECKLESS,
+  AI_ROUTE_LEAN,
   AI_SAMPLE_STEP,
   AI_SHORTCUT_HI,
   AI_SHORTCUT_HULL_HI,
@@ -122,10 +124,11 @@ export function driverSeed(raceSeed: number, index: number): number {
 
 export interface AiOptions {
   /**
-   * Which shortcuts this driver takes: none (false), its own call each lap (true), or always
-   * the one with this branch id and no other (measuring a shortcut).
+   * Which branches this driver takes: none, staying on the main road through every shortcut
+   * and fork (false); its own call each lap (true); or always the one with this branch id and
+   * no other (measuring a shortcut or a route).
    */
-  shortcuts: boolean | string;
+  branches: boolean | string;
   /**
    * Overrides the driver's own feel for rough ground (measurements): 'lift' to exactly the
    * safe speed, 'flat' never lifting. Absent, it lifts as its skill and nerve say.
@@ -155,12 +158,14 @@ export class AiDriver {
   private readonly profiles = new Map<Ribbon, SpeedProfiles>();
   /** Per branch: the lap a shortcut was last decided on and whether it is being taken. */
   private readonly shortcut = new Map<number, { lap: number; take: boolean; reckless: boolean }>();
+  /** Per fork: the lap it was last decided on and the way picked (-1 main road, else a branch index). */
+  private readonly forkPicks = new Map<number, { lap: number; way: number }>();
   /** Seconds this driver has held a full draft: once it would charge a slingshot, pull out. */
   private fullDraft = 0;
   /** Where the slipstream has moved this driver off its line, metres (eased, see AI_DRAFT_SHIFT_RATE). */
   private draftOffset = 0;
 
-  constructor(skill: number, seed: number, options: AiOptions = { shortcuts: true, cellDetours: true }) {
+  constructor(skill: number, seed: number, options: AiOptions = { branches: true, cellDetours: true }) {
     if (!(skill >= 0 && skill <= 1)) throw new Error(`AiDriver: skill ${skill} outside 0..1`);
     this.skill = skill;
     this.options = options;
@@ -461,8 +466,9 @@ export class AiDriver {
   }
 
   /**
-   * Shortcuts: decided once per lap as one comes up (skilled drivers gamble on them more),
-   * then lined up through the entry junction; on a branch, merge back in its exit junction.
+   * Shortcuts and forks: decided once per lap as one comes up (skilled drivers gamble on
+   * shortcuts more; a fork's route is this driver's own draw), then lined up through the entry
+   * junction; on a branch, merge back in its exit junction.
    */
   private routeChoice(track: Track, st: RacerState, v: number, line: number): { x: number; crossing: boolean } {
     if (st.branch >= 0) {
@@ -471,20 +477,30 @@ export class AiDriver {
       // The main road lies across the branch's main-facing edge.
       return { x: -b.side * (b.ribbon.widthAt(st.s) / 2 + RACER_HALF_WIDTH + AI_WALL_MARGIN), crossing: true };
     }
-    if (!this.options.shortcuts) return { x: line, crossing: false };
+    if (!this.options.branches) return { x: line, crossing: false };
+    // The driver acts a reaction time after it sees (drive's history), so on a fork it starts
+    // across that far before the junction opens; otherwise a slow pilot is still lining up when
+    // the junction closes behind it and never gets onto the route it drew, and the field bunches
+    // on the main road's way. Shortcuts keep the late cross: every cup's balance is measured on it.
+    const early = v * this.bySkill(AI_REACTION_LO, AI_REACTION_HI);
     for (const b of track.branches) {
       const ahead = track.delta(st.s, b.entryS);
       const inJunction = ahead <= 0 && ahead > -junctionBounds(b).inEnd;
+      const crossNow = inJunction || (b.fork !== null && ahead > 0 && ahead <= early);
       if (!inJunction && (ahead < 0 || ahead > v * AI_SHORTCUT_LOOK_TIME)) continue;
-      let choice = this.shortcut.get(b.index);
-      if (choice === undefined || choice.lap !== st.lap) {
-        choice = this.shortcutCall(b.def.id, st.lap, st.damage);
-        this.shortcut.set(b.index, choice);
+      if (b.fork !== null) {
+        if (this.forkWay(track, b.fork, st) !== b.index) continue;
+      } else {
+        let choice = this.shortcut.get(b.index);
+        if (choice === undefined || choice.lap !== st.lap) {
+          choice = this.shortcutCall(b.def.id, st.lap, st.damage);
+          this.shortcut.set(b.index, choice);
+        }
+        if (!choice.take) continue;
       }
-      if (!choice.take) continue;
       // Hug the road edge until the junction opens, then cross onto the branch.
       const half = track.widthAt(st.s) / 2;
-      return { x: b.side * (inJunction ? half + b.def.width / 2 : half - RACER_HALF_WIDTH), crossing: inJunction };
+      return { x: b.side * (crossNow ? half + b.def.width / 2 : half - RACER_HALF_WIDTH), crossing: inJunction };
     }
     return { x: line, crossing: false };
   }
@@ -495,11 +511,37 @@ export class AiDriver {
    * luck further), and rookies now and then charge through without lifting and get hurt.
    */
   private shortcutCall(id: string, lap: number, damage: number): { lap: number; take: boolean; reckless: boolean } {
-    if (typeof this.options.shortcuts === 'string') return { lap, take: this.options.shortcuts === id, reckless: false };
+    if (typeof this.options.branches === 'string') return { lap, take: this.options.branches === id, reckless: false };
     // Both rolls every time, so this driver's stream doesn't depend on the state of its hull.
     const keen = this.rng() < this.bySkill(AI_SHORTCUT_LO, AI_SHORTCUT_HI);
     const reckless = this.rng() < AI_ROUGH_RECKLESS * (1 - this.skill) ** 2;
     return { lap, take: keen && damage < this.bySkill(AI_SHORTCUT_HULL_LO, AI_SHORTCUT_HULL_HI), reckless };
+  }
+
+  /** The way through a fork this driver takes this lap (-1 = the main road's route), picked once per lap. */
+  private forkWay(track: Track, fork: Fork, st: RacerState): number {
+    let pick = this.forkPicks.get(fork.index);
+    if (pick === undefined || pick.lap !== st.lap) {
+      pick = { lap: st.lap, way: this.forkCall(track, fork, st.damage) };
+      this.forkPicks.set(fork.index, pick);
+    }
+    return pick.way;
+  }
+
+  /**
+   * A fork's route for this pass: the driver's own seeded draw over the ways (so the field
+   * spreads over them), tilted by skill toward the harder ones (AI_ROUTE_LEAN); a hull past
+   * this driver's limit takes the gentlest.
+   */
+  private forkCall(track: Track, fork: Fork, damage: number): number {
+    const only = this.options.branches;
+    if (typeof only === 'string') return fork.routes.find((i) => track.branches[i].def.id === only) ?? -1;
+    // The draw every time, so this driver's stream doesn't depend on the state of its hull.
+    const u = this.rng();
+    const ways = fork.byDifficulty;
+    if (damage >= this.bySkill(AI_SHORTCUT_HULL_LO, AI_SHORTCUT_HULL_HI)) return ways[0];
+    const pick = Math.floor((u + (2 * this.skill - 1) * AI_ROUTE_LEAN) * ways.length);
+    return ways[clamp(pick, 0, ways.length - 1)];
   }
 
   /**
@@ -551,7 +593,8 @@ export class AiDriver {
     // On rough ground this driver holds a share of its top speed: the safe speed when told to
     // lift exactly, else by skill (aces just over it, rookies well over and paying for it).
     const lift = stats.topSpeed * (this.options.rough === 'lift' ? ROUGH_SAFE_SPEED : this.bySkill(AI_ROUGH_LIFT_LO, AI_ROUGH_LIFT_HI));
-    const rough = envelope(BRAKE_DECEL, ribbon.samples.map((p) => (p.rough > 0 ? lift : Infinity)));
+    const worth = liftStretches(ribbon);
+    const rough = envelope(BRAKE_DECEL, ribbon.samples.map((_, k) => (worth[k] === 1 ? lift : Infinity)));
     const made = { brake: envelope(BRAKE_DECEL), boost, boostRun, loopAhead, rough };
     this.profiles.set(ribbon, made);
     return made;
@@ -580,6 +623,38 @@ export class AiDriver {
     if (this.lapse > 0) this.lapse -= dt;
     else if (this.rng() < AI_MISTAKE_RATE * (1 - this.skill) ** 2 * dt) this.lapse = AI_MISTAKE_DURATION;
   }
+}
+
+/**
+ * 1 on every sample of a rough stretch worth lifting for: one whose worst ground reaches
+ * AI_ROUGH_LIFT_MIN (its blended ends included). Milder stretches are ridden at pace.
+ */
+function liftStretches(ribbon: Ribbon): Uint8Array {
+  const n = ribbon.samples.length;
+  const out = new Uint8Array(n);
+  const rough = (k: number) => ribbon.samples[k].rough > 0;
+  // On a loop a stretch may run across the start line: begin the scan just after a smooth sample.
+  let start = 0;
+  if (ribbon.closed) {
+    while (start < n && rough(start)) start++;
+    if (start === n) start = 0;
+  }
+  for (let q = 0; q < n; ) {
+    const k0 = (start + q) % n;
+    if (!rough(k0)) {
+      q++;
+      continue;
+    }
+    let len = 0;
+    let peak = 0;
+    while (q + len < n && rough((start + q + len) % n)) {
+      peak = Math.max(peak, ribbon.samples[(start + q + len) % n].rough);
+      len++;
+    }
+    if (peak >= AI_ROUGH_LIFT_MIN) for (let d = 0; d < len; d++) out[(start + q + d) % n] = 1;
+    q += len;
+  }
+  return out;
 }
 
 function nextJump(ribbon: Ribbon, s: number, horizon: number): Jump | null {

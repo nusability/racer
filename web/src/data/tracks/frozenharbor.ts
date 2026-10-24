@@ -10,6 +10,7 @@ export const frozenharbor: TrackDef = {
   name: 'Frozen Harbour',
   blurb: 'A figure of eight round the frozen harbour, and an icebreaker ramming across the road.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 2202,
   width: 48,
@@ -102,6 +103,7 @@ export const frozenharbor: TrackDef = {
   branches: [
     {
       id: 'packice',
+      kind: 'shortcut',
       name: 'Pack Ice',
       side: -1,
       from: 9.3,

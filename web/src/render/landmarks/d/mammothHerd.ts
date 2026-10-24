@@ -1,4 +1,8 @@
 // The herd: giant woolly beasts of the ice age crossing the snowfield in a slow, heavy file.
+// They walk like elephants: a lateral-sequence walk (left hind, left fore, right hind, right
+// fore), three feet down most of the time, each leg a thigh and a shin hinged at a knee over a
+// broad pad of a foot that stays planted while the body rolls over it. The stride is matched
+// to the ground they cover, so no foot ever slides.
 // High humped shoulders sloping to low hindquarters, great domed heads carried low, trunks
 // hanging, long tusks sweeping out and curling in; coats of long dark guard hair hanging in
 // layered shags, frost lying on their backs, breath smoking in the cold. A few graze far back
@@ -12,7 +16,7 @@ import { sweeperX } from '../../../core/hazards.ts';
 import { Frame, T, ball, beam, mix, prism, shade, vary } from '../b/shapes.ts';
 import type { V3 } from '../b/motion.ts';
 import type { Rng } from '../../../core/rng.ts';
-import { brush, col } from '../a/kit.ts';
+import { brush, col, fract } from '../a/kit.ts';
 import { DARK, IceKit, RoadFrame, bindHazard, smooth01, type Def } from './kit.ts';
 
 const SALT = 0xf205b;
@@ -20,26 +24,45 @@ const RADIUS = 160;
 /** Design size: the torso's half-length in plan, which the lead is scaled to fit the cylinder. */
 const BODY_R = 5.5;
 const HIP_Y = 5.6;
-const LEG_LEN = 5.6;
+/** Leg segments, model units: thigh (hip to knee), shin (knee to ankle), the foot pad's height.
+ * Thigh plus shin is a little longer than hip to ankle, so even the planted leg keeps a soft knee. */
+const THIGH = 2.75;
+const SHIN = 2.55;
+const FOOT_H = 0.55;
 /** Legs: [x, z] of each hip; walked in lateral sequence (LH, LF, RH, RF a quarter apart). */
 const LEGS: readonly (readonly [number, number])[] = [[3.3, 1.8], [3.3, -1.8], [-3.1, 1.6], [-3.1, -1.6]];
 const LEG_PHASE: readonly number[] = [0.25, 0.75, 0, 0.5];
-/** A long, slow stride and a small swing: weight, not bounce. */
-const STRIDE = 10;
-const LEG_SWING = 0.2;
+/** Parts per leg: thigh, shin, foot. */
+const LEG_PARTS = 3;
+/**
+ * Stride (one full cycle of a leg) over hip height. An elephant's relative stride is about
+ * 2.3·Fr^0.3 (Alexander); at the herd's mean pace (Froude number about 0.35) that is 1.7. These
+ * giants step shorter, under their weight: legs that swing far read as a jaunty stroll.
+ */
+const STRIDE_OVER_HIP = 1.4;
+/** Share of each stride a foot is planted: over a half, so three feet carry the weight. */
+const DUTY = 0.62;
+/** How high a swinging foot lifts, model units. */
+const FOOT_LIFT = 0.8;
+/** The swinging foot's sole tips back as the shin folds, radians at mid-swing. */
+const FOOT_CURL = 0.35;
+/** The body dips twice a stride as weight settles onto each foot, and rolls gently. */
 const SINK = 0.12;
 const SWAY = 0.025;
+/** Turning on the spot still steps the feet: metres of stepping per radian turned. */
+const TURN_STEP = 3;
 const FOLLOWERS = { high: 5, low: 3 } as const;
 const GRAZERS = { high: 6, low: 3 } as const;
 const SHAGS = { high: 16, low: 10 } as const;
-/** Followers trail the lead by this many seconds each, and walk this far to either side (metres along s). */
-const LAG = 1.3;
+/** Followers walk this far behind each other (metres of trail), and this far to either side (metres along s). */
+const FILE_GAP = 17;
 const SPREAD = 10;
 const TURN = 2.4;
 const TRAIL_W = 26;
 const TRAIL_LEN = 140;
 const SIGN_OFF = 30;
 const DUST_RATE = 0.06;
+const FOOTFALL_PUFFS = 3;
 const BREATH_EVERY = 2.6;
 /** The Old One's skeleton: length, rib height and half-width at the ground, rib thickness. */
 const OLD = { length: 110, height: 62, width: 34, ribs: 9, ribR: 2.2 } as const;
@@ -64,7 +87,7 @@ function arc(kit: IceKit['b'], f: Frame, a: V3, b: V3, c: V3, r: number, color: 
   }
 }
 
-/** Where a piece rides: a bone or a leg index. */
+/** Where a piece rides: a bone, or a leg part (leg × LEG_PARTS + 0 thigh, 1 shin, 2 foot). */
 type Part = 'body' | 'head' | 'tail' | number;
 type Emit = (geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, part: Part, m: THREE.Matrix4) => void;
 
@@ -109,14 +132,23 @@ function mammoth(emit: Emit, c: Coat, rng: Rng, shags: number, lead: boolean): v
       shag(emit, 'body', vary(rng, color, 0.05), x, y + (Math.cos(a) > 0 ? 0.8 : 0), z, len * (0.8 + rng() * 0.4), 0.7 + rng() * 0.3, Math.sin(a) * 0.15);
     }
   }
-  // Legs: thick columns in shaggy trousers, broad dark feet.
+  // Legs: a heavy thigh in shaggy breeches down to a knee, a bare columnar shin, an ankle,
+  // and a broad dark pad of a foot with pale nails. Each segment hangs from its own joint.
   LEGS.forEach((_, leg) => {
-    emit(prism(0.95, 1.2, LEG_LEN, 7).translate(0, -LEG_LEN, 0), fur(0.8), leg, T(0, 0, 0));
-    emit(prism(1.15, 1.15, 0.5, 7).translate(0, -LEG_LEN, 0), DARK, leg, T(0, 0, 0));
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + 0.4;
-      shag(emit, leg, vary(rng, c.shag, 0.05), Math.cos(a) * 1.0, -0.4, Math.sin(a) * 1.0, 3.2, 0.55, 0);
+    const thigh = leg * LEG_PARTS;
+    emit(prism(1.05, 1.3, THIGH, 7).translate(0, -THIGH, 0), fur(0.82), thigh, T(0, 0, 0));
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2 + 0.4;
+      shag(emit, thigh, vary(rng, c.shag, 0.05), Math.cos(a) * 1.05, -0.3, Math.sin(a) * 1.05, THIGH * 0.75, 0.5, 0);
     }
+    emit(ball(1, 7, 5), fur(0.78), thigh + 1, T(0, 0, 0, 0, 0, 0, [1.05, 0.95, 1.0]));
+    emit(prism(0.92, 1.0, SHIN, 7).translate(0, -SHIN, 0), fur(0.72), thigh + 1, T(0, 0, 0));
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      shag(emit, thigh + 1, vary(rng, c.shag, 0.05), Math.cos(a) * 0.9, -0.5, Math.sin(a) * 0.9, 1.1, 0.35, 0);
+    }
+    emit(prism(1.22, 1.0, FOOT_H, 8).translate(0, -FOOT_H, 0), DARK, thigh + 2, T(0, 0, 0));
+    for (let k = -1; k <= 1; k++) emit(ball(0.22, 5, 3), IVORY, thigh + 2, T(1.1, -FOOT_H + 0.15, k * 0.45, 0, 0, 0, [0.7, 0.8, 1]));
   });
   // Head: a high domed crown carried low, small ears, a beard of hair, the trunk hanging.
   emit(ball(1, 10, 7), fur(1), 'head', T(0.9, 0.2, 0, 0, 0, -0.3, [2.0, 2.5, 1.7]));
@@ -152,15 +184,67 @@ function mammoth(emit: Emit, c: Coat, rng: Rng, shags: number, lead: boolean): v
   shag(emit, 'tail', c.shag, 1.1, -2.2, 0, 1.4, 0.4, 0);
 }
 
+interface Leg {
+  thigh: THREE.Bone;
+  shin: THREE.Bone;
+  foot: THREE.Bone;
+  /** Gait phase last frame, and whether the foot came down this frame. */
+  last: number;
+  down: boolean;
+}
+
 interface Beast {
   body: THREE.Bone;
   head: THREE.Bone;
   tail: THREE.Bone;
-  legs: THREE.Bone[];
+  legs: Leg[];
   scale: number;
   lag: number;
   off: number;
+  /** Seconds offsetting its breath and tail; share of a stride offsetting its gait. */
   phase: number;
+  step: number;
+}
+
+/** Joint angles (radians, + swings toward +X) for one leg. */
+interface LegPose {
+  hip: number;
+  knee: number;
+  ankle: number;
+}
+
+/**
+ * Two-bone leg in the body's side plane: thigh and shin from the hip at (0, 0) to put the ankle
+ * at (dx, dy). The knee bends forward, as an elephant's fore knee and hind knee both do; the
+ * foot stays level (sole flat) unless `curl` tips it.
+ */
+function solveLeg(dx: number, dy: number, curl: number, out: LegPose): LegPose {
+  const reach = Math.min(Math.hypot(dx, dy), (THIGH + SHIN) * LEG_REACH);
+  const down = Math.atan2(dx, -dy);
+  const atHip = Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + reach * reach - SHIN * SHIN) / (2 * THIGH * reach), -1, 1));
+  const atAnkle = Math.acos(THREE.MathUtils.clamp((SHIN * SHIN + reach * reach - THIGH * THIGH) / (2 * SHIN * reach), -1, 1));
+  out.hip = down + atHip;
+  out.knee = -(atHip + atAnkle);
+  out.ankle = -(down - atAnkle) - curl;
+  return out;
+}
+/** Never quite straighten the leg: a locked knee would snap through. */
+const LEG_REACH = 0.995;
+
+/** Ankle target for a leg at gait phase p (0..1), in its hip's frame, model units. */
+function footAt(p: number, stride: number, groundY: number, out: { x: number; y: number; curl: number }): void {
+  const half = (stride * DUTY) / 2;
+  if (p < DUTY) {
+    // Planted: the body walks over it, so it moves back exactly as fast as the body goes on.
+    out.x = half - p * stride;
+    out.y = groundY;
+    out.curl = 0;
+    return;
+  }
+  const u = (p - DUTY) / (1 - DUTY);
+  out.x = -half + 2 * half * smooth01(u);
+  out.y = groundY + FOOT_LIFT * Math.sin(Math.PI * u);
+  out.curl = FOOT_CURL * Math.sin(Math.PI * u);
 }
 
 /** Facing in the crossing's cycle: toward xTo while crossing, turning at each end. */
@@ -173,12 +257,26 @@ function facing(d: Def<'sweeper'>, time: number): number {
   return Math.PI + Math.PI * smooth01((t - back) / Math.min(TURN, d.period - back));
 }
 
+/**
+ * Metres a beast following the crossing has walked by race time t: across and back every
+ * cycle, plus the steps it takes turning round at each end. Never decreases, so the gait
+ * always runs forward.
+ */
+function walked(d: Def<'sweeper'>, time: number): number {
+  const span = Math.abs(d.xTo - d.xFrom);
+  const cycle = Math.floor((time + d.phase) / d.period);
+  const t = time + d.phase - cycle * d.period;
+  const out = Math.abs(sweeperX(d, time) - d.xFrom);
+  const across = t < d.cross + d.hold ? out : 2 * span - out;
+  return cycle * (2 * span + 2 * Math.PI * TURN_STEP) + across + TURN_STEP * facing(d, time);
+}
+
 export function createMammothHerd(opts: LandmarkOptions): Landmark {
   const ik = new IceKit(opts, SALT);
   const { rng, rig } = ik;
   const kit = ik.b;
   const bound = bindHazard('mammothHerd', opts, ['sweeper'] as const, {
-    def: { type: 'sweeper', id: 'free', at: 0, radius: 6, height: 11, xFrom: -70, xTo: 60, cross: 16, hold: 4, period: 44, phase: 0 },
+    def: { type: 'sweeper', id: 'free', at: 0, radius: 6, height: 11, xFrom: -70, xTo: 60, cross: 28, hold: 4, period: 70, phase: 0 },
     roadZ: -10,
     lateral: -1,
     minX: -12,
@@ -195,15 +293,29 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
   // --- The moving herd: one rig, a bone per body part ---
   const beasts: Beast[] = [];
   const nFollow = ik.q(FOLLOWERS.high, FOLLOWERS.low);
+  // Followers keep FILE_GAP of trail between them at the herd's mean pace across.
+  const span = Math.abs(def.xTo - def.xFrom);
+  const lag = FILE_GAP / (span / def.cross);
   for (let i = 0; i <= nFollow; i++) {
     const body = rig.bone();
     const head = rig.bone(body, HEAD_AT[0], HEAD_AT[1], 0);
     const tail = rig.bone(body, TAIL_AT[0], TAIL_AT[1], 0);
-    const legs = LEGS.map(([x, z]) => rig.bone(body, x, HIP_Y, z));
+    const legs = LEGS.map(([x, z]): Leg => {
+      const thigh = rig.bone(body, x, HIP_Y, z);
+      const shin = rig.bone(thigh, 0, -THIGH, 0);
+      const foot = rig.bone(shin, 0, -SHIN, 0);
+      return { thigh, shin, foot, last: 0, down: false };
+    });
     const bones: Record<string, THREE.Bone> = { body, head, tail };
-    mammoth((geo, color, part, m) => rig.add(geo, color, { bone: typeof part === 'number' ? legs[part] : bones[part], m }), coat(i === 0 ? 1 : 0.85 + rng() * 0.25), rng, nShag, i === 0);
-    beasts.push({ body, head, tail, legs, scale: i === 0 ? 1 : 0.7 + rng() * 0.2, lag: i * LAG, off: i === 0 ? 0 : (i % 2 ? 1 : -1) * (4 + rng() * SPREAD), phase: rng() * 6 });
+    const legBone = (part: number) => {
+      const l = legs[Math.floor(part / LEG_PARTS)];
+      return [l.thigh, l.shin, l.foot][part % LEG_PARTS];
+    };
+    mammoth((geo, color, part, m) => rig.add(geo, color, { bone: typeof part === 'number' ? legBone(part) : bones[part], m }), coat(i === 0 ? 1 : 0.85 + rng() * 0.25), rng, nShag, i === 0);
+    beasts.push({ body, head, tail, legs, scale: i === 0 ? 1 : 0.7 + rng() * 0.2, lag: i * lag, off: i === 0 ? 0 : (i % 2 ? 1 : -1) * (4 + rng() * SPREAD), phase: rng() * BREATH_EVERY, step: rng() });
   }
+  // Grazers stand square: each foot under its hip.
+  const stand = solveLeg(0, FOOT_H - HIP_Y, 0, { hip: 0, knee: 0, ankle: 0 });
 
   // --- Grazers far back: static bodies from the same pattern, heads lowered and swaying ---
   for (let i = 0; i < ik.q(GRAZERS.high, GRAZERS.low); i++) {
@@ -215,10 +327,20 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
         kit.moving.add(geo, color, f.m(HEAD_AT[0], HEAD_AT[1], 0, 0, 0, -0.35).multiply(m), sway);
         return;
       }
-      const at = typeof part === 'number' ? f.m(LEGS[part][0], HIP_Y, LEGS[part][1]) : part === 'tail' ? f.m(TAIL_AT[0], TAIL_AT[1], 0) : f.base;
+      const at = typeof part === 'number' ? standingLeg(f, part) : part === 'tail' ? f.m(TAIL_AT[0], TAIL_AT[1], 0) : f.base;
       kit.solid.add(geo, color, at.clone().multiply(m));
     }, coat(0.9), rng, Math.ceil(nShag / 2), false);
   }
+  /** A grazer's leg part (see Part), standing square, in its frame. */
+  function standingLeg(f: Frame, part: number): THREE.Matrix4 {
+    const [x, z] = LEGS[Math.floor(part / LEG_PARTS)];
+    const seg = part % LEG_PARTS;
+    const m = f.m(x, HIP_Y, z, 0, 0, stand.hip);
+    if (seg > 0) m.multiply(T(0, -THIGH, 0, 0, 0, stand.knee));
+    if (seg > 1) m.multiply(T(0, -SHIN, 0, 0, 0, stand.ankle));
+    return m;
+  }
+
   // The Old One: the half-buried skeleton of a frostback a hundred times their size, its ribs
   // and tusks arching over the snow. The herd's waymark, and the landmark's silhouette from afar.
   const bone = mix(0xece2cc, ik.snow, 0.3);
@@ -260,6 +382,9 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
   const road = new RoadFrame(bound.binding);
   const P = new THREE.Vector3();
   const D = new THREE.Vector3();
+  const pose: LegPose = { hip: 0, knee: 0, ankle: 0 };
+  const foot = { x: 0, y: 0, curl: 0 };
+  const stride = STRIDE_OVER_HIP * HIP_Y;
   let dustAcc = 0;
 
   function update(time: number, dt: number): void {
@@ -273,18 +398,29 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
     beasts.forEach((b, i) => {
       const t = time - b.lag;
       const x = sweeperX(def, t);
-      const s = (i === 0 ? leadScale : leadScale * b.scale) * k;
+      const model = i === 0 ? leadScale : leadScale * b.scale;
+      const s = model * k;
       road.point(x, 0, b.body.position).addScaledVector(road.along, b.off * k);
       const turn = facing(def, t);
-      // Gait from distance walked (turning on the spot still shuffles the feet).
-      const gait = (x / STRIDE + turn * 0.4) * Math.PI * 2 + b.phase;
+      // Gait from the distance walked, in strides of this beast's own size: a planted foot moves
+      // back under the body exactly as fast as the body moves on, so it never slides.
+      const phase = walked(def, t) / (stride * model) + b.step;
+      const gait = phase * Math.PI * 2;
       // Weight settles onto each footfall: the body sinks twice a stride and rolls gently.
-      b.body.position.y -= SINK * s * (1 - Math.abs(Math.cos(gait)));
+      const sink = SINK * (1 - Math.abs(Math.cos(gait)));
+      b.body.position.y -= sink * s;
       b.body.rotation.order = 'YXZ';
       b.body.rotation.set(Math.sin(gait) * SWAY, yaw0 + turn, Math.sin(gait * 2) * SWAY * 0.4);
       b.body.scale.setScalar(s);
       b.legs.forEach((leg, j) => {
-        leg.rotation.z = Math.sin(gait + LEG_PHASE[j] * Math.PI * 2) * LEG_SWING;
+        const p = fract(phase + LEG_PHASE[j]);
+        footAt(p, stride, FOOT_H - HIP_Y + sink, foot);
+        solveLeg(foot.x, foot.y, foot.curl, pose);
+        leg.thigh.rotation.z = pose.hip;
+        leg.shin.rotation.z = pose.knee;
+        leg.foot.rotation.z = pose.ankle;
+        leg.down = dt > 0 && p < leg.last;
+        leg.last = p;
       });
       b.head.rotation.set(0, Math.sin(gait) * 0.05, -0.08 + Math.sin(gait * 2 + 0.6) * 0.035);
       b.tail.rotation.x = Math.sin(time * 0.9 + b.phase) * 0.25;
@@ -303,13 +439,16 @@ export function createMammothHerd(opts: LandmarkOptions): Landmark {
     }
     rig.sync();
 
-    if (!emitNow) return;
-    beasts.forEach((b, i) => {
-      const moving = Math.abs(sweeperX(def, time - b.lag) - sweeperX(def, time - b.lag - DUST_RATE)) > 0.01;
-      if (moving) {
-        rig.local(b.legs[(i + Math.floor(time * 2.5)) % LEGS.length], 0, -LEG_LEN, 0, P);
-        snowCloud.emit(kick, P.x, P.y + 0.4, P.z, (rng() - 0.5) * 3, 1 + rng() * 1.5, (rng() - 0.5) * 3);
+    // Each footfall throws up a low cloud of powder round the pad.
+    for (const b of beasts) {
+      for (const leg of b.legs) {
+        if (!leg.down) continue;
+        rig.local(leg.foot, 0, -FOOT_H, 0, P);
+        for (let q = 0; q < FOOTFALL_PUFFS; q++) snowCloud.emit(kick, P.x, P.y + 0.4, P.z, (rng() - 0.5) * 4, 0.6 + rng(), (rng() - 0.5) * 4);
       }
+    }
+    if (!emitNow) return;
+    beasts.forEach((b) => {
       if ((time + b.phase) % BREATH_EVERY < DUST_RATE) {
         rig.local(b.head, MOUTH[0], MOUTH[1], MOUTH[2], P);
         for (let q = 0; q < 4; q++) snowCloud.emit(breath, P.x, P.y, P.z, 1 + (rng() - 0.5) * 1.5, 0.3, (rng() - 0.5) * 1.5);

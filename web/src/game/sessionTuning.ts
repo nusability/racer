@@ -4,6 +4,8 @@
 export const SESSION_MAX_FRAME_DT = 0.1;
 /** Seconds the finished race stays on screen before the results appear. */
 export const SESSION_FINISH_LINGER = 2.5;
+/** A sprint's HUD counts it in this many equal sectors (where a circuit counts laps), flashing each one reached. */
+export const SPRINT_SECTORS = 4;
 /** Seconds "GO!" stays up. */
 export const SESSION_GO_SHOWN = 0.8;
 /** Racers further than this (m along the track) from the player skip dust and sparks. */

@@ -9,6 +9,7 @@ export const lagoonloop: TrackDef = {
   name: 'Lagoon Loop',
   blurb: 'Two kilometres flat out over the lagoon, and the whales breach across the causeway.',
   difficulty: 1,
+  course: 'circuit',
   laps: 3,
   seed: 1202,
   width: 54,
@@ -105,6 +106,7 @@ export const lagoonloop: TrackDef = {
   branches: [
     {
       id: 'sandbar',
+      kind: 'shortcut',
       name: 'Sandbar Cut',
       side: 1,
       from: 37.2,

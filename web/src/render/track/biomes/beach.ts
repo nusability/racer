@@ -51,6 +51,9 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette, sea: SeaL
     road: { surface: scenery.road, runoff: 'wetsand' },
     roadLight: 0,
     masonry: 'sandstone',
+    pillar: { kind: 'rock' },
+    ownPosts: false,
+    cornerStands: true,
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];

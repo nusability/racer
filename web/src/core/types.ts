@@ -2,7 +2,8 @@
 // TypeScript (no three.js, no DOM) so it runs headless in tools/sim-check.ts.
 //
 // World axes follow three.js: +Y is up, the ground is the XZ plane, metres and seconds.
-// "Track space" is (s, x, y): s = distance along the centreline (0..track.length, wraps),
+// "Track space" is (s, x, y): s = distance along the centreline (0..track.length; wraps on a
+// circuit, clamps at the ends of a sprint and of a branch),
 // x = lateral offset from the centreline (+ = to the racer's right when facing +s),
 // y = height above the road surface.
 
@@ -16,7 +17,7 @@ export interface Vec3 {
 // Track authoring (src/data/tracks/*.ts)
 // ---------------------------------------------------------------------------
 
-/** A control point of the closed centreline, in world metres. */
+/** A control point of the centreline, in world metres. */
 export interface TrackControlPoint {
   x: number;
   z: number;
@@ -100,7 +101,14 @@ export type TrackFeature =
    */
   | { kind: 'crossing'; at: TrackParam; other: TrackParam; style: 'bridge' | 'flat' }
   /** A scheduled, moving danger tied to the course (see HazardDef). */
-  | { kind: 'hazard'; hazard: HazardDef };
+  | { kind: 'hazard'; hazard: HazardDef }
+  /**
+   * Names the main road's own route through a fork (main road only). A fork is one or two
+   * `route` branches leaving over exactly this from..to (one on each side at most), and the
+   * main road between them is the third route: it gets a name like the others, flashed when a
+   * racer stays on it past the fork.
+   */
+  | { kind: 'route'; from: TrackParam; to: TrackParam; name: string };
 
 /**
  * Hazards are deterministic schedules on race time, so the simulation and the presentation
@@ -145,6 +153,14 @@ export interface TrackPalette {
   dusk: number;
 }
 
+/**
+ * How a course is raced. 'circuit': a closed loop over `laps`, the start and finish line at
+ * point 0. 'sprint': point to point, raced once, from a start line at point 0 to a finish line
+ * at the last point; the builder adds a straight grid apron behind the start and a run-out
+ * beyond the finish (SPRINT_GRID_APRON, SPRINT_RUNOUT) so finishers glide to a stop.
+ */
+export type CourseKind = 'circuit' | 'sprint';
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -152,6 +168,8 @@ export interface TrackDef {
   blurb: string;
   /** 1 (easy) .. 5 (brutal). */
   difficulty: number;
+  course: CourseKind;
+  /** Laps of a circuit; a sprint is raced once, so exactly 1. */
   laps: number;
   seed: number;
   /** Default road width when a point doesn't set one. */
@@ -161,16 +179,19 @@ export interface TrackDef {
    * slower than the road, so cutting across it is a choice, not a free shortcut.
    */
   runoff: number;
-  /** Closed loop: the last point connects back to the first. The start line is at point 0. */
+  /**
+   * Circuit: a closed loop, the last point connects back to the first; the start line is at
+   * point 0. Sprint: an open line from the start (point 0) to the finish (the last point).
+   */
   points: TrackControlPoint[];
   features: TrackFeature[];
-  /** Alternative routes that leave and rejoin the main loop (shortcuts). */
+  /** Ribbons that leave the main road and rejoin it later: shortcuts and the routes of forks. */
   branches: BranchDef[];
   palette: TrackPalette;
 }
 
 /**
- * A shortcut: an open ribbon that leaves the main road from one side and rejoins it later.
+ * A branch: an open ribbon that leaves the main road from one side and rejoins it later.
  * At each end it runs alongside the main road, edge to edge, for BRANCH_JUNCTION_LENGTH
  * metres (the junction, where racers can cross between the two); between the junctions a
  * divider wall separates them. The builder derives the two junction control points at each
@@ -180,11 +201,18 @@ export interface TrackDef {
  */
 export interface BranchDef {
   id: string;
+  /**
+   * 'shortcut': a walled cut that trades hull for time (rough ground, squeezes; see
+   * track-check's shortcut table). 'route': one of the parallel ways of a fork, about as quick
+   * as the main road (ROUTE_TIME_BAND in track-check), different in character, never a free
+   * gain. A route needs a main-road 'route' feature over the same from..to naming the main way.
+   */
+  kind: 'shortcut' | 'route';
   /** Shown on the minimap and in flashes, e.g. "Smuggler's Cut". */
   name: string;
   /** Side of the main road it leaves from and rejoins on. */
   side: -1 | 1;
-  /** Main-loop params where it leaves and rejoins; from < to (never across the start line). */
+  /** Main-road params where it leaves and rejoins; from < to (never across a circuit's start line). */
   from: TrackParam;
   to: TrackParam;
   width: number;
@@ -236,11 +264,6 @@ export interface TrackSample {
   grip: number;
   /** Rough ground 0..1 (0 = smooth): hull damage and jolts at speed (see the 'rough' feature). */
   rough: number;
-  /**
-   * World metres per metre of s (≥ 1). Inside a loop the road is longer than the s span it
-   * occupies; the simulation advances s by speed / stretch so speeds stay true.
-   */
-  stretch: number;
 }
 
 /** A solid obstacle in track space: a vertical cylinder standing on the road. */
@@ -405,13 +428,13 @@ export interface RacerState {
   airborne: boolean;
   /** Seconds since this racer wrecked; 0 while racing. A wreck is final for the race. */
   crashed: number;
-  /** Laps completed. */
+  /** Laps completed (a sprint has one: 1 once it is finished). */
   lap: number;
   /** Race time at which this racer finished, or null. */
   finishTime: number | null;
   /** 1-based current standing. */
   place: number;
-  /** Best lap time so far (s) or null. */
+  /** Best lap time so far (s) or null; on a sprint, the run itself once finished. */
   bestLap: number | null;
   /** Steer rate command applied this step (-1..1), for presentation. */
   steer: number;

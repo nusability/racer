@@ -1,5 +1,6 @@
-// Quick Race: pick a world, any of its tracks and a lap count, then race. Pays less than the
-// championship. Locked worlds stay visible with their tracks locked, as a reason to progress.
+// Quick Race: pick a world, any of its tracks and (on a circuit) a lap count, then race. Pays
+// less than the championship. Locked worlds stay visible with their tracks locked, as a reason
+// to progress. A sprint is raced once: it has no lap count to pick.
 import { cupById } from '../../data/championships.ts';
 import { trackById } from '../../data/tracks/index.ts';
 import { WORLDS, worldById, worldOfTrack } from '../../data/worlds.ts';
@@ -29,13 +30,20 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
       const t = trackIfBuilt(id);
       if (!t) return comingSoonCard(id);
       const rec = career.save.records[t.id];
+      const best = t.course === 'sprint' ? rec?.bestRace['1'] : rec?.bestLap;
       const card = button({
         id: `quick_track_${t.id}_button`,
         label: t.name.toUpperCase(),
         aria: `Track: ${t.name}${open ? '' : ' (locked)'}`,
         disabled: !open,
         onTap: () => {
+          // A sprint's single run, or back to a circuit from one: the track's own distance.
+          const wasSprint = trackId !== null && trackById(trackId).course === 'sprint';
           trackId = t.id;
+          if (t.course === 'sprint' || wasSprint) {
+            laps = t.laps;
+            lapsPicker.replaceWith((lapsPicker = makeLapsPicker()));
+          }
           refresh();
         },
       });
@@ -49,7 +57,7 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
           'span',
           'trackcard__meta',
           difficultyDots(t.difficulty),
-          h('span', 'trackcard__best', rec?.bestLap ? `Best ${formatTime(rec.bestLap)}` : 'No lap yet'),
+          h('span', 'trackcard__best', best ? `Best ${t.course === 'sprint' ? 'run ' : ''}${formatTime(best)}` : t.course === 'sprint' ? 'No run yet' : 'No lap yet'),
         ),
         h('span', 'trackcard__blurb', t.blurb),
       );
@@ -90,7 +98,9 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
   requestAnimationFrame(showWorldTab);
 
   const makeLapsPicker = () =>
-    stepper({
+    trackId !== null && trackById(trackId).course === 'sprint'
+      ? h('div', 'stepper', h('span', 'stepper__label', 'COURSE'), h('span', 'stepper__value', 'SPRINT'))
+      : stepper({
       idPrefix: 'quick_laps',
       label: 'LAPS',
       aria: 'Laps',
@@ -140,7 +150,8 @@ export function quickRaceScreen(ctx: AppCtx, initialWorld?: string, initialTrack
     const win = racePayout({ mode: 'quick', place: 1, cup: career.quickRacePayCup(t.id), laps, standardLaps: t.laps, cupWin: null });
     pays.textContent = `1st pays ${formatCredits(win.total)}`;
     const best = career.save.records[t.id]?.bestRace[String(laps)];
-    raceBtn.append(h('span', 'btn__sub', `${t.name} · ${laps} lap${laps > 1 ? 's' : ''}${best ? ` · PB ${formatTime(best)}` : ''}`));
+    const distance = t.course === 'sprint' ? 'sprint' : `${laps} lap${laps > 1 ? 's' : ''}`;
+    raceBtn.append(h('span', 'btn__sub', `${t.name} · ${distance}${best ? ` · PB ${formatTime(best)}` : ''}`));
   }
 
   const el = h(

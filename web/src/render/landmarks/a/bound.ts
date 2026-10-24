@@ -40,14 +40,42 @@ export class RoadFrame {
   readonly ey = new THREE.Vector3();
   readonly es = new THREE.Vector3();
   /** Local units per track metre. */
-  readonly k: number;
+  k = 1;
+
+  private readonly b: HazardBinding;
+  private readonly s: number;
+  private readonly x: number;
 
   constructor(b: HazardBinding, s: number, x: number) {
+    this.b = b;
+    this.s = s;
+    this.x = x;
+    this.refresh();
+  }
+
+  /**
+   * Re-reads the binding. The track scene fills a binding's mapping in only once it has placed
+   * the landmark, after building it, so a landmark that poses parts from the road calls this
+   * in update(); what the constructor read is only right where the binding is ready up front.
+   */
+  refresh(): this {
+    const { b, s, x } = this;
     b.toLocal(s, x, 0, this.o);
     b.toLocal(s, x + 1, 0, this.ex).sub(this.o);
     b.toLocal(s, x, 1, this.ey).sub(this.o);
     b.toLocal(s + 1, x, 0, this.es).sub(this.o);
     this.k = this.ex.length();
+    return this;
+  }
+
+  /** The local point at lateral x, height y and `ds` along the road from this frame's s. */
+  point(x: number, y: number, ds: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.o).addScaledVector(this.ex, x - this.x).addScaledVector(this.ey, y).addScaledVector(this.es, ds);
+  }
+
+  /** A track-space direction (lateral, up, along) as a local vector, `k` long per metre. */
+  dir(x: number, y: number, ds: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.set(0, 0, 0).addScaledVector(this.ex, x).addScaledVector(this.ey, y).addScaledVector(this.es, ds);
   }
 
   /** +1 if the landmark's origin lies toward +x of the road here, −1 if toward −x. */

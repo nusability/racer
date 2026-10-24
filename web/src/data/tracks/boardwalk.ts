@@ -10,6 +10,7 @@ export const boardwalk: TrackDef = {
   name: 'Boardwalk',
   blurb: 'A figure of eight in planks: tight seafront corners, the bridge, and a ship crossing the road.',
   difficulty: 2,
+  course: 'circuit',
   laps: 3,
   seed: 1303,
   width: 40,
@@ -106,6 +107,7 @@ export const boardwalk: TrackDef = {
   branches: [
     {
       id: 'promenade',
+      kind: 'shortcut',
       name: 'Promenade',
       side: -1,
       from: 5.4,

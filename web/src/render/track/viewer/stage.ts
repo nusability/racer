@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Track, type Ribbon } from '../../../core/track.ts';
 import type { TrackDef } from '../../../core/types.ts';
-import { worldOfTrack } from '../../../data/worlds.ts';
+import { biomeOfTrack } from '../../../data/tracks/index.ts';
 import { pixelRatioFor } from '../../graphics.ts';
 import { GRAPHICS_PROFILE, type GraphicsLevel } from '../../graphicsTuning.ts';
 import { resolveLook, type LookFlags } from '../../look/look.ts';
@@ -73,7 +73,7 @@ export class Stage {
     this.camera.far = FOG_FAR[quality] + FAR_MARGIN;
     const track = new Track(def);
     const env = applyEnvironment(this.scene, def.palette, quality);
-    const look = resolveLook(worldOfTrack(def.id).biome, settings.level, settings.look, PostFx.supported(r), def.palette);
+    const look = resolveLook(biomeOfTrack(def.id), settings.level, settings.look, PostFx.supported(r), def.palette);
     // Without a render target the materials tone-map themselves on the way to the canvas.
     r.toneMapping = look && !look.post ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     r.toneMappingExposure = look && !look.post ? look.look.grade.materialExposure : 1;

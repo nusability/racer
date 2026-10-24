@@ -101,4 +101,4 @@ function probeGpu(): string {
   return name;
 }
 
-startApp({ root, launchRace, showroom, audio: new GameAudio(), store: viewerStore, graphics: { gpu: probeGpu(), benchmark: runBenchmark } });
+startApp({ root, launchRace, showroom, audio: new GameAudio(), store: viewerStore, graphics: { gpu: probeGpu(), benchmark: runBenchmark }, start: { screen: 'title' } });

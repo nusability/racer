@@ -10,6 +10,7 @@ export const avalanche: TrackDef = {
   name: 'Avalanche Pass',
   blurb: 'A cliff road, a corkscrew over the gorge, and the avalanche slope letting go above you.',
   difficulty: 4,
+  course: 'circuit',
   laps: 3,
   seed: 2505,
   width: 40,
@@ -103,6 +104,7 @@ export const avalanche: TrackDef = {
   branches: [
     {
       id: 'colcut',
+      kind: 'shortcut',
       name: 'Col Cut',
       side: 1,
       from: 13.4,

@@ -4,17 +4,20 @@ import { mulberry32, range, type Rng } from '../../../core/rng.ts';
 import type { CityScenery } from '../../../data/tracks/scenery.ts';
 import { HORIZON_MAX, HORIZON_MIN, RUNOFF_MIN } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
+import type { Ground } from '../ground.ts';
 import { fbm, smoothstep } from '../noise.ts';
 import { sideIndex } from '../shape.ts';
 import { concreteTexture, pavingTexture } from '../textures.ts';
 import { CITY_NEON, facadeBox, facadeMaterial } from '../../facade.ts';
 import { neonSigns, signBoards } from '../../neonSigns.ts';
 import type { BiomeKit, DressContext, Dressing } from './kit.ts';
+import { BUILDING_CLEAR, citySite, type CitySite, type Lot } from './citySite.ts';
 import type { AoLook } from '../../look/lookTuning.ts';
 
-// Neon Meridian: a night city. Dark asphalt streets and pale plazas off the course, blocks of
-// lit towers standing back from it on a street grid, a skyline of taller towers ringing the
-// horizon, and neon billboards on poles along the walls. The road keeps the contrast: dark
+// Neon Meridian: a night city. Dark asphalt streets and pale plazas off the course, a canyon of
+// lit high-rises lining it on a street grid (broken by low blocks and open squares, and kept
+// low round the inside of corners so the road ahead stays in view), towers behind them, a
+// skyline of taller towers ringing the horizon, and neon billboards on poles along the walls. The road keeps the contrast: dark
 // laned asphalt between bright edge lines, accent-and-white kerbs and pale concrete barriers.
 // Every building is one instance of one box whose windows and neon the shader draws
 // (render/facade.ts), so the whole city is one draw call at either quality.
@@ -42,25 +45,29 @@ const BLOCK = 120;
 const STREET = 22;
 /** Lots per block side (a block holds up to LOTS² buildings). */
 const LOTS = 2;
-/** Buildings keep this far past the corridor's reach and from landmark footprints. */
-const BUILDING_CLEAR = 22;
-/** Extra clearance from loops and corkscrews (their swept road), metres. */
-const MAGNET_CLEAR = 80;
 /** The district is searched this far out from the course for blocks. */
 const DISTRICT_REACH = 900;
 /** Tower height spread round the scenery's typical height. */
 const HEIGHT_SPREAD: readonly [number, number] = [0.35, 1.9];
 /**
- * Low-rise blocks fill the band this deep beside the course (so towers never wall in the view),
- * this many per kilometre of lap, at these heights.
+ * The canyon: the blocks this deep beside the course, this many buildings per kilometre of lap,
+ * most of them high-rises nearly as tall as the towers behind (shares of the scenery's tower
+ * height), so the course runs between walls of lit storeys.
  */
-const LOW_RISE_BAND = 260;
-const LOW_RISE_PER_KM = 55;
-const LOW_RISE: readonly [number, number] = [8, 30];
-/** Towers start this far into the low-rise band, and grow to full height over this ramp (share at the course, metres). */
+const CANYON_BAND = 260;
+const CANYON_PER_KM = 55;
+const CANYON_HEIGHT: readonly [number, number] = [0.5, 1.05];
+/** Rhythm in the canyon walls: this share of its buildings are low blocks of these heights. */
+const CANYON_LOW_SHARE = 0.2;
+const CANYON_LOW: readonly [number, number] = [12, 34];
+/** Share of canyon blocks left as open squares, so the skyline shows between the walls. */
+const PLAZA_SHARE = 0.12;
+/** A lot capped lower than this (inside a corner, past a drop) is left as an open square. */
+const MIN_RISE = 8;
+/** Towers start this far into the canyon band, and grow to full height over this ramp (share at the course, metres). */
 const TOWER_START = 0.6;
 const TOWER_RAMP: readonly [number, number] = [0.4, 500];
-/** Low quality keeps this share of the towers and skyline. */
+/** Low quality keeps this share of every building (canyon, towers and skyline): less fill on a weak GPU. */
 const LOW_SHARE = 0.55;
 /** Skyline towers on the horizon: how many, how far out, and how much taller than the district. */
 const SKYLINE = 150;
@@ -112,6 +119,9 @@ export function cityKit(scenery: CityScenery, palette: TrackPalette, ao: AoLook 
     road: { surface: 'asphalt', runoff: 'concrete' },
     roadLight: ROAD_LIGHT,
     masonry: 'concrete',
+    pillar: { kind: 'rock' },
+    ownPosts: false,
+    cornerStands: true,
     detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: concreteTexture(seed, quality) }),
     dress: (ctx) => dressCity(ctx, scenery, palette, ao),
     spray: { road: palette.road, runoff: SPRAY_CONCRETE, water: SPRAY_CONCRETE },
@@ -129,8 +139,9 @@ function dressCity(ctx: DressContext, scenery: CityScenery, palette: TrackPalett
     tints.push(tint);
   };
   const lapKm = ctx.corridors[0].ribbon.length / 1000;
-  district(ctx, scenery, rng, Math.round(scenery.towers * keep), Math.round(LOW_RISE_PER_KM * lapKm * keep), add);
-  skyline(ctx, scenery, rng, Math.round(SKYLINE * keep), add);
+  const site = citySite(ctx.ground, ctx.quality);
+  district(ctx.ground, site, scenery, rng, Math.round(scenery.towers * keep), Math.round(CANYON_PER_KM * lapKm * keep), add);
+  skyline(ctx.ground, site, scenery, rng, Math.round(SKYLINE * keep), add);
 
   const objects: THREE.Object3D[] = [];
   const owned: { dispose(): void }[] = [];
@@ -188,11 +199,25 @@ function wallTint(rng: Rng): THREE.Color {
 }
 
 /**
- * Towers on a street grid round the course: the grid's blocks nearest the course fill first, a
- * few lots per block, low-rise right by the road and taller further back.
+ * Stands a building on its lot: the base reaches under the lowest ground round it (so no slope
+ * opens a gap), the height counts from the highest ground under it (so no slope swallows it),
+ * and the roof stops at the site's cap. False when the cap leaves too little to build.
  */
-function district(ctx: DressContext, scenery: CityScenery, rng: Rng, towers: number, lowRise: number, add: AddBox): void {
-  const g = ctx.ground;
+function build(site: CitySite, lot: Lot, rise: number, tint: THREE.Color, add: AddBox): boolean {
+  const f = site.footing(lot);
+  const top = Math.min(f.hi + rise, site.roofCap(lot));
+  if (top - f.hi < MIN_RISE) return false;
+  const base = f.lo - BASE_SINK;
+  add(lot.x, base, lot.z, lot.w, top - base, lot.d, lot.yaw, tint);
+  return true;
+}
+
+/**
+ * Buildings on a street grid round the course: the canyon of high-rises lining it first (the
+ * grid's blocks nearest the course fill first, a few lots per block), then the towers behind,
+ * tallest furthest back. Each lot holds one building.
+ */
+function district(g: Ground, site: CitySite, scenery: CityScenery, rng: Rng, towers: number, canyon: number, add: AddBox): void {
   const S = g.views.flatMap((v) => v.ribbon.samples);
   let x0 = Infinity;
   let z0 = Infinity;
@@ -211,7 +236,7 @@ function district(ctx: DressContext, scenery: CityScenery, rng: Rng, towers: num
   const cz = (z0 + z1) / 2;
   const half = Math.hypot(x1 - x0, z1 - z0) / 2 + DISTRICT_REACH;
   const n = Math.ceil(half / BLOCK);
-  const blocks: { x: number; z: number; d: number }[] = [];
+  const blocks: { x: number; z: number; d: number; id: number }[] = [];
   for (let j = -n; j <= n; j++) {
     for (let i = -n; i <= n; i++) {
       const u = i * BLOCK;
@@ -222,52 +247,46 @@ function district(ctx: DressContext, scenery: CityScenery, rng: Rng, towers: num
       if (!near) continue;
       const d = Math.abs(near.d) - g.views[near.v].shape.outer[sideIndex(near.d)][near.k];
       if (d < BUILDING_CLEAR || d > DISTRICT_REACH) continue;
-      blocks.push({ x, z, d });
+      blocks.push({ x, z, d, id: blocks.length });
     }
   }
   blocks.sort((a, b) => a.d - b.d);
   const lot = (BLOCK - STREET) / LOTS;
-  // Clear of the corridor, and much further from loops and corkscrews: their road swings out
-  // sideways and up, far past the corridor's footprint on the ground.
-  const clear = (x: number, z: number, reach: number) => {
-    const near = g.nearest(x, z);
-    if (!near) return true;
-    const sh = g.views[near.v].shape;
-    const extra = sh.magnet[near.k] ? MAGNET_CLEAR : 0;
-    return g.clearOfCourse(x, z, BUILDING_CLEAR + reach + extra);
-  };
-  const fill = (list: typeof blocks, count: number, height: (d: number) => number) => {
+  // Lots already built on or left open: the canyon and the towers share the band between them.
+  const taken = new Set<number>();
+  const fill = (list: typeof blocks, count: number, plazas: number, height: (d: number) => number) => {
     let placed = 0;
     for (const b of list) {
       if (placed >= count) return;
+      if (rng() < plazas) {
+        for (let q = 0; q < LOTS * LOTS; q++) taken.add(b.id * LOTS * LOTS + q);
+        continue;
+      }
       for (let q = 0; q < LOTS * LOTS && placed < count; q++) {
-        if (rng() < EMPTY_LOT) continue;
+        const id = b.id * LOTS * LOTS + q;
+        if (taken.has(id) || rng() < EMPTY_LOT) continue;
         const lu = ((q % LOTS) - (LOTS - 1) / 2) * lot;
         const lv = (Math.floor(q / LOTS) - (LOTS - 1) / 2) * lot;
-        const w = lot * range(rng, 0.6, 0.92);
-        const dd = lot * range(rng, 0.6, 0.92);
-        const x = b.x + lu * c - lv * sn;
-        const z = b.z + lu * sn + lv * c;
-        const reach = Math.hypot(w, dd) / 2;
-        if (!clear(x, z, reach) || g.inFootprint(x, z) || g.inFootprint(x + reach, z) || g.inFootprint(x - reach, z)) continue;
-        const y = g.meshHeight(x, z) - BASE_SINK;
-        add(x, y, z, w, height(b.d) + BASE_SINK, dd, -yaw, wallTint(rng));
+        const here: Lot = { x: b.x + lu * c - lv * sn, z: b.z + lu * sn + lv * c, w: lot * range(rng, 0.6, 0.92), d: lot * range(rng, 0.6, 0.92), yaw: -yaw };
+        if (!site.clear(here)) continue;
+        if (!build(site, here, height(b.d), wallTint(rng), add)) continue;
+        taken.add(id);
         placed++;
       }
     }
   };
-  // Low-rise streets hug the course; the towers stand behind them, tallest furthest back.
-  fill(blocks.filter((b) => b.d < LOW_RISE_BAND), lowRise, () => range(rng, LOW_RISE[0], LOW_RISE[1]));
-  fill(blocks.filter((b) => b.d >= LOW_RISE_BAND * TOWER_START), towers, (d) => scenery.towerHeight * range(rng, HEIGHT_SPREAD[0], HEIGHT_SPREAD[1]) * Math.min(1, TOWER_RAMP[0] + d / TOWER_RAMP[1]));
+  fill(blocks.filter((b) => b.d < CANYON_BAND), canyon, PLAZA_SHARE, () =>
+    rng() < CANYON_LOW_SHARE ? range(rng, CANYON_LOW[0], CANYON_LOW[1]) : scenery.towerHeight * range(rng, CANYON_HEIGHT[0], CANYON_HEIGHT[1]),
+  );
+  fill(blocks.filter((b) => b.d >= CANYON_BAND * TOWER_START), towers, 0, (d) => scenery.towerHeight * range(rng, HEIGHT_SPREAD[0], HEIGHT_SPREAD[1]) * Math.min(1, TOWER_RAMP[0] + d / TOWER_RAMP[1]));
 }
 /** Share of lots left empty (a car park, a square): a solid wall of towers reads as a texture. */
 const EMPTY_LOT = 0.2;
-/** Buildings start this far under the ground so slopes never show a gap under them. */
+/** Buildings reach this far under the lowest ground round them, past the terrain mesh's own sink and skirts. */
 const BASE_SINK = 3;
 
 /** Taller towers ringing the horizon, some built as setback stacks. */
-function skyline(ctx: DressContext, scenery: CityScenery, rng: Rng, count: number, add: AddBox): void {
-  const g = ctx.ground;
+function skyline(g: Ground, site: CitySite, scenery: CityScenery, rng: Rng, count: number, add: AddBox): void {
   const S = g.views.flatMap((v) => v.ribbon.samples);
   let cx = 0;
   let cz = 0;
@@ -287,21 +306,22 @@ function skyline(ctx: DressContext, scenery: CityScenery, rng: Rng, count: numbe
     const x = cx + Math.cos(a) * dist;
     const z = cz + Math.sin(a) * dist;
     const foot = range(rng, SKYLINE_FOOT[0], SKYLINE_FOOT[1]);
-    if (!clear(x, z, foot) || g.inFootprint(x, z)) continue;
+    const lot: Lot = { x, z, w: foot, d: foot * range(rng, 0.6, 1), yaw: rng() * Math.PI };
+    if (!clear(x, z, foot) || !site.clear(lot)) continue;
     const h = scenery.towerHeight * range(rng, SKYLINE_HEIGHT[0], SKYLINE_HEIGHT[1]);
-    const y = g.natural(x, z) - BASE_SINK;
-    const yaw = rng() * Math.PI;
     const tint = wallTint(rng);
     if (rng() < SETBACK_SHARE) {
-      // Tiers narrowing upward, each standing on the last.
-      let base = y;
+      // Tiers narrowing upward, each standing on the last; the first stands on the ground.
+      const f = site.footing(lot);
+      let base = f.lo - BASE_SINK;
+      let top = f.hi;
       for (let t = 0; t < SETBACK_TIERS; t++) {
         const k = 1 - t * 0.25;
-        const th = (h / SETBACK_TIERS) * (t === 0 ? 1.3 : 0.85);
-        add(x, base, z, foot * k, th + BASE_SINK, foot * k * 0.85, yaw, tint);
-        base += th;
+        top += (h / SETBACK_TIERS) * (t === 0 ? 1.3 : 0.85);
+        add(x, base, z, lot.w * k, top - base, lot.w * k * 0.85, lot.yaw, tint);
+        base = top;
       }
-    } else add(x, y, z, foot, h + BASE_SINK, foot * range(rng, 0.6, 1), yaw, tint);
+    } else build(site, lot, h, tint, add);
     placed++;
   }
 }

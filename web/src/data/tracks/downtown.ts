@@ -9,6 +9,7 @@ export const downtown: TrackDef = {
   name: 'Downtown Circuit',
   blurb: 'Wide boulevards, a loop on the start straight and a maglev crossing the avenue.',
   difficulty: 1,
+  course: 'circuit',
   laps: 3,
   seed: 3101,
   width: 52,
@@ -104,7 +105,7 @@ export const downtown: TrackDef = {
     { kind: 'boostPad', at: 0.76, lateral: 0 },
     { kind: 'narrow', from: 1.33, to: 3.52, width: 32, blend: 80 },
     { kind: 'runoff', from: 1.42, to: 3.43, amount: 0 },
-    { kind: 'loop', at: 1.93, radius: 28, span: 124, shift: 36, settle: 140 },
+    { kind: 'loop', at: 1.93, radius: 80, span: 124, shift: 36, settle: 140 },
     { kind: 'boostPad', at: 4.93, lateral: 0 },
     { kind: 'boostPad', at: 5.12, lateral: 0 },
     {
@@ -123,6 +124,7 @@ export const downtown: TrackDef = {
   branches: [
     {
       id: 'arcade',
+      kind: 'shortcut',
       name: 'Arcade Cut',
       side: 1,
       from: 34.61,

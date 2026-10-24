@@ -5,6 +5,8 @@ import type { Ground } from '../ground.ts';
 import type { RoadStyle } from '../textures.ts';
 import type { Masonry } from '../paint.ts';
 import type { DebrisLook } from '../scheduled.ts';
+import type { Scatter } from '../corridor.ts';
+import type { FlatBuilder } from '../builder.ts';
 
 // A biome kit: everything about a world's look that is not the course itself. The corridor,
 // hazards, junctions, pickups and landmarks are shared; the kit supplies the open ground, its
@@ -34,11 +36,28 @@ export interface DressContext {
   seed: number;
   /** Floating markers the corridor placed on lagoon boundaries. */
   buoys: { x: number; y: number; z: number }[];
+  /** Where the corridor put boundary markers: pylons on run-off lips, lamps on wall tops. */
+  posts: Pick<Scatter, 'pylons' | 'lights'>;
+  /**
+   * The course's merged static meshes, still open: lit vertex-coloured props and unlit glow.
+   * Small static dressing added here costs no draw call of its own.
+   */
+  props: FlatBuilder;
+  glow: FlatBuilder;
   /** Shared materials: lit vertex-coloured, unlit vertex-coloured, textured rock. */
   lit: THREE.Material;
   unlit: THREE.Material;
   rock: THREE.Material;
 }
+
+/**
+ * How the course's pillar obstacles look. They are always drawn (features.ts), whatever the kit:
+ * the kit only picks rock columns or, in a forest, giant living trunks.
+ */
+export type PillarLook =
+  | { kind: 'rock' }
+  /** Bark and its moss (sRGB); the trunk rises to `height` metres, far above what collides. */
+  | { kind: 'trunk'; bark: number; moss: number; height: number };
 
 export interface BiomeKit {
   ground: GroundStyle;
@@ -50,9 +69,20 @@ export interface BiomeKit {
   roadLight: number;
   /** What walls, tunnels and rock dressing are made of. */
   masonry: Masonry;
+  pillar: PillarLook;
   /** Near-white detail maps multiplied over vertex colours. */
   detail(seed: number, quality: Quality): { sand: THREE.CanvasTexture; rock: THREE.CanvasTexture };
   dress(ctx: DressContext): Dressing;
+  /**
+   * The kit draws the boundary markers itself, in its own style, at DressContext.posts (a
+   * forest's waymarker stones and lanterns); otherwise the shared pylons and lamp posts stand there.
+   */
+  ownPosts: boolean;
+  /**
+   * Concrete grandstands crowd the outside of the tightest corners. A wild world (the forest,
+   * whose folk gather in its villages and towns) has none: they would stand in the deep woods.
+   */
+  cornerStands: boolean;
   /** What a craft kicks up: over the road, over run-off sand, over water (sRGB hex). */
   spray: { road: number; runoff: number; water: number };
   /**

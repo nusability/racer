@@ -9,6 +9,7 @@ export const mirageh: TrackDef = {
   name: 'Mirage Heights',
   blurb: 'Loop the loop, then climb the cliff roads and hold the ridge against the wind.',
   difficulty: 4,
+  course: 'circuit',
   laps: 3,
   seed: 707,
   width: 40,
@@ -83,7 +84,7 @@ export const mirageh: TrackDef = {
     { kind: 'boostCells', at: 49.79, lateral: -34, count: 4, spacing: 26 },
     { kind: 'narrow', from: 1.4, to: 3.6, width: 26, blend: 80 },
     { kind: 'runoff', from: 1.5, to: 3.5, amount: 0 },
-    { kind: 'loop', at: 2.0, radius: 26, span: 120, shift: 30, settle: 140 },
+    { kind: 'loop', at: 2.0, radius: 80, span: 120, shift: 30, settle: 140 },
     { kind: 'boostPad', at: 3.3, lateral: 0 },
     { kind: 'boostPad', at: 3.34, lateral: 0 },
     { kind: 'drop', from: 8.3, to: 12.7, side: -1 },
@@ -112,6 +113,7 @@ export const mirageh: TrackDef = {
   branches: [
     {
       id: 'cliffleap',
+      kind: 'shortcut',
       name: 'Cliff Leap',
       side: 1,
       from: 24.5,
