@@ -1,7 +1,9 @@
-// Settings: steering, sensitivity, sound, quality. Every change saves immediately.
-import type { Settings, SteeringMode } from '../../game/types.ts';
+// Settings: steering, sensitivity, sound, graphics. Every change saves immediately.
+import { graphicsLevel } from '../../game/graphics.ts';
+import type { GraphicsChoice, Settings, SteeringMode } from '../../game/types.ts';
+import { GRAPHICS_LEVELS } from '../../render/graphicsTuning.ts';
 import { requestTiltPermission } from '../input.ts';
-import { h, header, panel, segmented, stepper } from '../kit.ts';
+import { button, h, header, panel, segmented, stepper } from '../kit.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 export const MIN_SENSITIVITY = 0.5;
@@ -37,10 +39,11 @@ export function settingsScreen(ctx: AppCtx): Screen {
   }
 
   const career = ctx.career;
-  const s: Settings = { ...career.save.settings };
-  const save = () => career.setSettings(s);
+  const s = career.save.settings;
+  // Only the field that changed is written: the benchmark may record its result meanwhile.
+  const save = (patch: Partial<Settings>) => career.setSettings({ ...career.save.settings, ...patch });
   const help = h('p', 'note');
-  const showHelp = () => (help.textContent = STEERING_HELP[s.steering]);
+  const showHelp = () => (help.textContent = STEERING_HELP[career.save.settings.steering]);
 
   const steering = segmented<SteeringMode>(
     'settings_steering',
@@ -52,8 +55,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
     ],
     s.steering,
     (v) => {
-      s.steering = v;
-      save();
+      save({ steering: v });
       showHelp();
       if (v !== 'tilt') return;
       // iOS only grants motion access from inside a user gesture, so ask right here.
@@ -75,8 +77,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
     step: SENSITIVITY_STEP,
     format: (v) => `${Math.round(v * 100)}%`,
     onChange: (v) => {
-      s.sensitivity = v;
-      save();
+      save({ sensitivity: v });
     },
   });
 
@@ -89,25 +90,18 @@ export function settingsScreen(ctx: AppCtx): Screen {
     ],
     s.sound ? 'on' : 'off',
     (v) => {
-      s.sound = v === 'on';
-      ctx.audio.setEnabled(s.sound);
-      save();
+      const sound = v === 'on';
+      ctx.audio.setEnabled(sound);
+      save({ sound });
     },
   );
 
-  const quality = segmented<Settings['quality']>(
-    'settings_quality',
-    'Graphics quality',
-    [
-      { value: 'low', label: 'LOW' },
-      { value: 'high', label: 'HIGH' },
-    ],
-    s.quality,
-    (v) => {
-      s.quality = v;
-      save();
-    },
-  );
+  const graphics = h('div', 'settings__graphics');
+  function showGraphics(): void {
+    graphics.replaceChildren(graphicsControl(ctx));
+  }
+  showGraphics();
+  const unsubscribe = ctx.graphics.subscribe(showGraphics);
 
   const row = (label: string, control: HTMLElement) => h('div', 'setting', h('span', 'setting__label', label), control);
   const el = h(
@@ -118,8 +112,54 @@ export function settingsScreen(ctx: AppCtx): Screen {
       'div',
       'settings__body list-scroll',
       panel('CONTROLS', row('STEERING', steering), help, sensitivity),
-      panel('GAME', row('SOUND', sound), row('GRAPHICS', quality), buildLabel()),
+      panel('GAME', row('SOUND', sound), graphics, buildLabel()),
     ),
   );
-  return { el, backdrop: 'sunset' };
+  return { el, backdrop: 'sunset', dispose: unsubscribe };
+}
+
+/**
+ * AUTO · LOW · MEDIUM · HIGH · ULTRA, what auto measured, and Re-test. Rebuilt whenever a
+ * measurement starts or ends, so it never shows a stale pick.
+ */
+function graphicsControl(ctx: AppCtx): HTMLElement {
+  const career = ctx.career;
+  const s = career.save.settings;
+  const testing = ctx.graphics.testing;
+  const auto = graphicsLevel({ ...s, graphics: 'auto' }).toUpperCase();
+  const choice = segmented<GraphicsChoice>(
+    'settings_graphics',
+    'Graphics',
+    [
+      { value: 'auto', label: 'AUTO', sub: testing ? 'TESTING…' : s.benchmark ? auto : 'NOT TESTED' },
+      ...GRAPHICS_LEVELS.map((l) => ({ value: l, label: l.toUpperCase() })),
+    ],
+    s.graphics,
+    (v) => {
+      career.setSettings({ ...career.save.settings, graphics: v });
+      // Auto with no current measurement for this build and GPU measures now.
+      if (v === 'auto') ctx.graphics.ensure();
+      note.textContent = graphicsNote(ctx);
+    },
+  );
+  const note = h('p', 'note', graphicsNote(ctx));
+  const retest = button({
+    id: 'settings_graphics_retest_button',
+    label: testing ? 'TESTING…' : 'RE-TEST',
+    aria: 'Test this device again and pick the graphics level automatically',
+    variant: 'ghost',
+    disabled: testing,
+    onTap: () => void ctx.graphics.retest(),
+  });
+  return h('div', 'settings__graphics', h('span', 'setting__label', 'GRAPHICS'), choice, h('div', 'settings__graphicsnote', note, retest));
+}
+
+function graphicsNote(ctx: AppCtx): string {
+  const s = ctx.career.save.settings;
+  const b = s.benchmark;
+  if (ctx.graphics.testing) return 'Measuring this device…';
+  const measured = b ? `${b.measured.toUpperCase()} measured on this device (${b.lowerBound ? 'over ' : ''}${b.ms.toFixed(1)} ms a frame)` : 'This device has not been measured yet.';
+  const lowered = b && b.level !== b.measured ? `; lowered to ${b.level.toUpperCase()} after a slow race` : '';
+  const pick = s.graphics === 'auto' ? `Auto: ${measured}${lowered}.` : `Set by hand. Auto: ${measured}${lowered}.`;
+  return `${pick} Applies from the next race.`;
 }

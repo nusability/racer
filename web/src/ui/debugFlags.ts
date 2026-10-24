@@ -12,7 +12,7 @@ export interface DebugFlags {
   look: LookFlags;
 }
 
-const AA_MODES: readonly LookFlags['aa'][] = ['fxaa', 'msaa', 'off'];
+const AA_MODES: readonly LookFlags['aa'][] = ['level', 'fxaa', 'msaa', 'off'];
 
 export function loadDebugFlags(store: KeyValueStore): DebugFlags {
   const raw = store.getItem(KEY);
@@ -29,7 +29,7 @@ function parseLook(v: unknown, raw: string): LookFlags {
   if (typeof v !== 'object' || v === null) throw new Error(`Bad look flags in storage: ${raw}`);
   const o = v as Record<string, unknown>;
   const flags = { ...LOOK_FLAGS_ON };
-  for (const k of ['world', 'post', 'bloom', 'blur', 'wet', 'gliders', 'ao'] as const) {
+  for (const k of ['world', 'post', 'bloom', 'blur', 'wet', 'gliders', 'ao', 'haze'] as const) {
     if (o[k] === undefined) continue;
     if (typeof o[k] !== 'boolean') throw new Error(`Bad look flag "${k}" in storage: ${raw}`);
     flags[k] = o[k];

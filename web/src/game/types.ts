@@ -2,6 +2,7 @@
 // renderer (src/render). The race runtime is wired up in src/main.ts.
 
 import type { PlayerInput, RaceEntrant, RaceEvent, RaceResultRow, RacerVisual } from '../core/types.ts';
+import type { GraphicsLevel } from '../render/graphicsTuning.ts';
 
 /** Why a racer was wrecked out of the race. */
 export type CrashReason = Extract<RaceEvent, { type: 'crash' }>['reason'];
@@ -36,8 +37,14 @@ export interface RaceOutcome {
   playerWreck: WreckInfo | null;
 }
 
+/** How the race ran on this device, for the graphics safety net. */
+export interface RacePerf {
+  /** The frame rate stayed under the safety net's floor for long enough to count (graphicsTuning.ts). */
+  sustainedSlow: boolean;
+}
+
 /** Menus hand a race to the runtime and get the outcome back; quitting returns null. */
-export type RaceLauncher = (req: RaceRequest, onDone: (outcome: RaceOutcome | null) => void) => void;
+export type RaceLauncher = (req: RaceRequest, onDone: (outcome: RaceOutcome | null, perf: RacePerf) => void) => void;
 
 export type SteeringMode = 'drag' | 'tilt' | 'buttons';
 
@@ -46,7 +53,26 @@ export interface Settings {
   /** Steering sensitivity multiplier, 0.5..1.5. */
   sensitivity: number;
   sound: boolean;
-  quality: 'low' | 'high';
+  /** A level the player picked, or 'auto': the benchmark's pick. */
+  graphics: GraphicsChoice;
+  /** The last benchmark on this device; null until one has finished. */
+  benchmark: GraphicsBenchmark | null;
+}
+
+export type GraphicsChoice = GraphicsLevel | 'auto';
+
+export interface GraphicsBenchmark {
+  /** What 'auto' runs at: the measured level, or lower once the in-race safety net stepped it down. */
+  level: GraphicsLevel;
+  /** The level the measurement itself picked. */
+  measured: GraphicsLevel;
+  /** Median ms per frame of the benchmark scene ... */
+  ms: number;
+  /** ... or, when true, the device was cut off as clearly low and `ms` is a lower bound. */
+  lowerBound: boolean;
+  /** The build and GPU it ran on: a change of either measures again. */
+  build: string;
+  gpu: string;
 }
 
 /** The 3D showroom behind the garage screen (render/showroom.ts). */

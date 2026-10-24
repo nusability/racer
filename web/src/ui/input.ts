@@ -80,7 +80,7 @@ function holdButton(id: string, cls: string, label: string, aria: string): { el:
   };
 }
 
-export function createInput(root: HTMLElement, settings: Settings): InputSource {
+export function createInput(root: HTMLElement, settings: Pick<Settings, 'steering' | 'sensitivity'>): InputSource {
   const layer = h('div', 'race-ui touch');
   layer.dataset.mode = settings.steering;
   if (!hasTouch()) layer.classList.add('no-touch');

@@ -67,7 +67,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const biome = worldOfTrack(def.id).biome;
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
   const ao = look?.ao ? look.look.ao : null;
-  const kit = biomeKit(scenery, def.palette, ao);
+  const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
   const ground = new Ground(views, kit.ground, def.seed);
@@ -112,7 +112,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
     sign: new THREE.MeshBasicMaterial({ map: tex.sign, side: THREE.DoubleSide }),
   };
   if (look && (look.wetSheen || look.wetReflections)) {
-    for (const m of [mats.road, mats.branchRoad]) makeRoadWet(m, look.look.wetRoad, { sheen: look.wetSheen, mask: look.wetReflections });
+    for (const m of [mats.road, mats.branchRoad]) makeRoadWet(m, look.look.wetRoad, look.look.sunDir, def.palette.sun, { sheen: look.wetSheen, mask: look.wetReflections });
   }
   const add = (geo: THREE.BufferGeometry | null, mat: THREE.Material, name: string) => {
     if (!geo) return null;

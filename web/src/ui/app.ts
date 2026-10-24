@@ -3,9 +3,11 @@
 import './styles.css';
 import type { GameAudio } from '../audio/audio.ts';
 import { Career } from '../game/career.ts';
+import { graphicsLevel, steppedDown } from '../game/graphics.ts';
 import type { KeyValueStore } from '../game/save.ts';
-import type { RaceLauncher, RaceRequest, ShowroomApi } from '../game/types.ts';
-import { h } from './kit.ts';
+import type { RaceLauncher, RacePerf, RaceRequest, ShowroomApi } from '../game/types.ts';
+import { GraphicsAuto, type GraphicsDeps } from './graphicsAuto.ts';
+import { h, toast } from './kit.ts';
 import { championshipScreen, cupScreen, worldScreen } from './screens/championship.ts';
 import type { AppCtx, Nav, Screen } from './screens/context.ts';
 import { garageScreen } from './screens/garage.ts';
@@ -26,6 +28,8 @@ export interface AppDeps {
    * their fake races can never pay into the real save.
    */
   store: KeyValueStore;
+  /** The automatic graphics level's benchmark and the GPU it is recorded against. */
+  graphics: GraphicsDeps;
 }
 
 function build(ctx: AppCtx, nav: Nav): Screen {
@@ -56,6 +60,7 @@ function build(ctx: AppCtx, nav: Nav): Screen {
 export function startApp(deps: AppDeps): void {
   const career = new Career(deps.store);
   deps.audio.setEnabled(career.save.settings.sound);
+  const graphics = new GraphicsAuto(career, deps.graphics);
 
   const shell = h('div', 'app');
   deps.root.append(shell);
@@ -86,14 +91,33 @@ export function startApp(deps: AppDeps): void {
     racing = true;
     clear();
     shell.hidden = true;
-    deps.launchRace(req, (outcome) => {
+    graphics.cancel();
+    deps.launchRace(req, (outcome, perf) => {
       racing = false;
       shell.hidden = false;
       if (outcome === null) go(back);
       else go({ screen: 'results', report: career.applyOutcome(outcome) });
+      safetyNet(perf);
     });
   }
 
-  const ctx: AppCtx = { career, store: deps.store, audio: deps.audio, showroom: deps.showroom, go, race };
+  /** A race at an automatic level that ran too slowly: one level down for the next, said once. */
+  function safetyNet(perf: RacePerf): void {
+    if (!perf.sustainedSlow) return;
+    const next = steppedDown(career.save.settings);
+    if (!next) return;
+    career.setSettings(next);
+    const level = graphicsLevel(next).toUpperCase();
+    console.info(`graphics: the race ran under the frame-rate floor; auto → ${level} for the next race`);
+    const t = toast();
+    // At the top: the results' buttons are at the bottom, and the next race is one tap away.
+    t.el.classList.add('toast--top');
+    shell.append(t.el);
+    t.say(`Graphics set to ${level} for a smoother race`, true);
+  }
+
+  const ctx: AppCtx = { career, store: deps.store, audio: deps.audio, showroom: deps.showroom, graphics, go, race };
   go({ screen: 'title' });
+  // While the title waits for its tap: the measurement draws on a canvas that is never shown.
+  graphics.ensure();
 }

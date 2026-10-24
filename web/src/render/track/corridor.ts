@@ -28,6 +28,8 @@ import type { AoLook } from '../look/lookTuning.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
 const TUNNEL_ROAD_SHADE = 0.42;
+/** Grip this far under normal reads fully slick in the road's wet look (the slick stretches run 0.6–0.75 grip). */
+const SLICK_GRIP_LOSS = 0.25;
 /** A branch road reaches this far under the main road in a junction so no crack shows. */
 const JUNCTION_OVERLAP = 1.2;
 /** Atlas split of the road texture: u below this is paved road, above it is run-off sand. */
@@ -237,6 +239,7 @@ export class Corridor {
       // A deck's run-off is part of the deck, level with the road.
       const lip = (run: number) => (run > RUNOFF_MIN && !this.deck(k) ? -RUNOFF_DROP : 0);
       const y = -this.shape.sink[this.idx(k)];
+      const slick = Math.min(1, Math.max(0, (1 - smp.grip) / SLICK_GRIP_LOSS));
       // Occlusion at the foot of whatever bounds each side: the run-off's outer edge, and the
       // road edge itself where a wall stands right at it. Open edges and junctions have none.
       const wallShade = ao ? 1 - ao.look.wall : 1;
@@ -244,7 +247,7 @@ export class Corridor {
       const foot = (side: number) => (walled(side) ? wallShade : 1);
       const edgeShade = (side: number, run: number) => (walled(side) && run < RUNOFF_MIN ? wallShade : 1);
       const at = (x: number, yy: number, mult: number, u: number) =>
-        c.road.vertex(this.banked(k, x, yy), mult === 1 ? shade : tmp.copy(shade).multiplyScalar(mult), u, v);
+        c.road.vertex(this.banked(k, x, yy), mult === 1 ? shade : tmp.copy(shade).multiplyScalar(mult), u, v, undefined, slick);
       // Across the paved road: the edges and the centre, plus (with occlusion) the inner edge of
       // the darkening, so it hugs the wall instead of fading over half the road.
       const reach = ao ? Math.min(ao.look.reach, half / 2) : 0;

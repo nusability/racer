@@ -3,10 +3,14 @@ import type { TrackPalette } from '../../../core/types.ts';
 import { SEA_LEVEL, TERRAIN_MARGIN, type Quality } from '../config.ts';
 import { sunDirection } from '../environment.ts';
 import type { Ground } from '../ground.ts';
+import type { SeaLook } from '../../look/lookTuning.ts';
 
 // The sea: one opaque mesh, one draw. Depth under the surface comes from a small baked
 // texture of the terrain, so the shader can shade shallow turquoise to deep blue, paint coral
 // through the shallows, and run foam along every shore — no transparency, no reflections.
+// With a world look (LOOK) the water mirrors the sky's gradient through a Fresnel term on
+// rippled normals, and the sun's glints run brighter than white (HDR) so the bloom catches them,
+// plus a sparkle of single facets near the sun's path.
 
 /** Depth texture resolution over the terrain area. */
 const DEPTH_RES = { low: 160, high: 320 } as const;
@@ -18,6 +22,19 @@ const APRON = 9000;
 const SHALLOW = 0x3fe0d8;
 const DEEP = 0x0b4f8a;
 const FOAM = 0xf4fbff;
+/** Sparkle facets per metre, how often they re-roll (1/s) and the distance band they fade out over (m). */
+const SPARKLE_CELLS = 1.5;
+const SPARKLE_RATE = 6;
+const SPARKLE_FADE: readonly [number, number] = [30, 200];
+/** Sparkle shows only this close to the sun's mirror path (Phong power): elsewhere facets read as noise. */
+const SPARKLE_LOBE = 48;
+/** The fine ripples fade over this distance band (m): beyond it they alias into speckle. */
+const FINE_RIPPLE_FADE: readonly [number, number] = [25, 140];
+/**
+ * The sky is mirrored off the ripples flattened to this share: at grazing angles full ripples
+ * swing the mirrored ray between horizon and zenith and blotch the sea; glints keep them whole.
+ */
+const SKY_RIPPLE = 0.3;
 
 const VERTEX = /* glsl */ `
 uniform float uTime;
@@ -43,6 +60,12 @@ uniform vec3 uFoam;
 uniform vec3 uSky;
 uniform vec3 uSunDir;
 uniform vec3 uSun;
+uniform vec3 uZenith;
+uniform float uReflect;
+uniform float uGlint;
+uniform float uGlintPower;
+uniform float uSparkle;
+uniform float uSparkleGain;
 varying vec3 vWorld;
 #include <fog_pars_fragment>
 
@@ -69,13 +92,34 @@ void main() {
   float edge = 1.0 - smoothstep(0.0, 0.7, wob);
   float swash = smoothstep(0.85, 1.0, sin(depth * 2.2 - uTime * 1.6 + n * 3.0)) * (1.0 - smoothstep(0.5, 3.5, depth));
   col = mix(col, uFoam, clamp(edge + swash * 0.7, 0.0, 1.0));
-  // Sky reflection at grazing angles and sun glints on the ripples.
   vec3 view = normalize(cameraPosition - vWorld);
+#ifdef LOOK
+  // Ripples at two scales (the fine ones only near); the sky they mirror is graded horizon to zenith like the sky dome.
+  float dist = length(cameraPosition - vWorld);
+  float fine = 0.25 * (1.0 - smoothstep(${FINE_RIPPLE_FADE[0].toFixed(1)}, ${FINE_RIPPLE_FADE[1].toFixed(1)}, dist));
+  vec3 nrm = normalize(vec3(
+    (noise(vWorld.xz * 0.6 + uTime * 0.7) - 0.5) * 0.5 + (noise(vWorld.xz * 2.3 - uTime * 1.1) - 0.5) * fine,
+    1.0,
+    (noise(vWorld.zx * 0.6 - uTime * 0.6) - 0.5) * 0.5 + (noise(vWorld.zx * 2.1 + uTime * 0.9) - 0.5) * fine));
+  vec3 calm = normalize(vec3(nrm.x * ${SKY_RIPPLE.toFixed(2)}, nrm.y, nrm.z * ${SKY_RIPPLE.toFixed(2)}));
+  vec3 rc = reflect(-view, calm);
+  vec3 sky = mix(uSky, uZenith, pow(clamp(rc.y, 0.0, 1.0), 0.4));
+  float fres = 0.02 + 0.98 * pow(1.0 - max(dot(view, calm), 0.0), 5.0);
+  vec3 r = reflect(-view, nrm);
+  col = mix(col, sky, clamp(fres * uReflect, 0.0, 1.0));
+  float toSun = max(dot(r, uSunDir), 0.0);
+  col += uSun * (uGlint * pow(toSun, uGlintPower));
+  // Sparkle: a few facets per patch flash as their random tilt catches the sun, near the sun's path.
+  float facet = step(1.0 - uSparkle, hash(floor(vWorld.xz * ${SPARKLE_CELLS.toFixed(2)}) + floor(uTime * ${SPARKLE_RATE.toFixed(1)})));
+  col += uSun * (facet * uSparkleGain * pow(toSun, ${SPARKLE_LOBE.toFixed(1)}) * (1.0 - smoothstep(${SPARKLE_FADE[0].toFixed(1)}, ${SPARKLE_FADE[1].toFixed(1)}, dist)));
+#else
+  // Sky reflection at grazing angles and sun glints on the ripples.
   float fres = pow(1.0 - max(view.y, 0.0), 4.0);
   col = mix(col, uSky, fres * 0.55);
   vec3 nrm = normalize(vec3((noise(vWorld.xz * 0.6 + uTime * 0.7) - 0.5) * 0.5, 1.0, (noise(vWorld.zx * 0.6 - uTime * 0.6) - 0.5) * 0.5));
   float glint = pow(max(dot(nrm, normalize(uSunDir + view)), 0.0), 220.0);
   col += uSun * glint * 1.6;
+#endif
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
   #include <colorspace_fragment>
@@ -87,8 +131,8 @@ export interface Sea {
   dispose(): void;
 }
 
-/** Bakes the sea depth over the terrain area and builds the water surface. */
-export function buildSea(ground: Ground, palette: TrackPalette, quality: Quality): Sea {
+/** Bakes the sea depth over the terrain area and builds the water surface; `look` is the world look's water, or null. */
+export function buildSea(ground: Ground, palette: TrackPalette, quality: Quality, look: SeaLook | null): Sea {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -166,8 +210,15 @@ export function buildSea(ground: Ground, palette: TrackPalette, quality: Quality
         uSky: { value: new THREE.Color(palette.horizon) },
         uSunDir: { value: sunDirection(palette) },
         uSun: { value: new THREE.Color(palette.sun) },
+        uZenith: { value: new THREE.Color(palette.sky) },
+        uReflect: { value: look ? look.reflection : 0 },
+        uGlint: { value: look ? look.glint : 0 },
+        uGlintPower: { value: look ? look.glintPower : 1 },
+        uSparkle: { value: look ? look.sparkle : 0 },
+        uSparkleGain: { value: look ? look.sparkleGain : 0 },
       },
     ]),
+    defines: look ? { LOOK: 1 } : {},
     fog: true,
   });
   // UniformsUtils.merge clones textures; bind the baked one itself so disposal frees it.

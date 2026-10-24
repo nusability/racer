@@ -6,6 +6,7 @@ import { fbm, smoothstep } from '../noise.ts';
 import { rockTexture, sandTexture } from '../textures.ts';
 import { buildCoastHorizon, buildCoastLife } from './coast.ts';
 import type { BiomeKit } from './kit.ts';
+import type { SeaLook } from '../../look/lookTuning.ts';
 import { buildSea } from './water.ts';
 
 // Coral Coast: the course runs over sand spits and causeways in a turquoise sea, with
@@ -20,7 +21,8 @@ const DUNE_WAVELENGTH = 90;
 /** What a craft throws up skimming water. */
 const SPRAY_WATER = 0xe6fbff;
 
-export function beachKit(scenery: BeachScenery, palette: TrackPalette): BiomeKit {
+/** `sea`: the world look's water (sky reflection, HDR glints), or null for the water as it always was. */
+export function beachKit(scenery: BeachScenery, palette: TrackPalette, sea: SeaLook | null): BiomeKit {
   const dry = new THREE.Color(palette.sand);
   const wet = new THREE.Color(palette.sand).multiplyScalar(0.72).lerp(new THREE.Color(0x7a8a90), 0.2);
   const grass = new THREE.Color(0x7f9a44).lerp(new THREE.Color(palette.sand), 0.15);
@@ -52,10 +54,10 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette): BiomeKit
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];
-      const sea = buildSea(ctx.ground, palette, ctx.quality);
+      const water = buildSea(ctx.ground, palette, ctx.quality, sea);
       const horizonGeo = buildCoastHorizon(main, scenery, ctx.quality, ctx.seed).build(ROCK_TILE);
       const life = buildCoastLife(main, ctx.buoys, ctx.ground, scenery, ctx.quality, ctx.lit, ctx.seed);
-      const objects: THREE.Object3D[] = [sea.mesh, ...life.meshes];
+      const objects: THREE.Object3D[] = [water.mesh, ...life.meshes];
       if (horizonGeo) {
         const m = new THREE.Mesh(horizonGeo, ctx.rock);
         m.name = 'coastHorizon';
@@ -65,11 +67,11 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette): BiomeKit
       return {
         objects,
         update(time) {
-          sea.update(time);
+          water.update(time);
           life.update(time);
         },
         dispose() {
-          sea.dispose();
+          water.dispose();
           life.dispose();
           horizonGeo?.dispose();
         },

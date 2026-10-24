@@ -55,7 +55,7 @@ const hud = createHud(layer, () => {
   paused = !paused;
   hud.flash(paused ? 'PAUSED' : 'GO');
 });
-const input = createInput(layer, { steering, sensitivity: 1, sound: false, quality: 'high' });
+const input = createInput(layer, { steering, sensitivity: 1 });
 
 const COUNTDOWN_S = 4;
 const LAP_S = 20;

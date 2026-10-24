@@ -37,9 +37,23 @@ const PATH_SCALE = 260;
 const RIPPLE = 6;
 const RIPPLE_WAVES = 14;
 const RIPPLE_RATE = 3;
-/** Light by day and at deep dusk. */
-const GLOW_DAY = 0.15;
-const GLOW_DUSK = 0.32;
+/**
+ * Light by day and at deep dusk, and how much of the sky behind the body it dims. Light added
+ * onto a bright dusk sky reads white, so the body dims the sky behind it and its own saturated
+ * colour carries it: a coloured hologram over any palette. Kept under 1: ACES turns brighter
+ * cyan toward white; the rims still reach the bloom's threshold on the city's night grade.
+ */
+const GLOW_DAY = 0.75;
+const GLOW_DUSK = 0.9;
+const OPACITY_DAY = 0.85;
+const OPACITY_DUSK = 0.75;
+/**
+ * The body fades from cyan at the head to electric indigo at the tail: a magenta tail vanished
+ * into the city's magenta dusks.
+ */
+const TAIL = 0x5a48ff;
+/** The body's faces seen square-on still show this much of the light its rims do. */
+const BODY_FILL = 0.35;
 /** Projector tower height and its beam. */
 const TOWER_H = 34;
 const BEAM_DAY = 0.05;
@@ -85,6 +99,7 @@ const FRAGMENT = /* glsl */ `
 #include <fog_pars_fragment>
 uniform float uTime;
 uniform float uGlow;
+uniform float uOpacity;
 uniform vec3 uHead;
 uniform vec3 uTail;
 varying float vT;
@@ -93,13 +108,14 @@ varying float vY;
 void main() {
   vec3 col = mix(uHead, uTail, smoothstep(0.1, 0.9, vT));
   float scan = 0.6 + 0.4 * step(0.5, fract(vY * 0.35 - uTime * 2.0));
-  float edge = 0.12 + 0.88 * pow(vRim, 2.0);
-  float a = edge * scan * uGlow * (1.0 - 0.6 * smoothstep(0.85, 1.0, vT));
-  gl_FragColor = vec4(col * a, 1.0);
+  float edge = ${BODY_FILL.toFixed(2)} + ${(1 - BODY_FILL).toFixed(2)} * pow(vRim, 2.0);
+  float a = edge * scan * (1.0 - 0.6 * smoothstep(0.85, 1.0, vT));
+  // Premultiplied: its light, over the sky dimmed where the body stands.
+  gl_FragColor = vec4(col * a * uGlow, a * uOpacity);
   #include <colorspace_fragment>
   // Light fades into the haze rather than turning into it.
   #ifdef USE_FOG
-  gl_FragColor.rgb *= 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
+  gl_FragColor *= 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
   #endif
 }`;
 
@@ -125,9 +141,11 @@ export function createHologramDragon(opts: LandmarkOptions): Landmark {
   // --- The dragon ---
   const geo = dragonGeometry(kit.high);
   const time = { value: 0 };
-  const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uGlow: { value: GLOW_DAY + (GLOW_DUSK - GLOW_DAY) * dusk }, uHead: { value: new THREE.Color(CYAN) }, uTail: { value: new THREE.Color(MAGENTA) } }]);
+  const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uGlow: { value: GLOW_DAY + (GLOW_DUSK - GLOW_DAY) * dusk }, uOpacity: { value: OPACITY_DAY + (OPACITY_DUSK - OPACITY_DAY) * dusk }, uHead: { value: new THREE.Color(CYAN) }, uTail: { value: new THREE.Color(TAIL) } }]);
   uniforms.uTime = time;
-  const mat = new THREE.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: FRAGMENT, uniforms, fog: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const mat = new THREE.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: FRAGMENT, uniforms, fog: true, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'dragon';
   // Laid out on its path in the shader: its rest bounds mean nothing.

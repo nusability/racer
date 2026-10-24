@@ -3,14 +3,17 @@
 import './main.css';
 import * as THREE from 'three';
 import { GameAudio } from './audio/audio.ts';
+import { graphicsLevel } from './game/graphics.ts';
 import { RaceSession } from './game/raceSession.ts';
 import { loadSettings } from './game/save.ts';
-import type { RaceLauncher } from './game/types.ts';
+import type { RaceLauncher, ShowroomApi } from './game/types.ts';
+import { runBenchmark } from './render/benchmark.ts';
+import { gpuName, pixelRatioFor } from './render/graphics.ts';
 import { Showroom } from './render/showroom.ts';
 import { startApp } from './ui/app.ts';
 
-/** Device pixel ratio cap per quality; phones at 3× would burn fill-rate for little gain. */
-const PIXEL_RATIO_CAP = { low: 1.25, high: 2 } as const;
+/** Longest frame the showroom animates by; a longer stall (tab switch) is clipped. The race clips its own. */
+const SHOWROOM_MAX_FRAME_DT = 0.1;
 
 const root = document.getElementById('app');
 if (!root) throw new Error('index.html: #app missing');
@@ -21,11 +24,13 @@ document.body.prepend(canvas);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+/** The graphics level's render scale, read when a race or the garage starts so a change in Settings lands there. */
 function applyPixelRatio() {
-  const quality = loadSettings(window.localStorage).quality;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, PIXEL_RATIO_CAP[quality]));
+  const ratio = pixelRatioFor(graphicsLevel(loadSettings(window.localStorage)), window.devicePixelRatio);
+  if (ratio === renderer.getPixelRatio()) return;
+  renderer.setPixelRatio(ratio);
+  resize();
 }
-applyPixelRatio();
 
 const audio = new GameAudio();
 const showroom = new Showroom(renderer);
@@ -39,24 +44,32 @@ function resize() {
   session?.resize(w, h);
 }
 window.addEventListener('resize', resize);
+applyPixelRatio();
 resize();
 
 const launchRace: RaceLauncher = (req, onDone) => {
   showroom.hide();
   applyPixelRatio();
-  resize();
   session = new RaceSession(
     { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage), store: window.localStorage },
     req,
-    (outcome) => {
+    (outcome, perf) => {
       session = null;
       renderer.clear();
-      onDone(outcome);
+      onDone(outcome, perf);
     },
   );
 };
 
-startApp({ root, launchRace, showroom, audio, store: window.localStorage });
+const showroomApi: ShowroomApi = {
+  show: (visual) => {
+    applyPixelRatio();
+    showroom.show(visual);
+  },
+  hide: () => showroom.hide(),
+};
+
+startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, graphics: { gpu: gpuName(renderer.getContext()), benchmark: runBenchmark } });
 
 // Dev builds expose the live session so browser automation can inspect it.
 if (import.meta.env.DEV) Object.assign(window, { __session: () => session });
@@ -64,10 +77,13 @@ if (import.meta.env.DEV) Object.assign(window, { __session: () => session });
 let last = performance.now();
 let time = 0;
 function loop(now: number) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const raw = (now - last) / 1000;
   last = now;
+  const dt = Math.min(SHOWROOM_MAX_FRAME_DT, raw);
   time += dt;
-  if (session) session.frame(dt);
+  // The race gets the true frame time: it clips its own step, and its safety net must tell a
+  // stall from a slow frame.
+  if (session) session.frame(raw);
   else if (showroom.active) showroom.render(dt, time);
   requestAnimationFrame(loop);
 }

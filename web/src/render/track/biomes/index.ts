@@ -5,22 +5,27 @@ import { cityKit } from './city.ts';
 import { desertKit } from './desert.ts';
 import { iceKit } from './ice.ts';
 import type { BiomeKit } from './kit.ts';
-import type { AoLook } from '../../look/lookTuning.ts';
+import type { AoLook, SeaLook } from '../../look/lookTuning.ts';
 
-/**
- * The look of a track's world, from its scenery (which names the biome). `ao` is the world
- * look's baked occlusion when on; only kits with buildings of their own use it.
- */
-export function biomeKit(scenery: TrackScenery, palette: TrackPalette, ao: AoLook | null): BiomeKit {
+/** The parts of a world's look a kit draws itself (null when off or not the world's). */
+export interface KitLook {
+  /** Baked occlusion; only kits with buildings of their own use it. */
+  ao: AoLook | null;
+  /** The look's water; only kits with a sea use it. */
+  sea: SeaLook | null;
+}
+
+/** The look of a track's world, from its scenery (which names the biome). */
+export function biomeKit(scenery: TrackScenery, palette: TrackPalette, look: KitLook): BiomeKit {
   switch (scenery.biome) {
     case 'desert':
       return desertKit(scenery, palette);
     case 'beach':
-      return beachKit(scenery, palette);
+      return beachKit(scenery, palette, look.sea);
     case 'ice':
       return iceKit(scenery, palette);
     case 'city':
-      return cityKit(scenery, palette, ao);
+      return cityKit(scenery, palette, look.ao);
   }
 }
 

@@ -18,7 +18,7 @@ import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } 
 import { DRAFT_STREAKS, SpeedLines } from '../render/speedLines.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/trackScene.ts';
 import { describeLook, resolveLook, type ActiveLook } from '../render/look/look.ts';
-import { cityEnvironment } from '../render/look/cityEnv.ts';
+import { worldEnvironment } from '../render/look/env.ts';
 import { PostFx } from '../render/look/postFx.ts';
 import { GlowPools } from '../render/look/glowPools.ts';
 import { worldOfTrack } from '../data/worlds.ts';
@@ -30,7 +30,10 @@ import type { KeyValueStore } from './save.ts';
 import { loadDebugFlags } from '../ui/debugFlags.ts';
 import { createPerfOverlay, type PerfOverlay } from '../ui/perfOverlay.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
-import type { CrashReason, Hud, InputSource, RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
+import type { CrashReason, Hud, InputSource, RaceOutcome, RacePerf, RaceRequest, Settings, WreckInfo } from './types.ts';
+import { graphicsLevel } from './graphics.ts';
+import { SlowFrameWatch } from './slowFrameWatch.ts';
+import { GRAPHICS_PROFILE } from '../render/graphicsTuning.ts';
 import {
   SESSION_DUST_RANGE,
   SESSION_FPS_SMOOTHING,
@@ -113,7 +116,9 @@ const WRECK_KIND: Record<CrashReason, WreckKind> = {
 export class RaceSession {
   private readonly ctx: SessionContext;
   private readonly request: RaceRequest;
-  private readonly onDone: (o: RaceOutcome | null) => void;
+  private readonly onDone: (o: RaceOutcome | null, perf: RacePerf) => void;
+  /** The graphics safety net's view of this race's frame rate. */
+  private readonly slowWatch = new SlowFrameWatch();
   private readonly track: Track;
   private race: Race;
   private readonly scene = new THREE.Scene();
@@ -175,7 +180,7 @@ export class RaceSession {
   private readonly roadFrame = makeFrame();
   private readonly roadUp = new THREE.Vector3();
 
-  constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null) => void) {
+  constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null, perf: RacePerf) => void) {
     this.ctx = ctx;
     this.request = request;
     this.onDone = onDone;
@@ -185,28 +190,32 @@ export class RaceSession {
     this.telemetry = new TelemetryRecorder(request, ctx.settings, __BUILD__);
 
     const renderer = ctx.renderer;
-    this.look = resolveLook(worldOfTrack(def.id).biome, ctx.settings.quality, loadDebugFlags(ctx.store).look, PostFx.supported(renderer));
+    const level = graphicsLevel(ctx.settings);
+    const detail = GRAPHICS_PROFILE[level].detail;
+    this.look = resolveLook(worldOfTrack(def.id).biome, level, loadDebugFlags(ctx.store).look, PostFx.supported(renderer), def.palette);
     this.toneMappingBefore = { mapping: renderer.toneMapping, exposure: renderer.toneMappingExposure };
     const look = this.look;
     if (look && !look.post) {
       // No render target: the materials tone-map themselves on the way to the canvas.
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = look.look.grade.exposure;
+      renderer.toneMappingExposure = look.look.grade.materialExposure;
     }
     this.post = look?.post
       ? new PostFx(renderer, {
           bloom: look.bloom ? look.look.bloom : null,
+          bloomShift: look.bloomShift,
           grade: look.look.grade,
           boostBlur: look.boostBlur ? look.look.boostBlur : null,
           wet: look.wetReflections ? look.look.wetRoad : null,
+          haze: look.heatHaze ? look.look.heatHaze : null,
           aa: look.aa,
         })
       : null;
-    this.gliderEnv = look?.gliders ? cityEnvironment(renderer, look.look.env) : null;
+    this.gliderEnv = look?.gliders ? worldEnvironment(renderer, look.look.env, look.look.sunDir) : null;
     const finish = this.gliderEnv && look ? { envMap: this.gliderEnv.texture, look: look.look.gliders } : null;
 
-    this.env = applyEnvironment(this.scene, def.palette, ctx.settings.quality);
-    this.trackScene = buildTrackScene(this.track, ctx.settings.quality, look);
+    this.env = applyEnvironment(this.scene, def.palette, detail);
+    this.trackScene = buildTrackScene(this.track, detail, look);
     this.scene.add(this.trackScene.group);
     this.glowPools = look?.wetSheen
       ? new GlowPools(this.track, request.entrants.map((e) => racerById(e.racerId).visual.glow), look.look.glowPool)
@@ -215,7 +224,7 @@ export class RaceSession {
 
     for (const e of request.entrants) {
       const model = createRacerModel(racerById(e.racerId).visual, {
-        detail: e.isPlayer || ctx.settings.quality === 'high' ? 'high' : 'low',
+        detail: e.isPlayer || detail === 'high' ? 'high' : 'low',
         finish,
       });
       this.scene.add(model.root);
@@ -238,7 +247,7 @@ export class RaceSession {
     const size = ctx.renderer.getSize(new THREE.Vector2());
     this.cam = new ChaseCamera(size.x / size.y);
     this.scene.add(this.cam.camera);
-    this.effects = new Effects(this.scene, ctx.settings.quality);
+    this.effects = new Effects(this.scene, detail);
     this.speedLines = new SpeedLines(this.cam.camera);
     this.draftLines = new SpeedLines(this.cam.camera, DRAFT_STREAKS);
 
@@ -330,7 +339,7 @@ export class RaceSession {
     // A quit race isn't worth a log: there is no outcome to explain.
     if (outcome) saveTelemetry(this.telemetry.finish(outcome));
     this.dispose();
-    this.onDone(outcome);
+    this.onDone(outcome, { sustainedSlow: this.slowWatch.sustainedSlow });
   }
 
   /** Advance and draw one display frame. */
@@ -357,6 +366,7 @@ export class RaceSession {
       this.clock += dt;
       this.acc += dt;
       this.telemetry.frame(real);
+      this.slowWatch.frame(dtRaw);
       const input: PlayerInput = this.input.read();
       while (this.acc >= SIM_DT) {
         this.acc -= SIM_DT;
