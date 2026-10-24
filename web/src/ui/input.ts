@@ -1,6 +1,6 @@
 // Player input: touch controls drawn over the race (boost, brake, steering by the chosen
 // mode), DeviceOrientation tilt, and the keyboard for desktop testing. Everything registers on
-// touch-down (pointerdown), and every pointer is tracked on its own so steer + boost work at once.
+// touch-down, and every finger is tracked on its own so steer + boost work at once.
 import './race.css';
 import type { PlayerInput } from '../core/types.ts';
 import type { InputSource, Settings } from '../game/types.ts';
@@ -98,7 +98,14 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
   const trail = Array.from({ length: SLIDE_TRAIL_DOTS }, () => h('div', 'tc-trail'));
   zone.append(...trail, dot);
   const metresPerPx = SLIDE_METRES_PER_PX * settings.sensitivity;
-  let dragId: number | null = null;
+  /**
+   * The finger (or mouse) steering, as 't<identifier>' for a touch or 'p<pointerId>' for a pointer.
+   * Fingers are read through touch events, not pointer events: iOS Safari holds a touch's first
+   * pointer moves back until it has travelled a few pixels (its gesture slop), then delivers
+   * them at once, so small corrections were swallowed and then jumped. Touch events report
+   * every movement from the first pixel once touchstart is claimed.
+   */
+  let dragId: string | null = null;
   let lastX = 0;
   /** Zone origin, cached at touch-down so moves never read layout. */
   let zoneLeft = 0;
@@ -109,39 +116,73 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
   function placeDot(x: number, y: number): void {
     dot.style.transform = `translate3d(${x - zoneLeft}px, ${y - zoneTop}px, 0)`;
   }
-  zone.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (dragId !== null) return;
-    zone.setPointerCapture(e.pointerId);
-    dragId = e.pointerId;
-    lastX = e.clientX;
+  function startDrag(id: string, x: number, y: number): boolean {
+    if (dragId !== null) return false;
+    dragId = id;
+    lastX = x;
     const r = zone.getBoundingClientRect();
     zoneLeft = r.left;
     zoneTop = r.top;
-    placeDot(e.clientX, e.clientY);
+    placeDot(x, y);
     zone.classList.add('is-active');
-  });
-  zone.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== dragId) return;
-    nudge += (e.clientX - lastX) * metresPerPx;
-    lastX = e.clientX;
-    placeDot(e.clientX, e.clientY);
+    return true;
+  }
+  function moveDrag(id: string, x: number, y: number): void {
+    if (id !== dragId) return;
+    nudge += (x - lastX) * metresPerPx;
+    lastX = x;
+    placeDot(x, y);
     const t = trail[trailNext];
     trailNext = (trailNext + 1) % trail.length;
     t.style.transform = dot.style.transform;
     t.animate([{ opacity: 0.45 }, { opacity: 0 }], { duration: SLIDE_TRAIL_FADE_MS, fill: 'forwards' });
-  });
-  const endDrag = (e: PointerEvent) => {
-    if (e.pointerId !== dragId) return;
-    releaseDrag();
-  };
+  }
+  function endDrag(id: string): void {
+    if (id === dragId) releaseDrag();
+  }
   function releaseDrag(): void {
     dragId = null;
     zone.classList.remove('is-active');
   }
-  zone.addEventListener('pointerup', endDrag);
-  zone.addEventListener('pointercancel', endDrag);
-  zone.addEventListener('lostpointercapture', endDrag);
+
+  // Fingers.
+  zone.addEventListener(
+    'touchstart',
+    (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) if (startDrag(`t${t.identifier}`, t.clientX, t.clientY)) break;
+    },
+    { passive: false },
+  );
+  zone.addEventListener(
+    'touchmove',
+    (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) moveDrag(`t${t.identifier}`, t.clientX, t.clientY);
+    },
+    { passive: false },
+  );
+  const touchEnd = (e: TouchEvent) => {
+    for (const t of e.changedTouches) endDrag(`t${t.identifier}`);
+  };
+  zone.addEventListener('touchend', touchEnd);
+  zone.addEventListener('touchcancel', touchEnd);
+
+  // Mouse and pen (desktop testing); touch pointers are handled above.
+  zone.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;
+    e.preventDefault();
+    if (startDrag(`p${e.pointerId}`, e.clientX, e.clientY)) zone.setPointerCapture(e.pointerId);
+  });
+  zone.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'touch') moveDrag(`p${e.pointerId}`, e.clientX, e.clientY);
+  });
+  const pointerEnd = (e: PointerEvent) => {
+    if (e.pointerType !== 'touch') endDrag(`p${e.pointerId}`);
+  };
+  zone.addEventListener('pointerup', pointerEnd);
+  zone.addEventListener('pointercancel', pointerEnd);
+  zone.addEventListener('lostpointercapture', pointerEnd);
 
   if (settings.steering === 'drag') layer.append(zone);
   if (settings.steering === 'buttons') layer.append(h('div', 'tc-steer', left.el, right.el));
