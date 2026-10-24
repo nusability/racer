@@ -19,6 +19,7 @@ import { ribbonViews } from './track/shape.ts';
 import { buildTerrain } from './track/terrain.ts';
 import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
 import { biomeKit } from './track/biomes/index.ts';
+import { buildPadBeacons } from './track/padBeacons.ts';
 import { worldOfTrack } from '../data/worlds.ts';
 
 export { applyEnvironment } from './track/environment.ts';
@@ -135,6 +136,8 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
   add(props.build(), mats.plain, 'props');
   for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
   add(boostPads(corridors.map((c) => c.ribbon)), mats.pad, 'boostPads');
+  const beacons = buildPadBeacons(corridors.map((c) => c.ribbon));
+  if (beacons.mesh) group.add(beacons.mesh);
   if (signs.pos.length > 0) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(signs.pos, 3));
@@ -157,6 +160,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       const dt = last === null ? 0 : Math.max(0, Math.min(0.1, time - last));
       last = time;
       tex.pad.offset.y = -time * BOOST_SCROLL;
+      beacons.update(time);
       scheduled.update(time);
       cells.boost.update(time);
       cells.repair.update(time);
@@ -205,6 +209,7 @@ export function buildTrackScene(track: Track, quality: Quality): TrackScene {
       return found;
     },
     dispose() {
+      beacons.dispose();
       dressing.dispose();
       scheduled.dispose();
       cells.boost.dispose();
