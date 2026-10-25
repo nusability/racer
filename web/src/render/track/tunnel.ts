@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { FlatBuilder, P3 } from './builder.ts';
-import { TUNNEL_RIB_SPACING, TUNNEL_ROCK_ABOVE, TUNNEL_ROCK_WIDTH } from './config.ts';
+import { TUNNEL_RIBS, TUNNEL_ROCK_ABOVE, TUNNEL_ROCK_WIDTH } from './config.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing, rockQuad } from './paint.ts';
+import { beatsIn } from './rhythm.ts';
 
 // Tunnels: a lit bore through a mesa (or, in a station, its pressure hull). Walls at the road
-// edge, a chamfered roof at the ceiling height, warm light strips and strobing ceiling ribs, and
+// edge, a chamfered roof at the ceiling height, warm light strips and ceiling ribs flicking past, and
 // a hazard frame round each mouth.
 
 /** Bore cross-section: walls rise to this fraction of the ceiling, then chamfer in. */
@@ -143,11 +144,9 @@ function tunnelLights(cor: Corridor, ka: number, kb: number) {
       quadFacing(g, a0, a1, b1, b0, sub(axis, a0), color);
     }
   }
-  // Ceiling ribs: bright bars across the roof that strobe past at speed.
+  // Ceiling ribs: bright bars across the roof flicking past at speed, at uneven gaps so they never strobe.
   const r = cor.ribbon;
-  const s0 = ka * r.step;
-  const s1 = kb * r.step;
-  for (let s = Math.ceil(s0 / TUNNEL_RIB_SPACING) * TUNNEL_RIB_SPACING; s < s1; s += TUNNEL_RIB_SPACING) {
+  for (const { s } of beatsIn(TUNNEL_RIBS, r.length, ka * r.step, kb * r.step)) {
     const smp = r.sampleAt(s);
     const h = (smp.width / 2) * TUNNEL_CHAMFER;
     const y = smp.ceiling - LIGHT_INSET;

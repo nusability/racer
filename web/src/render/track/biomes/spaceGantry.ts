@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { Corridor } from '../corridor.ts';
+import { GANTRY_RHYTHM } from '../config.ts';
+import { beatsIn } from '../rhythm.ts';
 import { StationMesh } from './stationMesh.ts';
 import { light, type Lights } from './spaceStation.ts';
 
@@ -9,8 +11,7 @@ import { light, type Lights } from './spaceStation.ts';
 // light under it and strips up the legs. All of them one station mesh: they line the road, so
 // they are in view together.
 
-/** Gantries over the open deck: spacing, clear height over the road, and how far outside the boundary their legs stand. */
-const GATE_SPACING = 64;
+/** Gantries over the open deck (spaced by GANTRY_RHYTHM): clear height over the road, and how far outside the boundary their legs stand. */
 const GATE_HEIGHT = 10;
 const GATE_LEG_GAP = 1.6;
 /** The lattices: leg and beam section, bay, member (m). Only the faces racers see head-on are braced. */
@@ -49,7 +50,7 @@ export function gantries(cor: Corridor, spans: readonly (readonly [number, numbe
   const mesh = new StationMesh();
   let n = 0;
   const stations: number[] = [];
-  for (const [s0, s1] of spans) for (let s = s0; s <= s1; s += GATE_SPACING) stations.push(s);
+  for (const [s0, s1] of spans) for (const b of beatsIn(GANTRY_RHYTHM, r.length, s0, s1)) stations.push(b.s);
   for (const s of stations) {
     const k = cor.idx(Math.round(s / r.step));
     if (cor.tunnel(k) || cor.gap(k) || cor.junction(k) || cor.open(k, -1) || cor.open(k, 1)) continue;

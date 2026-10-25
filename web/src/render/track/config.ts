@@ -1,4 +1,5 @@
 import type { BiomeId } from '../../data/worlds.ts';
+import type { Rhythm } from './rhythm.ts';
 
 // Track rendering tunables. Kept beside the renderer rather than in data/tuning.ts because
 // nothing here changes how a race plays: only how the course looks and what it costs to draw.
@@ -71,13 +72,24 @@ export const CANYON_MIN_HEIGHT = 7;
 /** Mesa rock around a tunnel: lateral reach past the road edge and rise over the ceiling. */
 export const TUNNEL_ROCK_WIDTH = 75;
 export const TUNNEL_ROCK_ABOVE = 34;
-/** Spacing of the lit ceiling ribs inside tunnels, metres. */
-export const TUNNEL_RIB_SPACING = 18;
+/**
+ * The lit ceiling ribs inside tunnels: 11–27 m apart (18 m on average), never one even pitch, so
+ * no speed and frame rate lines a frame's travel up with them (track/rhythm.ts).
+ */
+export const TUNNEL_RIBS: Rhythm = { gap: [11, 27], salt: 0x71b5 };
+/** Orbital Reach's gantries over the open deck: 44–84 m apart (64 m on average), so their light bands never strobe either. */
+export const GANTRY_RHYTHM: Rhythm = { gap: [44, 84], salt: 0x6a7e };
 /** How far a chasm's crack runs past the hard boundary, and how deep its glowing floor sits. */
 export const CHASM_SIDE = 45;
 export const CHASM_FLOOR_EXTRA = 12;
 /** Painted kerb block length along the road edge, metres. */
 export const KERB_BLOCK = 8;
+/**
+ * A deck's lines of light in the void (a rail's top, an open edge) change colour at gaps of
+ * 3–21 m instead of every KERB_BLOCK: lit blocks at one pitch crawl backwards at speed like any
+ * even row of lights (track/rhythm.ts).
+ */
+export const LIT_EDGE_BLOCKS: Rhythm = { gap: [3, 21], salt: 0x3ed9 };
 
 // --- Texture tiling (metres per repeat) ---
 export const ROAD_TEXTURE_LENGTH = 64;

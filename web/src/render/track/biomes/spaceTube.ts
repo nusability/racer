@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { range, type Rng } from '../../../core/rng.ts';
 import type { P3 } from '../builder.ts';
-import { TUNNEL_RIB_SPACING, type Quality } from '../config.ts';
+import { TUNNEL_RIBS, type Quality } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
+import { beats } from '../rhythm.ts';
 import { hullOutline } from '../tunnel.ts';
 import { StationMesh, axisFrame } from './stationMesh.ts';
 import { light, type Lights } from './spaceStation.ts';
@@ -402,12 +403,12 @@ function inset(line: [number, number][], d: number): [number, number][] {
   });
 }
 
-/** Ribs round the tube at every ceiling light (TUNNEL_RIB_SPACING): steel frames whose inner faces are bands of light. */
+/** Ribs round the tube at every ceiling light (TUNNEL_RIBS): steel frames whose inner faces are bands of light. */
 function ribs(cor: Corridor, chunk: (s: number) => StationMesh): void {
   const r = cor.ribbon;
   const clear = Math.round(RIB_MOUTH_CLEAR / r.step);
   let n = 0;
-  for (let s = TUNNEL_RIB_SPACING; s < r.length; s += TUNNEL_RIB_SPACING) {
+  for (const s of beats(TUNNEL_RIBS, r.length)) {
     const k = Math.round(s / r.step);
     if (!cor.tunnel(k - clear) || !cor.tunnel(k + clear)) continue;
     const mesh = chunk(s);

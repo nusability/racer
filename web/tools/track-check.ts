@@ -1,19 +1,21 @@
 // Builds every track headless and prints its shape plus the checks authors design against:
 // corner radii, widths, jump clear speeds, flight paths that hit something, whether every
 // obstacle leaves an open way round, shortcut sanity and saving, how evenly a fork's routes
-// race, and parts of the course that crowd each other. Exit code 1 when any check warns.
+// race, parts of the course that crowd each other, and rows of lights that would strobe at
+// speed. Exit code 1 when any check warns.
 import { TRACKS, sceneryById, trackById } from '../src/data/tracks/index.ts';
 import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
-import { SEA_LEVEL } from '../src/render/track/config.ts';
+import { GANTRY_RHYTHM, LIT_EDGE_BLOCKS, SEA_LEVEL, TUNNEL_RIBS } from '../src/render/track/config.ts';
+import { beats, type Rhythm } from '../src/render/track/rhythm.ts';
 import { Ribbon, Track, type Branch, type Fork } from '../src/core/track.ts';
 import { loopCrownRadius, type LoopSpan } from '../src/core/courseShapes.ts';
 import { Race } from '../src/core/race.ts';
 import { AiDriver, type AiOptions } from '../src/core/ai.ts';
-import { racerById } from '../src/data/racers.ts';
-import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
+import { RACERS, racerById } from '../src/data/racers.ts';
+import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, DRAFT_TOP_SPEED, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -881,6 +883,95 @@ function check(def: TrackDef): string[] {
   return warn;
 }
 
+// --- Strobing: rows of lights racers fly past (render/track/rhythm.ts) ----------------------
+// A frame carries the camera d = v / fps along the road. The eye pairs each light with the
+// nearest one in the next frame, so the row seems to move by d - L for whichever lag L makes
+// the two frames' patterns match best; any match with |d - L| < d (0 < L < 2d) beats the true
+// motion, and an even pitch p matches perfectly at L = p: the row crawls backwards or freezes
+// once d > p / 2. The check samples each row as a light signal and measures its normalised
+// autocorrelation over every lag past its own feature size up to 2d, for the fastest glider
+// there is at each frame rate: a row passes when no lag matches more than STROBE_MATCH_MAX.
+
+/** Frame rates a row must not strobe at: a low-end phone's floor, the common display, a fast display. */
+const STROBE_FPS = [30, 60, 120] as const;
+/** The highest share of the row a wrong pairing may match (an even pitch matches 1). */
+const STROBE_MATCH_MAX = 0.3;
+/** Road analysed per row (m), and the signal's sampling (m): far finer than any light. */
+const STROBE_ROAD = 6000;
+const STROBE_RES = 0.25;
+/** The rows: tube ribs (their light bars 1.4 m deep), gantries (the band under the beam), and the void's lit edges (two-tone blocks). */
+const STROBE_ROWS: { name: string; rhythm: Rhythm; kind: 'bands' | 'blocks'; size: number }[] = [
+  { name: 'tube ribs', rhythm: TUNNEL_RIBS, kind: 'bands', size: 1.4 },
+  { name: 'gantries', rhythm: GANTRY_RHYTHM, kind: 'bands', size: 1.5 },
+  { name: 'lit edges', rhythm: LIT_EDGE_BLOCKS, kind: 'blocks', size: LIT_EDGE_BLOCKS.gap[1] },
+];
+/** The row the ribs used to be, an even 18 m: the measure must flag it, or it has no teeth. */
+const EVEN_RIBS = 18;
+
+/** Fastest any glider goes: fully upgraded, boosting, in a full draft. */
+function fastestSpeed(): { id: string; v: number } {
+  const maxed = { engine: MAX_UPGRADE_LEVEL, thrusters: MAX_UPGRADE_LEVEL, steering: MAX_UPGRADE_LEVEL, tank: MAX_UPGRADE_LEVEL, armor: MAX_UPGRADE_LEVEL };
+  const all = RACERS.map((r) => {
+    const s = effectiveStats(r, maxed);
+    return { id: r.id, v: s.topSpeed * (1 + s.boostPower) * (1 + DRAFT_TOP_SPEED) };
+  });
+  return all.reduce((a, b) => (b.v > a.v ? b : a));
+}
+
+function lightSignal(at: readonly number[], kind: 'bands' | 'blocks', size: number): Float32Array {
+  const x = new Float32Array(Math.ceil(STROBE_ROAD / STROBE_RES));
+  if (kind === 'bands') {
+    for (const s of at) for (let i = Math.max(0, Math.floor((s - size / 2) / STROBE_RES)); i < Math.min(x.length, (s + size / 2) / STROBE_RES); i++) x[i] = 1;
+  } else {
+    // Blocks change colour at each beat: +1 and -1 in turn.
+    let j = 0;
+    for (let i = 0; i < x.length; i++) {
+      while (j < at.length && at[j] <= i * STROBE_RES) j++;
+      x[i] = j % 2 === 0 ? 1 : -1;
+    }
+  }
+  return x;
+}
+
+/** The best wrong match over lags (from, to] metres: normalised autocorrelation and its lag. */
+function worstMatch(x: Float32Array, from: number, to: number): { c: number; lag: number } {
+  let mean = 0;
+  for (const v of x) mean += v / x.length;
+  let variance = 0;
+  for (const v of x) variance += (v - mean) ** 2 / x.length;
+  let worst = { c: -1, lag: 0 };
+  for (let k = Math.floor(from / STROBE_RES) + 1; k * STROBE_RES <= to; k++) {
+    let sum = 0;
+    for (let i = 0; i + k < x.length; i++) sum += (x[i] - mean) * (x[i + k] - mean);
+    const c = sum / (x.length - k) / variance;
+    if (c > worst.c) worst = { c, lag: k * STROBE_RES };
+  }
+  return worst;
+}
+
+function checkStrobing(): string[] {
+  const warn: string[] = [];
+  const fast = fastestSpeed();
+  console.log(`\nStrobing (fastest: ${fast.id} maxed, boosting, drafting at ${fast.v.toFixed(0)} m/s; worst wrong match, ${STROBE_MATCH_MAX} allowed):`);
+  const even = Array.from({ length: Math.floor(STROBE_ROAD / EVEN_RIBS) }, (_, i) => (i + 0.5) * EVEN_RIBS);
+  const rows = [...STROBE_ROWS.map((r) => ({ ...r, at: beats(r.rhythm, STROBE_ROAD), baseline: false })), { name: `even ${EVEN_RIBS} m (old ribs)`, at: even, kind: 'bands' as const, size: 1.4, baseline: true }];
+  for (const row of rows) {
+    const x = lightSignal(row.at, row.kind, row.size);
+    const cells = STROBE_FPS.map((fps) => {
+      const d = fast.v / fps;
+      // A wrong pairing beats the true motion only at lags under 2d; past the light's own size.
+      if (2 * d <= row.size) return `${fps} fps (${d.toFixed(1)} m/frame) clear`;
+      const m = worstMatch(x, row.size, 2 * d);
+      if (!row.baseline && m.c > STROBE_MATCH_MAX) warn.push(`strobing: ${row.name} at ${fps} fps match ${m.c.toFixed(2)} at a ${m.lag} m lag (frame travel ${d.toFixed(1)} m)`);
+      if (row.baseline && fps === STROBE_FPS[0] && m.c <= STROBE_MATCH_MAX) warn.push(`strobing: the measure passes an even ${EVEN_RIBS} m row at ${fps} fps; it cannot see strobing`);
+      return `${fps} fps (${d.toFixed(1)} m/frame) ${m.c.toFixed(2)} @${m.lag} m`;
+    });
+    console.log(`  ${row.name.padEnd(22)} ${cells.join('  ')}`);
+  }
+  for (const m of warn) console.log(`  WARN ${m}`);
+  return warn;
+}
+
 // Node global; the tools share the browser tsconfig, which has no Node typings.
 declare const process: { exitCode: number; argv: string[] };
 
@@ -895,6 +986,7 @@ if (only.length > 0 && chosen.length !== only.length) {
   throw new Error(`track-check: unknown track id in ${only.join(', ')}`);
 }
 for (const def of chosen) warnings += check(def).length;
+warnings += checkStrobing().length;
 console.log(`\nShortcuts (stock ${MEASURE_RACER}, saving vs the main road to ${MEASURE_TAIL} m past the rejoin):`);
 for (const line of shortcutTable) console.log(`  ${line}`);
 if (forkTable.length > 0) {

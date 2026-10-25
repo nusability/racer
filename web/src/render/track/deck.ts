@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { FlatBuilder, P3 } from './builder.ts';
-import { KERB_BLOCK } from './config.ts';
+import { KERB_BLOCK, LIT_EDGE_BLOCKS } from './config.ts';
 import type { Chunk, Corridor } from './corridor.ts';
 import { DROP_FALL } from './ground.ts';
 import { quadFacing, rockQuad } from './paint.ts';
+import { beatIndex } from './rhythm.ts';
 
 // Road that leaves the ground: loops, corkscrews and bridge decks get guard rails, a structural
 // underside and piers; open drops get a sheer face falling away from a hazard-painted edge.
@@ -49,7 +50,9 @@ export function deckStrip(cor: Corridor, c: Chunk, a: number, b: number): void {
   // Underside: plain steel, left to the light to darken. A loop or corkscrew turns it to face
   // the racers coming in, so a colour with the shade baked in reads as a black hole there.
   quadFacing(c.rock, cor.banked(a, L(a), -DECK_DEPTH), cor.banked(a, R(a), -DECK_DEPTH), cor.banked(b, R(b), -DECK_DEPTH), cor.banked(b, L(b), -DECK_DEPTH), down(a), STEEL);
-  const block = Math.floor((((a + b) / 2) * cor.ribbon.step) / KERB_BLOCK) % 2 === 0;
+  const mid = ((a + b) / 2) * cor.ribbon.step;
+  // In the void the rails and open edges are lines of light (below): uneven blocks, so they never strobe.
+  const block = (cor.hanging ? beatIndex(LIT_EDGE_BLOCKS, cor.ribbon.length, mid) + 1 : Math.floor(mid / KERB_BLOCK)) % 2 === 0;
   // Seen from outside, a stunt deck is traced by its rails: their outer faces carry the kerb
   // paint too, so the ribbon's two edges read against its underside from any side.
   const stunt = cor.shape.magnet[cor.idx(a)] === 1 && cor.shape.magnet[cor.idx(b)] === 1;
