@@ -1,20 +1,34 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, range, type Rng } from '../../../core/rng.ts';
+import { canvas, finish, periodicNoise } from '../canvasPaint.ts';
 import type { Quality } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
 import type { Ground } from '../ground.ts';
+import { GRAIN_MEAN, LUMP, farRockMaterial, nearRockMaterial } from './asteroidShader.ts';
 
-// Asteroids. Near the road they are real rock: one faceted, noise-lumped icosahedron, instanced
-// with its own size, squash and spin, so a whole field is one draw call and the star rakes hard
-// lit facets across them. Far off they are impostors: camera-facing quads whose shader draws a
-// lumpy disc lit as a sphere from the same star, so the field and the belt beyond it run out
-// to the horizon at one more draw call and four triangles a rock.
+// Asteroids. Near the road they are real rock: an icosphere the vertex shader shapes into each
+// rock's own lumps and craters (asteroidShader.ts), smooth-shaded, instanced in three levels of
+// detail by how big the rock is on screen, crossfading by dither between levels so nothing
+// pops: a whole field is three draws. Far off they are sprites the same height function lights
+// as rock from where the camera is, so the belt beyond the field runs to the horizon at one
+// more draw and two triangles a rock.
 
-/** Icosahedron subdivision of the near rock: its silhouette, faceted, at either quality. */
-const ROCK_DETAIL = { low: 2, high: 3 } as const;
-/** Lumps: how far the surface swells and dents (share of the radius) and how coarse the noise is. */
-const LUMP = 0.28;
-const LUMP_SCALE = 1.7;
+/** Levels of detail: icosphere subdivision per level (fine, mid, coarse) at each quality. */
+const LOD_DETAIL = { low: [6, 3, 2], high: [10, 5, 3] } as const;
+/**
+ * A rock takes the finer level while its radius over its distance is above these, crossfading
+ * over this much of a doubling either side of each: swaps happen while the coarser level's
+ * triangles are still a few pixels, so the two levels shade alike through the dither.
+ */
+const LOD_SIZE = [0.08, 0.022] as const;
+/** Under this size a rock is a few pixels and the far belt's sprites carry the field: it fades out (same band). */
+const CULL_SIZE = 0.004;
+const LOD_BAND = 0.4;
+/** Grain texture: its size (px) and lattice. */
+const GRAIN_SIZE = 256;
+const GRAIN_CELLS = 32;
+
 /** The surface never swells past this share of the nominal radius: what clearance tests use. */
 const LUMP_MAX = 1 + LUMP;
 /** Near rocks: radius range (most small, a few big), squash range, how far out from the boundary. */
@@ -35,8 +49,8 @@ const GIANT_RADIUS: readonly [number, number] = [90, 220];
 const GIANT_GAP: readonly [number, number] = [150, 520];
 /** Low quality keeps this share of the near rocks. */
 const LOW_SHARE = 0.6;
-/** Rock tones (sRGB): dark carbonaceous grey, rust, pale silicate. */
-const ROCK_TONES = [0x5a5652, 0x6a5848, 0x7a7670, 0x4a4846];
+/** Rock tints (sRGB, near white): the regolith carries the colour, these vary it rock to rock. */
+const ROCK_TINTS = [0xffffff, 0xf0e4d8, 0xe0e0e0, 0xfff4e6];
 
 /** Far rocks: how far from any road (m), the belt's spread, and their radius range. */
 const FAR_CLEAR = 600;
@@ -48,62 +62,18 @@ const FAR_FIELD_SHARE = 0.65;
 const FAR_FIELD_REACH: readonly [number, number] = [600, 3500];
 /** Low quality keeps this share of the far rocks. */
 const FAR_LOW_SHARE = 0.5;
-/** Impostor lighting: key from the star, a cool fill from the planet below, and the rock's albedo (linear). */
-const IMPOSTOR_KEY = 2.6;
-const IMPOSTOR_FILL = new THREE.Color(0.05, 0.08, 0.13);
-const IMPOSTOR_ALBEDO = new THREE.Color(0.035, 0.032, 0.03);
-
-/** One lumpy rock of unit radius, faceted, with darker hollows. */
-function rockGeometry(quality: Quality, seed: number): THREE.BufferGeometry {
-  const g = new THREE.IcosahedronGeometry(1, ROCK_DETAIL[quality]);
-  const rng = mulberry32(seed);
-  const o = [range(rng, 0, 50), range(rng, 0, 50), range(rng, 0, 50)];
-  const p = g.attributes.position as THREE.BufferAttribute;
-  const col = new Float32Array(p.count * 3);
-  const v = new THREE.Vector3();
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i).normalize();
-    const n = lumps(v.x * LUMP_SCALE + o[0], v.y * LUMP_SCALE + o[1], v.z * LUMP_SCALE + o[2]);
-    const r = 1 + LUMP * (n * 2 - 1);
-    p.setXYZ(i, v.x * r, v.y * r, v.z * r);
-    // Hollows a shade darker: dust settles in them and the light reaches them last.
-    const shade = 0.7 + 0.3 * n;
-    col.set([shade, shade, shade], i * 3);
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  g.computeBoundingSphere();
-  return g;
-}
-
-/** Smooth 3D value noise, 0..1, two octaves (deterministic: a hash of the lattice). */
-function lumps(x: number, y: number, z: number): number {
-  const hash = (i: number, j: number, k: number) => {
-    const s = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453;
-    return s - Math.floor(s);
-  };
-  const octave = (x: number, y: number, z: number) => {
-    const i = Math.floor(x);
-    const j = Math.floor(y);
-    const k = Math.floor(z);
-    const f = (t: number) => t * t * (3 - 2 * t);
-    const u = f(x - i);
-    const w = f(y - j);
-    const q = f(z - k);
-    const l = (a: number, b: number, t: number) => a + (b - a) * t;
-    return l(
-      l(l(hash(i, j, k), hash(i + 1, j, k), u), l(hash(i, j + 1, k), hash(i + 1, j + 1, k), u), w),
-      l(l(hash(i, j, k + 1), hash(i + 1, j, k + 1), u), l(hash(i, j + 1, k + 1), hash(i + 1, j + 1, k + 1), u), w),
-      q,
-    );
-  };
-  return octave(x, y, z) * 0.7 + octave(x * 2.3 + 9, y * 2.3 + 9, z * 2.3 + 9) * 0.3;
-}
+/** Seeds are spread over this range: the shader hashes them into each rock's shape. */
+const SEED_RANGE = 1000;
 
 /** A near rock: where, how big and turned (unit rock scaled), and its tone. */
 export interface Placed {
   m: THREE.Matrix4;
   tint: THREE.Color;
+  /** Its shape (asteroidShader.ts). */
+  seed: number;
+  /** Its largest radius (m) and centre, for choosing its level of detail. */
+  r: number;
+  at: THREE.Vector3;
 }
 
 /** A rock of radius r centred at (x, y, z): whether its surface keeps clear of every road. */
@@ -152,72 +122,136 @@ export function fieldRocks(cor: Corridor, s0: number, s1: number, perKm: number,
       p = cor.beside(k, side, r * LUMP_MAX + ROCK_CLEAR + range(rng, NEAR_GAP[0], NEAR_GAP[1]), smp.pos.y + range(rng, -1.2 * r, 0.8 * r));
     }
     if (!clearRock(g, p.x, p.y, p.z, r)) continue;
-    out.push({ m: rockMatrix(rng, p.x, p.y, p.z, r), tint: new THREE.Color(ROCK_TONES[Math.floor(rng() * ROCK_TONES.length)]).multiplyScalar(range(rng, 0.85, 1.15)) });
+    out.push({ m: rockMatrix(rng, p.x, p.y, p.z, r), tint: new THREE.Color(ROCK_TINTS[Math.floor(rng() * ROCK_TINTS.length)]).multiplyScalar(range(rng, 0.85, 1.15)), seed: rng() * SEED_RANGE, r, at: new THREE.Vector3(p.x, p.y, p.z) });
     i++;
   }
 }
 
-/** The near rocks as one instanced, faceted, lit mesh. */
-export function nearRockMesh(rocks: Placed[], quality: Quality, seed: number): { mesh: THREE.InstancedMesh; dispose(): void } | null {
-  if (rocks.length === 0) return null;
-  const geo = rockGeometry(quality, seed);
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const mesh = new THREE.InstancedMesh(geo, mat, rocks.length);
-  rocks.forEach((r, i) => {
-    mesh.setMatrixAt(i, r.m);
-    mesh.setColorAt(i, r.tint);
-  });
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.computeBoundingSphere();
-  mesh.name = 'asteroids';
-  return { mesh, dispose: () => (geo.dispose(), mat.dispose()) };
+/** Near-white grain, tiling: the rocks sample it triplanar (asteroidShader.ts). */
+function grainTexture(seed: number): THREE.CanvasTexture {
+  const [cv, ctx] = canvas(GRAIN_SIZE, GRAIN_SIZE);
+  const rng = mulberry32(seed ^ 0x6a1);
+  const coarse = periodicNoise(rng, GRAIN_CELLS / 4);
+  const fine = periodicNoise(rng, GRAIN_CELLS);
+  const img = ctx.createImageData(GRAIN_SIZE, GRAIN_SIZE);
+  for (let y = 0; y < GRAIN_SIZE; y++) {
+    for (let x = 0; x < GRAIN_SIZE; x++) {
+      const u = x / GRAIN_SIZE;
+      const v = y / GRAIN_SIZE;
+      const value = GRAIN_MEAN + coarse(u * (GRAIN_CELLS / 4), v * (GRAIN_CELLS / 4)) * 0.1 + fine(u * GRAIN_CELLS, v * GRAIN_CELLS) * 0.08 + (rng() - 0.5) * 0.08;
+      const i = (y * GRAIN_SIZE + x) * 4;
+      const c = Math.max(0, Math.min(255, value * 255));
+      img.data.set([c, c, c, 255], i);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return finish(cv, THREE.RepeatWrapping);
 }
 
-const IMPOSTOR_VERTEX = /* glsl */ `
-uniform vec3 uSunDir;
-varying vec2 vUv;
-varying float vSeed;
-varying vec3 vSun;
-varying vec3 vUp;
-void main() {
-  vec3 centre = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-  float radius = length(instanceMatrix[0].xyz);
-  vec4 mv = viewMatrix * vec4(centre, 1.0);
-  // Facing the camera; the quad is a little wider than the rock so the lumps fit inside it.
-  mv.xy += position.xy * radius * 2.6;
-  gl_Position = projectionMatrix * mv;
-  vUv = position.xy * 2.6;
-  vSeed = float(gl_InstanceID);
-  vSun = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
-  vUp = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-}`;
+/** An indexed unit icosphere: shared vertices, so the vertex shader shapes each once. */
+function icosphere(detail: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(1, detail);
+  g.deleteAttribute('normal');
+  g.deleteAttribute('uv');
+  const merged = mergeVertices(g);
+  g.dispose();
+  // The shader displaces by up to LUMP: bounds must hold the swollen rock.
+  merged.boundingSphere = new THREE.Sphere(new THREE.Vector3(), LUMP_MAX);
+  return merged;
+}
 
-const IMPOSTOR_FRAGMENT = /* glsl */ `
-uniform vec3 uFill;
-uniform vec3 uAlbedo;
-uniform vec3 uKey;
-varying vec2 vUv;
-varying float vSeed;
-varying vec3 vSun;
-varying vec3 vUp;
-float hash(float n) { return fract(sin(n) * 43758.5453); }
-void main() {
-  float a = atan(vUv.y, vUv.x);
-  float s = vSeed * 7.31;
-  float edge = 1.0 + ${LUMP.toFixed(2)} * (0.45 * sin(a * 2.0 + s) + 0.3 * sin(a * 5.0 + s * 1.7) + 0.15 * sin(a * 11.0 + s * 2.9));
-  float r = length(vUv) / edge;
-  if (r > 1.0) discard;
-  // Lit as a sphere, the normal bent by the same lumps so the terminator is ragged.
-  vec3 n = normalize(vec3(vUv / edge, sqrt(max(0.0, 1.0 - r * r)) + 0.2 * sin(a * 3.0 + s)));
-  float key = smoothstep(-0.05, 0.6, dot(n, vSun));
-  float fill = 0.5 + 0.5 * dot(n, -vUp);
-  vec3 col = uAlbedo * (0.6 + 0.4 * hash(vSeed)) * (key * uKey + fill * uFill * 4.0);
-  gl_FragColor = vec4(col, 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
+/**
+ * The near rocks (see the header): three instanced levels of detail, refilled each frame from
+ * where the camera is; a rock near a level's edge is drawn in both, crossfading by dither.
+ */
+export function nearRocks(rocks: Placed[], quality: Quality, seed: number): { meshes: THREE.InstancedMesh[]; update(camera: THREE.Vector3): void; dispose(): void } | null {
+  if (rocks.length === 0) return null;
+  const grain = grainTexture(seed);
+  const mat = nearRockMaterial(quality === 'low', grain);
+  const levels = LOD_DETAIL[quality].map((detail, i) => {
+    const geo = icosphere(detail);
+    const seeds = new THREE.InstancedBufferAttribute(new Float32Array(rocks.length), 1).setUsage(THREE.DynamicDrawUsage);
+    const fades = new THREE.InstancedBufferAttribute(new Float32Array(rocks.length), 1).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aSeed', seeds);
+    geo.setAttribute('aFade', fades);
+    const mesh = new THREE.InstancedMesh(geo, mat, rocks.length);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Colours are set per slot as rocks are filled in; created up front so the program has them.
+    mesh.setColorAt(0, rocks[0].tint);
+    mesh.instanceColor?.setUsage(THREE.DynamicDrawUsage);
+    mesh.count = 0;
+    mesh.name = `asteroids${i}`;
+    return { mesh, geo, seeds, fades, held: [] as Placed[], bounds: new THREE.Sphere() };
+  });
+  const box = new THREE.Box3();
+  const reach = new THREE.Vector3();
+  const add = (level: number, rock: Placed, fade: number) => {
+    const l = levels[level];
+    const i = l.mesh.count++;
+    l.held[i] = rock;
+    l.mesh.setMatrixAt(i, rock.m);
+    l.mesh.setColorAt(i, rock.tint);
+    l.seeds.setX(i, rock.seed);
+    l.fades.setX(i, fade);
+  };
+  return {
+    meshes: levels.map((l) => l.mesh),
+    update(camera) {
+      for (const l of levels) l.mesh.count = 0;
+      for (const rock of rocks) {
+        const q = rock.r / Math.max(1, rock.at.distanceTo(camera));
+        // Finer levels first: the first boundary the rock is over (or within the band of) decides.
+        let level: number = LOD_SIZE.length;
+        let fade = 1;
+        for (let b = 0; b < LOD_SIZE.length; b++) {
+          const x = Math.log2(q / LOD_SIZE[b]) / LOD_BAND;
+          if (x > 0.5) {
+            level = b;
+            break;
+          }
+          if (x > -0.5) {
+            level = b;
+            fade = x + 0.5;
+            break;
+          }
+        }
+        if (level === LOD_SIZE.length) {
+          // The coarsest level fades out as the rock shrinks to a few pixels.
+          const x = Math.log2(q / CULL_SIZE) / LOD_BAND;
+          if (x < -0.5) continue;
+          if (x < 0.5) fade = x + 0.5;
+          add(level, rock, fade);
+        } else if (fade < 1) {
+          add(level, rock, fade);
+          add(level + 1, rock, -fade);
+        } else add(level, rock, 1);
+      }
+      for (const l of levels) {
+        l.mesh.instanceMatrix.needsUpdate = true;
+        if (l.mesh.instanceColor) l.mesh.instanceColor.needsUpdate = true;
+        l.seeds.needsUpdate = true;
+        l.fades.needsUpdate = true;
+        // Bounds of what this level now holds, so a level with nothing in view is culled whole.
+        box.makeEmpty();
+        for (let i = 0; i < l.mesh.count; i++) {
+          const rock = l.held[i];
+          reach.setScalar(rock.r * LUMP_MAX);
+          box.expandByPoint(reach.clone().add(rock.at)).expandByPoint(reach.negate().add(rock.at));
+        }
+        l.mesh.boundingSphere = box.getBoundingSphere(l.bounds);
+        // An empty level is no draw at all.
+        l.mesh.visible = l.mesh.count > 0;
+      }
+    },
+    dispose() {
+      for (const l of levels) l.geo.dispose();
+      mat.dispose();
+      grain.dispose();
+    },
+  };
+}
 
-/** Far rocks round the course and crowded round the fields, as one draw of camera-facing impostors. */
+/** Far rocks round the course and crowded round the fields, as one draw of sprites lit as rock. */
 export function farRockMesh(g: Ground, fields: { x: number; y: number; z: number }[], count: number, quality: Quality, sunDir: THREE.Vector3, sun: THREE.Color, seed: number): { mesh: THREE.InstancedMesh; dispose(): void } | null {
   const rng = mulberry32(seed ^ 0xfa2);
   const n = Math.round(count * (quality === 'high' ? 1 : FAR_LOW_SHARE));
@@ -240,20 +274,12 @@ export function farRockMesh(g: Ground, fields: { x: number; y: number; z: number
   }
   if (mats.length === 0) return null;
   const geo = new THREE.PlaneGeometry(1, 1);
-  const mat = new THREE.ShaderMaterial({
-    vertexShader: IMPOSTOR_VERTEX,
-    fragmentShader: IMPOSTOR_FRAGMENT,
-    uniforms: {
-      uSunDir: { value: sunDir.clone() },
-      uKey: { value: sun.clone().multiplyScalar(IMPOSTOR_KEY) },
-      uFill: { value: IMPOSTOR_FILL.clone() },
-      uAlbedo: { value: IMPOSTOR_ALBEDO.clone() },
-    },
-  });
+  geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(Float32Array.from(mats, () => rng() * SEED_RANGE), 1));
+  const mat = farRockMaterial(sunDir, sun);
   const mesh = new THREE.InstancedMesh(geo, mat, mats.length);
   mats.forEach((x, i) => mesh.setMatrixAt(i, x));
   mesh.instanceMatrix.needsUpdate = true;
-  // The bounds three computes from the unit quad miss the billboard's reach; the whole belt is one draw anyway.
+  // The bounds three computes from the unit quad miss the sprite's reach; the whole belt is one draw anyway.
   mesh.frustumCulled = false;
   mesh.name = 'farAsteroids';
   return { mesh, dispose: () => (geo.dispose(), mat.dispose()) };

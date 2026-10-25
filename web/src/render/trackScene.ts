@@ -20,6 +20,7 @@ import { buildPosts } from './track/posts.ts';
 import { hangInVoid, ribbonViews } from './track/shape.ts';
 import { buildTerrain } from './track/terrain.ts';
 import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
+import { deckGlowTexture } from './track/deckTexture.ts';
 import { biomeKit } from './track/biomes/index.ts';
 import { buildPadBeacons } from './track/padBeacons.ts';
 import type { ActiveLook } from './look/look.ts';
@@ -99,12 +100,16 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
     pad: boostTexture(),
     sign: signTexture(track.branches.map((b) => ({ name: b.def.name, side: b.side })), def.palette.accent),
   };
+  // A station deck carries its own light map (lit seams, edge strips, guide studs); other roads
+  // glow their own texture at the kit's road light.
+  const roadGlow = kit.road.surface === 'deck' ? deckGlowTexture(tex.road, def.palette, kit.roadLight) : null;
+  const roadEmissive = roadGlow ? { emissive: new THREE.Color(1, 1, 1), emissiveMap: roadGlow } : { emissive: new THREE.Color().setScalar(kit.roadLight), emissiveMap: tex.road };
   const mats = {
     // A kit's road light glows the road's own texture (lines and kerbs included), so the road
     // still reads where it faces away from the sun: the far side of a loop, a rolled corkscrew.
-    road: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, emissive: new THREE.Color().setScalar(kit.roadLight), emissiveMap: tex.road }),
+    road: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, ...roadEmissive }),
     // Branch roads overlap the main road's edge in junctions; they win the depth tie.
-    branchRoad: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, emissive: new THREE.Color().setScalar(kit.roadLight), emissiveMap: tex.road, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    branchRoad: new THREE.MeshLambertMaterial({ map: tex.road, vertexColors: true, ...roadEmissive, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     sand: new THREE.MeshLambertMaterial({ map: tex.sand, vertexColors: true }),
     rock: new THREE.MeshLambertMaterial({ map: tex.rock, vertexColors: true }),
     plain: new THREE.MeshLambertMaterial({ vertexColors: true }),
@@ -248,6 +253,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
       });
       for (const m of Object.values(mats)) m.dispose();
       for (const t of Object.values(tex)) t.dispose();
+      roadGlow?.dispose();
     },
   };
 }

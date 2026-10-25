@@ -3,6 +3,7 @@ import { mulberry32, type Rng } from '../../core/rng.ts';
 import type { TrackPalette } from '../../core/types.ts';
 import { KERB_BLOCK, ROAD_TEXTURE_LENGTH, ROCK_TILE, type Quality, TEXTURE_SIZE } from './config.ts';
 import { canvas, css, finish, periodicNoise, rgb, wrapStroke } from './canvasPaint.ts';
+import { deckPlating } from './deckTexture.ts';
 
 // Procedural canvas textures, painted once per scene from the track's palette. Detail maps
 // (sand, rock) are near-white multipliers over the vertex colours, so geometry keeps its tint
@@ -27,12 +28,6 @@ export interface RoadStyle {
   runoff: 'sand' | 'wetsand' | 'concrete';
 }
 
-/** A station deck's steel plates: their length along the road and how many span its width. */
-const DECK_PLATE = 4;
-const DECK_PLATES_ACROSS = 6;
-/** Rivets along each plate seam, per plate width. */
-const DECK_RIVETS = 5;
-
 /** Boardwalk plank depth along the road, metres, and the gap between planks. */
 const PLANK = 0.32;
 const PLANK_GAP = 0.04;
@@ -53,122 +48,110 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
   // --- Paved road ---
   ctx.fillStyle = css(palette.road);
   ctx.fillRect(0, 0, R, H);
-  if (style.surface === 'boardwalk') {
-    // Planks across the road: each its own tone, with dark gaps and nail rows.
-    for (let y = 0; y < H; y += PLANK * pxPerM) {
-      ctx.fillStyle = css(palette.road, 0.82 + rng() * 0.3);
-      ctx.fillRect(0, y, R, PLANK * pxPerM);
-      ctx.fillStyle = css(palette.road, 0.45, 0.9);
-      ctx.fillRect(0, y, R, Math.max(1, PLANK_GAP * pxPerM));
-      for (let x = 0.12; x < 1; x += 0.25) ctx.fillRect(x * R, y + (PLANK * pxPerM) / 2, 2, 2);
-    }
-  } else if (style.surface === 'deck') {
-    // Steel plates, each its own tone, with dark seams and rivet rows: no cracks, no gravel.
-    const pw = R / DECK_PLATES_ACROSS;
-    for (let y = 0; y < H; y += DECK_PLATE * pxPerM) {
-      for (let i = 0; i < DECK_PLATES_ACROSS; i++) {
-        ctx.fillStyle = css(palette.road, 0.9 + rng() * 0.2);
-        ctx.fillRect(i * pw, y, pw, DECK_PLATE * pxPerM);
-        ctx.fillStyle = css(palette.road, 0.5, 0.9);
-        ctx.fillRect(i * pw, y, 2, DECK_PLATE * pxPerM);
-        ctx.fillRect(i * pw, y, pw, 2);
-        ctx.fillStyle = css(palette.road, 1.4, 0.7);
-        for (let r = 0; r < DECK_RIVETS; r++) ctx.fillRect(i * pw + ((r + 0.5) * pw) / DECK_RIVETS, y + 4, 2, 2);
+  if (style.surface === 'deck') deckPlating(ctx, palette, rng, R, H, pxPerM);
+  else {
+    if (style.surface === 'boardwalk') {
+      // Planks across the road: each its own tone, with dark gaps and nail rows.
+      for (let y = 0; y < H; y += PLANK * pxPerM) {
+        ctx.fillStyle = css(palette.road, 0.82 + rng() * 0.3);
+        ctx.fillRect(0, y, R, PLANK * pxPerM);
+        ctx.fillStyle = css(palette.road, 0.45, 0.9);
+        ctx.fillRect(0, y, R, Math.max(1, PLANK_GAP * pxPerM));
+        for (let x = 0.12; x < 1; x += 0.25) ctx.fillRect(x * R, y + (PLANK * pxPerM) / 2, 2, 2);
+      }
+    } else if (style.surface === 'causeway') {
+      // Concrete slabs with sand blown across them.
+      for (let y = 0; y < H; y += 4 * pxPerM) {
+        ctx.fillStyle = css(palette.road, 0.75, 0.6);
+        ctx.fillRect(0, y, R, 2);
+      }
+      for (let i = 0; i < 40; i++) {
+        ctx.fillStyle = css(palette.sand, 1, 0.12 + rng() * 0.18);
+        const y = rng() * H;
+        wrapStroke(H, (dy) => ctx.fillRect(0, y + dy, R, 30 + rng() * 120));
       }
     }
-  } else if (style.surface === 'causeway') {
-    // Concrete slabs with sand blown across them.
-    for (let y = 0; y < H; y += 4 * pxPerM) {
-      ctx.fillStyle = css(palette.road, 0.75, 0.6);
-      ctx.fillRect(0, y, R, 2);
-    }
-    for (let i = 0; i < 40; i++) {
-      ctx.fillStyle = css(palette.sand, 1, 0.12 + rng() * 0.18);
+    // Repair patches and tonal blotches.
+    for (let i = 0; i < 26; i++) {
+      const x = rng() * R;
       const y = rng() * H;
-      wrapStroke(H, (dy) => ctx.fillRect(0, y + dy, R, 30 + rng() * 120));
+      const w = 20 + rng() * R * 0.4;
+      const h = 40 + rng() * 260;
+      ctx.fillStyle = css(palette.road, 0.88 + rng() * 0.2, 0.35);
+      wrapStroke(H, (dy) => ctx.fillRect(x - w / 2, y + dy, w, h));
     }
-  }
-  // Repair patches and tonal blotches.
-  for (let i = 0; i < 26; i++) {
-    const x = rng() * R;
-    const y = rng() * H;
-    const w = 20 + rng() * R * 0.4;
-    const h = 40 + rng() * 260;
-    ctx.fillStyle = css(palette.road, 0.88 + rng() * 0.2, 0.35);
-    wrapStroke(H, (dy) => ctx.fillRect(x - w / 2, y + dy, w, h));
-  }
-  // Aggregate: fine speckle and the odd pebble.
-  for (let i = 0; i < (R * H) / 9; i++) {
-    const v = 0.72 + rng() * 0.5;
-    ctx.fillStyle = css(palette.road, v, 0.8);
-    ctx.fillRect(rng() * R, rng() * H, 1 + rng() * 1.5, 1 + rng() * 1.5);
-  }
-  const metal = style.surface === 'deck';
-  for (let i = 0; i < (metal ? 0 : 900); i++) {
-    ctx.fillStyle = css(palette.road, rng() < 0.5 ? 0.62 : 1.25, 0.9);
-    ctx.beginPath();
-    ctx.arc(rng() * R, rng() * H, 1.2 + rng() * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Hover scorch: long soft streaks bunched round two racing lines.
-  for (let i = 0; i < 70; i++) {
-    const lane = rng() < 0.5 ? 0.33 : 0.67;
-    const x = (lane + (rng() - 0.5) * 0.22) * R;
-    const len = 200 + rng() * H * 0.8;
-    const y = rng() * H;
-    const g = ctx.createLinearGradient(0, y, 0, y + len);
-    g.addColorStop(0, 'rgba(30,14,6,0)');
-    g.addColorStop(0.5, `rgba(30,14,6,${0.12 + rng() * 0.18})`);
-    g.addColorStop(1, 'rgba(30,14,6,0)');
-    ctx.fillStyle = g;
-    const w = 1.5 + rng() * 5;
-    wrapStroke(H, (dy) => ctx.fillRect(x, y + dy, w, len));
-  }
-  // Cracks: wandering dark lines, mostly along the road.
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < (metal ? 0 : 40); i++) {
-    let x = rng() * R;
-    let y = rng() * H;
-    ctx.strokeStyle = css(palette.road, 0.45, 0.7);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    const steps = 6 + Math.floor(rng() * 14);
-    let ang = rng() < 0.6 ? Math.PI / 2 : rng() * Math.PI;
-    for (let s = 0; s < steps; s++) {
-      ang += (rng() - 0.5) * 1.1;
-      x = Math.max(4, Math.min(R - 4, x + Math.cos(ang) * 9));
-      y += Math.sin(ang) * 9;
-      ctx.lineTo(x, y);
+    // Aggregate: fine speckle and the odd pebble.
+    for (let i = 0; i < (R * H) / 9; i++) {
+      const v = 0.72 + rng() * 0.5;
+      ctx.fillStyle = css(palette.road, v, 0.8);
+      ctx.fillRect(rng() * R, rng() * H, 1 + rng() * 1.5, 1 + rng() * 1.5);
     }
-    ctx.stroke();
-  }
-  // Seams across the road.
-  ctx.fillStyle = 'rgba(30,15,5,0.2)';
-  for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += SEAM_SPACING) ctx.fillRect(0, m * pxPerM, R, 2);
-  // Paint: worn dashed centre line, edge lines, kerbs.
-  const paint = (x: number, y: number, w: number, h: number, color: string) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-    // Wear: knock specks out of fresh paint.
-    ctx.fillStyle = css(palette.road, 0.95, 0.55);
-    for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
-  };
-  // A city street (and a station deck) is laned: two dashed lane lines instead of one centre line.
-  const lanes = style.surface === 'asphalt' || metal ? CITY_LANES : [0.5];
-  for (const lane of lanes) {
-    for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
-      paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
+    for (let i = 0; i < 900; i++) {
+      ctx.fillStyle = css(palette.road, rng() < 0.5 ? 0.62 : 1.25, 0.9);
+      ctx.beginPath();
+      ctx.arc(rng() * R, rng() * H, 1.2 + rng() * 2.2, 0, Math.PI * 2);
+      ctx.fill();
     }
-  }
-  for (const mirror of [false, true]) {
-    const x = (u: number) => (mirror ? R - u * R : u * R);
-    const l0 = x(EDGE_LINE[0]);
-    const l1 = x(EDGE_LINE[1]);
-    paint(Math.min(l0, l1), 0, Math.abs(l1 - l0), H, '#f4f0e8');
-    for (let b = 0; b < ROAD_TEXTURE_LENGTH / KERB_BLOCK; b++) {
-      const k0 = x(0);
-      const k1 = x(KERB);
-      paint(Math.min(k0, k1), b * KERB_BLOCK * pxPerM, Math.abs(k1 - k0), KERB_BLOCK * pxPerM, b % 2 ? '#f4f0e8' : css(palette.accent));
+    // Hover scorch: long soft streaks bunched round two racing lines.
+    for (let i = 0; i < 70; i++) {
+      const lane = rng() < 0.5 ? 0.33 : 0.67;
+      const x = (lane + (rng() - 0.5) * 0.22) * R;
+      const len = 200 + rng() * H * 0.8;
+      const y = rng() * H;
+      const g = ctx.createLinearGradient(0, y, 0, y + len);
+      g.addColorStop(0, 'rgba(30,14,6,0)');
+      g.addColorStop(0.5, `rgba(30,14,6,${0.12 + rng() * 0.18})`);
+      g.addColorStop(1, 'rgba(30,14,6,0)');
+      ctx.fillStyle = g;
+      const w = 1.5 + rng() * 5;
+      wrapStroke(H, (dy) => ctx.fillRect(x, y + dy, w, len));
+    }
+    // Cracks: wandering dark lines, mostly along the road.
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 40; i++) {
+      let x = rng() * R;
+      let y = rng() * H;
+      ctx.strokeStyle = css(palette.road, 0.45, 0.7);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      const steps = 6 + Math.floor(rng() * 14);
+      let ang = rng() < 0.6 ? Math.PI / 2 : rng() * Math.PI;
+      for (let s = 0; s < steps; s++) {
+        ang += (rng() - 0.5) * 1.1;
+        x = Math.max(4, Math.min(R - 4, x + Math.cos(ang) * 9));
+        y += Math.sin(ang) * 9;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // Seams across the road.
+    ctx.fillStyle = 'rgba(30,15,5,0.2)';
+    for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += SEAM_SPACING) ctx.fillRect(0, m * pxPerM, R, 2);
+    // Paint: worn dashed centre line, edge lines, kerbs.
+    const paint = (x: number, y: number, w: number, h: number, color: string) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+      // Wear: knock specks out of fresh paint.
+      ctx.fillStyle = css(palette.road, 0.95, 0.55);
+      for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
+    };
+    // A city street is laned: two dashed lane lines instead of one centre line.
+    const lanes = style.surface === 'asphalt' ? CITY_LANES : [0.5];
+    for (const lane of lanes) {
+      for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
+        paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
+      }
+    }
+    for (const mirror of [false, true]) {
+      const x = (u: number) => (mirror ? R - u * R : u * R);
+      const l0 = x(EDGE_LINE[0]);
+      const l1 = x(EDGE_LINE[1]);
+      paint(Math.min(l0, l1), 0, Math.abs(l1 - l0), H, '#f4f0e8');
+      for (let b = 0; b < ROAD_TEXTURE_LENGTH / KERB_BLOCK; b++) {
+        const k0 = x(0);
+        const k1 = x(KERB);
+        paint(Math.min(k0, k1), b * KERB_BLOCK * pxPerM, Math.abs(k1 - k0), KERB_BLOCK * pxPerM, b % 2 ? '#f4f0e8' : css(palette.accent));
+      }
     }
   }
 

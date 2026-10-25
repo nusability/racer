@@ -3,7 +3,8 @@ import { mulberry32, range } from '../../core/rng.ts';
 import type { TrackPalette } from '../../core/types.ts';
 import { sunDirection } from './environment.ts';
 
-// Space at infinity: deep black with a faint nebula, one hard star, a banded gas giant under
+// Space at infinity: deep black with a faint nebula, one hard star, a banded gas giant (streaked
+// belts, eddies along their edges, a great storm and a string of white ovals) under
 // and beside the course (lit by the star, its night side barely there, a thin bright rim of
 // atmosphere on the day side) and crisp stars. Depth comes from light, not fog:
 // the planet's lit face and the star carry the far field. The light matches it: a hard key from
@@ -29,6 +30,29 @@ const PLANET_CREAM = 0xe4dcc2;
 /** Banding: belts across the latitudes, and how hard the turbulence bends them. */
 const BANDS = 9;
 const BAND_WARP = 1.4;
+/**
+ * Fine banding: many thin streaks of slightly different tone inside the belts, the turbulence
+ * stretched along the longitudes this many times (how far a streak runs before it breaks), and
+ * how strongly the streaks shift the tone.
+ */
+const STREAKS = 46;
+const STREAK_STRETCH = 9;
+const STREAK_TONE = 0.16;
+/** Shear eddies along the belt edges: their size (cells round the planet) and how far they curl the bands. */
+const EDDIES = 14;
+const EDDY_CURL = 0.035;
+/** The great storm: latitude and longitude (radians), half extent (lon, lat), its swirl and colours (sRGB). */
+const STORM_AT: readonly [number, number] = [-0.32, 0.9];
+const STORM_SIZE: readonly [number, number] = [0.3, 0.13];
+const STORM_SWIRL = 5;
+const STORM_CORE = 0xf2e6d0;
+const STORM_RING = 0x2d4d86;
+/** Small white ovals strung along one belt: how many, their latitude and size (radians). */
+const OVALS = 7;
+const OVAL_LAT = 0.42;
+const OVAL_SIZE = 0.045;
+/** The disc darkens toward its limb (the light crosses more haze there): power of the cosine and floor. */
+const LIMB_DARK: readonly [number, number] = [0.45, 0.35];
 /**
  * Lit face brightness (linear): the brightest broad thing in the frame, but its zones stay under
  * the bloom's threshold once exposed (look/worldLooks.ts), so it reads as a surface, not a glare.
@@ -106,6 +130,8 @@ uniform vec3 uPole;
 uniform vec3 uZone;
 uniform vec3 uBelt;
 uniform vec3 uCream;
+uniform vec3 uStormCore;
+uniform vec3 uStormRing;
 uniform vec3 uNight;
 uniform vec3 uRim;
 uniform vec3 uNebA;
@@ -131,11 +157,38 @@ void main() {
   if (tP > 0.0) {
     vec3 N = (d * tP - uPlanet) / R;
     float lat = dot(N, uPole);
+    vec3 e1 = normalize(cross(uPole, abs(uPole.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 e2 = cross(uPole, e1);
+    float lon = atan(dot(N, e2), dot(N, e1));
+    float la = asin(clamp(lat, -1.0, 1.0));
+    // Eddies curl the bands along their edges: a turbulence that shifts the latitude it reads.
+    float eddy = fbm3(vec3(cos(lon), sin(lon), la * 3.0) * ${(EDDIES / 3).toFixed(2)}) - 0.5;
     float warp = fbm3(N * 3.1) - 0.5;
     float swirl = fbm3(N * 9.0 + 3.0) - 0.5;
-    float bands = sin((lat + warp * ${(BAND_WARP * 0.1).toFixed(3)} + swirl * 0.02) * ${(BANDS * Math.PI).toFixed(3)});
+    float l2 = lat + warp * ${(BAND_WARP * 0.1).toFixed(3)} + swirl * 0.02 + eddy * ${EDDY_CURL.toFixed(3)};
+    float bands = sin(l2 * ${(BANDS * Math.PI).toFixed(3)});
     vec3 surf = mix(uBelt, uZone, smoothstep(-0.6, 0.6, bands));
-    surf = mix(surf, uCream, smoothstep(0.75, 0.95, sin(lat * ${(BANDS * 0.5 * Math.PI).toFixed(3)} + 0.7)) * 0.7);
+    surf = mix(surf, uCream, smoothstep(0.75, 0.95, sin(l2 * ${(BANDS * 0.5 * Math.PI).toFixed(3)} + 0.7)) * 0.7);
+    // Streaks: thin bands of tone, their turbulence stretched along the longitudes.
+    float streak = fbm3(vec3(cos(lon) * 2.0, sin(lon) * 2.0, l2 * ${STREAK_STRETCH.toFixed(1)}) * 1.6) - 0.5;
+    surf *= 1.0 + ${STREAK_TONE.toFixed(2)} * (sin(l2 * ${(STREAKS * Math.PI).toFixed(3)} + streak * 6.0) * 0.6 + streak * 1.4);
+    // The great storm: an oval of pale cloud wound into a spiral, ringed by a dark collar.
+    vec2 sq = vec2(sin(lon - ${STORM_AT[1].toFixed(3)}) / ${STORM_SIZE[0].toFixed(3)}, (la - ${STORM_AT[0].toFixed(3)}) / ${STORM_SIZE[1].toFixed(3)});
+    float sr = length(sq);
+    float sa = atan(sq.y, sq.x) + sr * ${STORM_SWIRL.toFixed(1)};
+    float spiral = 0.5 + 0.5 * sin(sa * 2.0 + fbm3(vec3(sq * 2.0, 1.0)) * 4.0);
+    float stormIn = (1.0 - smoothstep(0.55, 1.0, sr)) * step(0.0, cos(lon - ${STORM_AT[1].toFixed(3)}));
+    float collar = exp(-pow((sr - 1.05) / 0.18, 2.0)) * step(0.0, cos(lon - ${STORM_AT[1].toFixed(3)}));
+    surf = mix(surf, uStormRing, collar * 0.65);
+    surf = mix(surf, mix(uStormCore * 0.8, uStormCore, spiral), stormIn);
+    // Small white ovals along one belt, spaced round it.
+    float slot = floor((lon + 3.14159) / 6.28318 * ${OVALS.toFixed(1)});
+    float slon = (slot + 0.5) / ${OVALS.toFixed(1)} * 6.28318 - 3.14159 + (fract(sin(slot * 12.9) * 437.5) - 0.5) * 0.4;
+    vec2 oq = vec2(sin(lon - slon) / ${(OVAL_SIZE * 1.8).toFixed(3)}, (la - ${OVAL_LAT.toFixed(3)}) / ${OVAL_SIZE.toFixed(3)});
+    surf = mix(surf, uStormCore, (1.0 - smoothstep(0.6, 1.0, length(oq))) * 0.85 * step(0.0, cos(lon - slon)));
+    // Limb darkening: the haze thickens toward the edge of the disc.
+    float mu = max(dot(N, -d), 0.0);
+    surf *= mix(${LIMB_DARK[1].toFixed(2)}, 1.0, pow(mu, ${LIMB_DARK[0].toFixed(2)}));
     float ndl = dot(N, uSunDir);
     float lit = smoothstep(-0.06, 0.35, ndl);
     float graze = pow(1.0 - max(dot(N, -d), 0.0), ${RIM_POWER.toFixed(1)});
@@ -209,6 +262,8 @@ export function applySpaceSky(scene: THREE.Scene, palette: TrackPalette): { sun:
       uZone: { value: new THREE.Color(PLANET_ZONE) },
       uBelt: { value: new THREE.Color(PLANET_BELT) },
       uCream: { value: new THREE.Color(PLANET_CREAM) },
+      uStormCore: { value: new THREE.Color(STORM_CORE) },
+      uStormRing: { value: new THREE.Color(STORM_RING) },
       uNight: { value: new THREE.Color(PLANET_NIGHT) },
       uRim: { value: new THREE.Color(RIM) },
       uNebA: { value: new THREE.Color(NEBULA_A) },

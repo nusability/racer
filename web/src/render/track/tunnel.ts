@@ -4,8 +4,9 @@ import { TUNNEL_RIB_SPACING, TUNNEL_ROCK_ABOVE, TUNNEL_ROCK_WIDTH } from './conf
 import type { Corridor } from './corridor.ts';
 import { quadFacing, rockQuad } from './paint.ts';
 
-// Tunnels: a lit bore through a mesa. Walls at the road edge, a chamfered roof at the ceiling
-// height, warm light strips and strobing ceiling ribs, and a hazard frame round each mouth.
+// Tunnels: a lit bore through a mesa (or, in a station, its pressure hull). Walls at the road
+// edge, a chamfered roof at the ceiling height, warm light strips and strobing ceiling ribs, and
+// a hazard frame round each mouth.
 
 /** Bore cross-section: walls rise to this fraction of the ceiling, then chamfer in. */
 const TUNNEL_WALL_FRACTION = 0.62;
@@ -17,6 +18,17 @@ const LIGHT_INSET = 0.08;
 const WARM = new THREE.Color(0xfff1c8);
 /** A hanging hull's underside faces away from the star and the fill: darker than its sides. */
 const UNDERSIDE_SHADE = 0.55;
+/**
+ * A station's tube hull (masonry 'hull'): a chamfered pressure hull round the bore instead of a
+ * mesa, this much wider than the bore each side, rising this far over the ceiling and hanging
+ * this deep under the road; its corners chamfer in to this share of the extra width.
+ */
+const HULL_WIDTH = 30;
+const HULL_ABOVE = 16;
+const HULL_BELOW = 18;
+const HULL_CHAMFER = 0.55;
+/** The hull's widest point, as a share of its height over the road. */
+const HULL_BEAM = 0.3;
 
 export function mean(...p: P3[]): P3 {
   const o = { x: 0, y: 0, z: 0 };
@@ -51,8 +63,8 @@ function tunnelRing(cor: Corridor, k: number): { inner: P3[]; outer: P3[]; axis:
     [h, c * TUNNEL_WALL_FRACTION],
     [h, 0],
   ];
-  // A mesa: talus foot, near-vertical cliffs, broad flat top.
-  const outer: [number, number][] = [
+  // A station's hull: chamfered top and bottom; else a mesa: talus foot, near-vertical cliffs, broad flat top.
+  const outer: [number, number][] = cor.paint.masonry === 'hull' ? hullOutline(h, c) : [
     [-h - w, -TUNNEL_FOOT],
     [-h - w * 0.86 + wobble(1), top * 0.3],
     [-h - w * 0.8 + wobble(2), top + wobble(3) * 0.3],
@@ -65,6 +77,21 @@ function tunnelRing(cor: Corridor, k: number): { inner: P3[]; outer: P3[]; axis:
     outer: outer.map(([x, y]) => cor.banked(kk, x, y)),
     axis: cor.banked(kk, 0, c * 0.5),
   };
+}
+
+/** A station tube's hull outline round a bore of half width h and ceiling c (banked frame), left foot to right foot. */
+export function hullOutline(h: number, c: number): [number, number][] {
+  const top = c + HULL_ABOVE;
+  const w = h + HULL_WIDTH;
+  const n = h + HULL_WIDTH * HULL_CHAMFER;
+  return [
+    [-n, -HULL_BELOW],
+    [-w, top * HULL_BEAM],
+    [-n, top],
+    [n, top],
+    [w, top * HULL_BEAM],
+    [n, -HULL_BELOW],
+  ];
 }
 
 export function tunnelStrip(cor: Corridor, b: FlatBuilder, ka: number, kb: number): void {

@@ -2,20 +2,24 @@ import * as THREE from 'three';
 import { mulberry32 } from '../../../core/rng.ts';
 import type { TrackPalette } from '../../../core/types.ts';
 import type { SpaceScenery } from '../../../data/tracks/scenery.ts';
-import { FlatBuilder } from '../builder.ts';
 import { sunDirection } from '../environment.ts';
-import { concreteTexture, pavingTexture } from '../textures.ts';
-import { facadeBox } from '../../facade.ts';
-import { hullMaterial } from '../../hullPanels.ts';
+import { hullPlateTexture } from '../deckTexture.ts';
+import { pavingTexture } from '../textures.ts';
+import { stationMaterial } from '../../stationMaterial.ts';
 import type { BiomeKit, DressContext, Dressing } from './kit.ts';
-import { farRockMesh, fieldRocks, nearRockMesh, type Placed } from './spaceRocks.ts';
-import { gantries, hullModules, megastructure, ribs, type Box, type Lights, type StationParts } from './spaceStation.ts';
+import { farRockMesh, fieldRocks, nearRocks, type Placed } from './spaceRocks.ts';
+import { gantries } from './spaceGantry.ts';
+import { megastructure, type Lights } from './spaceStation.ts';
+import type { StationMesh } from './stationMesh.ts';
+import { tubeDressing } from './spaceTube.ts';
 
 // The ring station (look-dev, MIRA-17): no ground, every road a steel deck hanging in the void
 // over a gas giant (render/track/spaceSky.ts draws it, the stars and the light). The kit dresses
-// the course with the station (megastructures, the tube's hull and ribs, gantries over the
-// deck), asteroid fields and a belt of far rocks, and the lights on all of it. The whole kit is
-// about nine draw calls whatever the course length: a merged mesh or one instanced draw per kind.
+// the course with the station (megastructures, the tube's hull kit and ribs, gantries over the
+// deck), asteroid fields and a belt of far rocks, and the lights on all of it. Station
+// structure is merged per structure (a megastructure, a stretch of tube, a span of gantries)
+// in one material, so each culls on its own and costs one draw; rocks and lights are one
+// instanced draw per kind.
 
 /** The void's floor for the ground maths (Ground still answers heights): far under every road, never drawn. */
 const VOID_BELOW = 600;
@@ -49,7 +53,7 @@ export function spaceKit(scenery: SpaceScenery, palette: TrackPalette): BiomeKit
     road: { surface: 'deck', runoff: 'concrete' },
     roadLight: ROAD_LIGHT,
     masonry: 'hull',
-    detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: concreteTexture(seed, quality) }),
+    detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: hullPlateTexture(seed, quality) }),
     dress: (ctx) => dressSpace(ctx, scenery, palette),
     spray: { road: palette.road, runoff: SPRAY_STEEL, water: SPRAY_STEEL },
     debris: { color: STEEL, glow: 0, dust: DUST, streak: SPARK, shape: 'girder' },
@@ -110,30 +114,15 @@ function lightPoints(l: Lights): { points: THREE.Points; material: THREE.ShaderM
   return { points, material, dispose: () => (geo.dispose(), material.dispose()) };
 }
 
-function boxes(list: Box[], material: THREE.Material, name: string): { mesh: THREE.InstancedMesh; geo: THREE.BufferGeometry } | null {
-  if (list.length === 0) return null;
-  const geo = facadeBox();
-  const mesh = new THREE.InstancedMesh(geo, material, list.length);
-  list.forEach((b, i) => {
-    mesh.setMatrixAt(i, b.m);
-    mesh.setColorAt(i, b.tint);
-  });
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.computeBoundingSphere();
-  mesh.name = name;
-  return { mesh, geo };
-}
-
 function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPalette): Dressing {
   const rng = mulberry32(ctx.seed ^ 0x5bace);
   const main = ctx.corridors[0];
-  const parts: StationParts = { windowed: [], bare: [], lights: { pos: [], colour: [], size: [], blink: [] }, lit: new FlatBuilder(), glow: new FlatBuilder() };
-  for (const p of scenery.stations) megastructure(main, p, rng, parts);
-  for (const c of ctx.corridors) {
-    hullModules(c, rng, parts);
-    ribs(c, parts);
-  }
-  for (const g of scenery.gates) gantries(main, main.ribbon.paramToS(g.from), main.ribbon.paramToS(g.to), parts);
+  const lights: Lights = { pos: [], colour: [], size: [], blink: [] };
+  const structures: [string, StationMesh][] = [];
+  for (const p of scenery.stations) structures.push(['megastructure', megastructure(main, p, rng, ctx.quality, lights)]);
+  for (const c of ctx.corridors) for (const t of tubeDressing(c, rng, ctx.quality, lights)) structures.push(['tubeHull', t]);
+  const gates = gantries(main, scenery.gates.map((g) => [main.ribbon.paramToS(g.from), main.ribbon.paramToS(g.to)] as const), lights);
+  if (gates) structures.push(['gantries', gates]);
 
   const rocks: Placed[] = [];
   const centres: { x: number; y: number; z: number }[] = [];
@@ -146,49 +135,38 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
 
   const objects: THREE.Object3D[] = [];
   const owned: { dispose(): void }[] = [];
-  const windowMat = hullMaterial(palette.accent);
-  const bareMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-  owned.push(windowMat, bareMat, glowMat);
-  for (const [list, mat, name] of [[parts.windowed, windowMat, 'stationHull'], [parts.bare, bareMat, 'stationFrame']] as const) {
-    const b = boxes(list, mat, name);
-    if (!b) continue;
-    owned.push(b.geo);
-    objects.push(b.mesh);
-  }
-  const lit = parts.lit.build();
-  if (lit) {
-    const m = new THREE.Mesh(lit, ctx.lit);
-    m.name = 'stationSteel';
-    owned.push(lit);
+  const station = stationMaterial(palette.accent, sunDirection(palette), new THREE.Color(palette.sun), ctx.quality === 'low');
+  owned.push(station.material);
+  structures.forEach(([name, st], i) => {
+    const geo = st.build();
+    if (!geo) return;
+    const m = new THREE.Mesh(geo, station.material);
+    m.name = `${name}:${i}`;
+    m.matrixAutoUpdate = false;
+    owned.push(geo);
     objects.push(m);
-  }
-  const glow = parts.glow.build();
-  if (glow) {
-    const m = new THREE.Mesh(glow, glowMat);
-    m.name = 'stationGlow';
-    owned.push(glow);
-    objects.push(m);
-  }
-  const near = nearRockMesh(rocks, ctx.quality, ctx.seed);
+  });
+  const near = nearRocks(rocks, ctx.quality, ctx.seed);
   if (near) {
     owned.push(near);
-    objects.push(near.mesh);
+    objects.push(...near.meshes);
   }
   const far = farRockMesh(ctx.ground, centres, scenery.farRocks, ctx.quality, sunDirection(palette), new THREE.Color(palette.sun), ctx.seed);
   if (far) {
     owned.push(far);
     objects.push(far.mesh);
   }
-  const lights = lightPoints(parts.lights);
-  if (lights) {
-    owned.push(lights);
-    objects.push(lights.points);
+  const points = lightPoints(lights);
+  if (points) {
+    owned.push(points);
+    objects.push(points.points);
   }
   return {
     objects,
-    update(time) {
-      if (lights) lights.material.uniforms.uTime.value = time;
+    update(time, camera) {
+      station.setTime(time);
+      near?.update(camera);
+      if (points) points.material.uniforms.uTime.value = time;
     },
     dispose() {
       for (const o of owned) o.dispose();
