@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { TrackPalette } from '../../../core/types.ts';
 import { mulberry32, range, type Rng } from '../../../core/rng.ts';
 import type { CityScenery } from '../../../data/tracks/scenery.ts';
-import { HORIZON_MAX, HORIZON_MIN, RUNOFF_MIN, TERRAIN_CELLS_NEAR } from '../config.ts';
+import { HORIZON_MAX, HORIZON_MIN, RUNOFF_MIN } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
 import type { Ground } from '../ground.ts';
 import { fbm, smoothstep } from '../noise.ts';
@@ -119,10 +119,6 @@ export function cityKit(scenery: CityScenery, palette: TrackPalette, ao: AoLook 
     road: { surface: 'asphalt', runoff: 'concrete' },
     roadLight: ROAD_LIGHT,
     masonry: 'concrete',
-    pillar: { kind: 'rock' },
-    terrainCells: TERRAIN_CELLS_NEAR,
-    ownPosts: false,
-    cornerStands: true,
     detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: concreteTexture(seed, quality) }),
     dress: (ctx) => dressCity(ctx, scenery, palette, ao),
     spray: { road: palette.road, runoff: SPRAY_CONCRETE, water: SPRAY_CONCRETE },

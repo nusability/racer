@@ -131,19 +131,6 @@ export interface EnvRidgeLook {
   sunSide: number;
 }
 
-/** A forest's canopy closing overhead and its trunks round the horizon, as the gliders reflect them. */
-export interface EnvCanopyLook {
-  /** Leaf colour (sRGB), and the elevation (radians) where the canopy starts closing in. */
-  leaves: number;
-  from: number;
-  /** Share of the sky the leaves hide near the zenith (the rest is gaps of sky), 0..1. */
-  cover: number;
-  /** Dark trunks standing round the horizon up into the canopy: how many, their colour (sRGB), their width (radians). */
-  trunks: number;
-  bark: number;
-  trunkWidth: readonly [number, number];
-}
-
 /** The world the gliders reflect, painted once per race (env.ts). */
 export interface EnvLook {
   /** Sky at the zenith, the haze band at the horizon, and the ground below (sRGB). */
@@ -160,7 +147,6 @@ export interface EnvLook {
   sun: { color: number; gain: number; radius: number; glow: number; glowPower: number } | null;
   ridge: EnvRidgeLook | null;
   towers: EnvTowersLook | null;
-  canopy: EnvCanopyLook | null;
   /** Equirect canvas the environment is painted on before PMREM (power of two, 2:1). */
   width: number;
 }

@@ -12,7 +12,7 @@ import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, RACER_HALF_WIDTH, SIM_DT } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -34,10 +34,8 @@ const RUNOUT_MIN_RADIUS = 300;
 /** A beach road must sit this far above the sea so the swell never washes over it. */
 const SEA_CLEARANCE = 0.6;
 /**
- * The width and lane rules a course is designed against. Open worlds race on roads with run-off,
- * walled only in canyons, tunnels and short squeezes. Elderwood races on narrow forest trails
- * walled end to end by trunks (the trunks are the thrill): narrower everywhere, its lanes past
- * obstacles and hazards counted in glider widths (RACER_HALF_WIDTH), no squeeze limit.
+ * The width and lane rules a course is designed against: roads with run-off, walled only in
+ * canyons, tunnels and short squeezes.
  */
 interface WidthRules {
   /** Narrowest road anywhere (main road, route or shortcut). */
@@ -56,18 +54,6 @@ interface WidthRules {
   rookieOpening: number;
 }
 const ROAD_RULES: WidthRules = { minWidth: 18, walledWidth: 26, squeezeMax: 260, branchWidth: [16, 22], routeWidth: [18, 44], openLane: 16, branchLane: 8, rookieOpening: 24 };
-/** A forest trail's lane: two glider widths with a little air; a rookie's opening three. */
-const TRAIL_LANE = 4 * RACER_HALF_WIDTH + 0.4;
-const TRAIL_RULES: WidthRules = {
-  minWidth: 12,
-  walledWidth: 0,
-  squeezeMax: 0,
-  branchWidth: [10, 14],
-  routeWidth: [12, 22],
-  openLane: TRAIL_LANE,
-  branchLane: 2 * RACER_HALF_WIDTH + 2.6,
-  rookieOpening: 6 * RACER_HALF_WIDTH - 1.2,
-};
 /**
  * Road length of a lap, metres: about a minute on the starter. Up to 10 km of ground plan, plus
  * the road a stunt track's vertical loops add (~390 m each, three at most).
@@ -728,7 +714,7 @@ function check(def: TrackDef): string[] {
   const lineR = Math.min(...raceLines.map((s) => minRadiusBetween(t, t.wrap(s - 100), 300)));
   const run = def.course === 'circuit' ? `${def.laps} laps  lap@${STARTER_SPEED}` : `sprint  run@${STARTER_SPEED}`;
   console.log(`\n${def.id} "${def.name}" d${def.difficulty} ${run} ${(t.raceLength / STARTER_SPEED).toFixed(0)}s`);
-  const rules = sceneryById(def.id).biome === 'forest' ? TRAIL_RULES : ROAD_RULES;
+  const rules = ROAD_RULES;
   checkRibbon(t, def.features, def.points.length, 'main', warn, true, rules);
   const mainJunctions = t.branches.flatMap((b): [number, number][] => [
     [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH],

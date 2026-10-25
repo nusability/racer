@@ -168,8 +168,6 @@ export class AudioEnvironment {
         return 'snow';
       case 'city':
         return 'concrete';
-      case 'forest':
-        return 'litter';
       case 'beach': {
         const w = track.wrap(s);
         return branch < 0 && this.lagoons.some(([a, b]) => w >= a && w <= b) ? 'water' : 'sand';

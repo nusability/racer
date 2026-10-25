@@ -173,7 +173,7 @@ const api: ViewerApi = {
 };
 
 const firstTrack = params.get('track') ?? TRACKS[0].id;
-// Dev builds: a synthetic test scene (ui/devTracks.ts, e.g. Elderwood's) is registered first.
+// Dev builds: a synthetic test scene (ui/devTracks.ts, e.g. the sim's sprint) is registered first.
 if (import.meta.env.DEV && !TRACKS.some((t) => t.id === firstTrack)) (await import('../../ui/devTracks.ts')).loadDevTrack(firstTrack);
 build(trackById(firstTrack));
 const ui = buildUi(api, [stats, map.el, fly]);

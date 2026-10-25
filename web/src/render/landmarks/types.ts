@@ -55,18 +55,7 @@ export type LandmarkKind =
   | 'stadium'
   | 'hologramDragon'
   | 'suspensionBridge'
-  | 'skyTram'
-  // Set F: the forest
-  | 'fallingTree'
-  | 'herd'
-  | 'logSlide'
-  | 'windRoar'
-  | 'treeVillage'
-  | 'lumberTown'
-  | 'waterfall'
-  | 'ruins'
-  | 'glowGrove'
-  | 'ropeBridge';
+  | 'skyTram';
 
 /**
  * A landmark that IS part of the course (the sand beast that crosses the road, the digger

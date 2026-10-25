@@ -29,15 +29,7 @@ export type CueName =
   | 'chime'
   | 'whoosh'
   | 'clang'
-  | 'collapse'
-  | 'birdsong'
-  | 'woodcreak'
-  | 'call'
-  | 'crash'
-  | 'hooves'
-  | 'snap'
-  | 'logland'
-  | 'leaves';
+  | 'collapse';
 
 /** A distant siren's wail: rise-fall cycles and their length, seconds. */
 const SIREN_CYCLES = 3;
@@ -45,14 +37,6 @@ const SIREN_CYCLE_S = 0.9;
 /** A transit chime: three falling notes (Hz), this far apart. */
 const CHIME_NOTES = [988, 784, 659];
 const CHIME_GAP_S = 0.28;
-/** A bird's phrase: notes, their length and gap (s), and the pitch range they wander (Hz). */
-const BIRD_NOTES = 5;
-const BIRD_NOTE_S = 0.09;
-const BIRD_GAP_S = 0.12;
-const BIRD_HZ: readonly [number, number] = [2600, 4200];
-/** Hoofbeats in a hooves cue: a light four-beat gallop phrase, twice. */
-const HOOF_BEATS = 8;
-const HOOF_GAP_S = 0.16;
 /** Footfalls in a stomp cue, and the gap between them, seconds. */
 const STOMP_STEPS = 3;
 const STOMP_GAP_S = 0.42;
@@ -167,57 +151,6 @@ export function playCue(p: ShotPlayer, out: AudioNode, name: CueName, g: number,
       p.tone(out, { wave: 'triangle', f0: 523, dur: 1.2, gain: 0.12 * g, pan }, k);
       p.tone(out, { wave: 'triangle', f0: 1397, dur: 0.9, gain: 0.07 * g, pan }, k);
       p.noise(out, { filter: 'highpass', f0: 2600, dur: 0.15, gain: 0.35 * g, pan }, k);
-      break;
-    case 'birdsong': {
-      // A wandering phrase of short whistled notes, each gliding up or down.
-      let f = BIRD_HZ[0] + Math.random() * (BIRD_HZ[1] - BIRD_HZ[0]);
-      for (let i = 0; i < BIRD_NOTES; i++) {
-        const next = BIRD_HZ[0] + Math.random() * (BIRD_HZ[1] - BIRD_HZ[0]);
-        p.tone(out, { wave: 'sine', f0: f, f1: next, dur: BIRD_NOTE_S, gain: 0.05 * g, delay: i * BIRD_GAP_S, pan }, k);
-        f = next;
-      }
-      break;
-    }
-    case 'woodcreak':
-      // A great trunk under load: a slow, rough groan through a woody resonance, bending in pitch.
-      p.tone(out, { wave: 'sawtooth', f0: 70 + Math.random() * 20, f1: 46 + Math.random() * 12, dur: 1.4, gain: 0.3 * g, attack: 0.3, filter: 'bandpass', filterHz: 380 + Math.random() * 200, q: 6, pan }, k);
-      p.tone(out, { wave: 'square', f0: 23, f1: 31, dur: 1.2, gain: 0.12 * g, attack: 0.2, delay: 0.2, filter: 'lowpass', filterHz: 600, pan }, k);
-      break;
-    case 'call':
-      // Something large and gentle calling through the trees: a long rising hoot and a falling answer.
-      p.tone(out, { wave: 'triangle', f0: 180, f1: 310, dur: 1.1, gain: 0.16 * g, attack: 0.35, filter: 'lowpass', filterHz: 1400, pan }, k);
-      p.tone(out, { wave: 'triangle', f0: 290, f1: 150, dur: 1.3, gain: 0.12 * g, attack: 0.3, delay: 0.9, filter: 'lowpass', filterHz: 1200, pan: -pan * 0.5 }, k);
-      break;
-    case 'crash':
-      // A giant coming down: the trunk splitting, a rushing roar of crown and leaves, the ground shaking.
-      p.noise(out, { filter: 'highpass', f0: 2600, dur: 0.18, gain: 0.55 * g, pan }, k);
-      p.noise(out, { filter: 'bandpass', f0: 2400, f1: 600, q: 0.6, dur: 2.2, gain: 0.7 * g, attack: 0.15, delay: 0.1, pan }, k);
-      p.tone(out, { wave: 'sine', f0: 60, f1: 26, dur: 1.8, gain: 0.85 * g, delay: 0.55, pan }, k);
-      p.noise(out, { filter: 'lowpass', f0: 500, f1: 90, dur: 2, gain: 0.7 * g, delay: 0.55, pan }, k);
-      break;
-    case 'hooves':
-      for (let i = 0; i < HOOF_BEATS; i++) {
-        const beat = i * HOOF_GAP_S + (i % 4 === 3 ? 0.08 : 0);
-        p.tone(out, { wave: 'sine', f0: 90, f1: 45, dur: 0.12, gain: 0.45 * g, delay: beat, pan }, k);
-        p.noise(out, { filter: 'bandpass', f0: 900, q: 1.5, dur: 0.06, gain: 0.18 * g, delay: beat, pan }, k);
-      }
-      break;
-    case 'snap':
-      // A log jam letting go: a sharp crack of timber and the first knock of a log rolling.
-      p.noise(out, { filter: 'highpass', f0: 1800, dur: 0.1, gain: 0.6 * g, pan }, k);
-      p.tone(out, { wave: 'triangle', f0: 180, f1: 90, dur: 0.25, gain: 0.35 * g, delay: 0.05, pan }, k);
-      p.noise(out, { filter: 'lowpass', f0: 400, f1: 120, dur: 1.6, gain: 0.55 * g, attack: 0.4, delay: 0.2, pan }, k);
-      break;
-    case 'logland':
-      // A log hitting the trail: a hollow wooden knock over a thud.
-      p.tone(out, { wave: 'sine', f0: 85, f1: 38, dur: 0.4, gain: 0.7 * g, pan }, k);
-      p.tone(out, { wave: 'triangle', f0: 240, f1: 170, dur: 0.22, gain: 0.25 * g, pan }, k);
-      p.noise(out, { filter: 'lowpass', f0: 900, f1: 200, dur: 0.35, gain: 0.45 * g, pan }, k);
-      break;
-    case 'leaves':
-      // A gust tearing through the canopy: a rising rush of leaves sweeping across.
-      p.noise(out, { filter: 'bandpass', f0: 1200, f1: 3200, q: 0.7, dur: 1.6, gain: 0.5 * g, attack: 0.6, pan: -pan, panTo: pan }, k);
-      p.noise(out, { filter: 'lowpass', f0: 350, dur: 1.4, gain: 0.35 * g, attack: 0.5, pan }, k);
       break;
     case 'collapse':
       // A facade coming down: a crack, then masonry thundering on for seconds.

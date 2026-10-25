@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { TrackPalette } from '../../../core/types.ts';
 import type { BeachScenery } from '../../../data/tracks/scenery.ts';
-import { ROCK_TILE, SEA_LEVEL, TERRAIN_CELLS_NEAR } from '../config.ts';
+import { ROCK_TILE, SEA_LEVEL } from '../config.ts';
 import { fbm, smoothstep } from '../noise.ts';
 import { rockTexture, sandTexture } from '../textures.ts';
 import { buildCoastHorizon, buildCoastLife } from './coast.ts';
@@ -51,10 +51,6 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette, sea: SeaL
     road: { surface: scenery.road, runoff: 'wetsand' },
     roadLight: 0,
     masonry: 'sandstone',
-    pillar: { kind: 'rock' },
-    terrainCells: TERRAIN_CELLS_NEAR,
-    ownPosts: false,
-    cornerStands: true,
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];

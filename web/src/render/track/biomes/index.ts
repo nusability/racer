@@ -3,7 +3,6 @@ import type { TrackScenery } from '../../../data/tracks/scenery.ts';
 import { beachKit } from './beach.ts';
 import { cityKit } from './city.ts';
 import { desertKit } from './desert.ts';
-import { forestKit } from './forest.ts';
 import { iceKit } from './ice.ts';
 import type { BiomeKit } from './kit.ts';
 import type { AoLook, SeaLook } from '../../look/lookTuning.ts';
@@ -27,8 +26,6 @@ export function biomeKit(scenery: TrackScenery, palette: TrackPalette, look: Kit
       return iceKit(scenery, palette);
     case 'city':
       return cityKit(scenery, palette, look.ao);
-    case 'forest':
-      return forestKit(scenery, palette);
   }
 }
 

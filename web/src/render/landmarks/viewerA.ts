@@ -66,7 +66,7 @@ renderer.info.autoReset = false;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-applyEnvironment(scene, palette, atmosphere('desert', quality));
+applyEnvironment(scene, palette, atmosphere(quality));
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2),
   new THREE.MeshLambertMaterial({ color: palette.sand }),

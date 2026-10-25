@@ -4,7 +4,6 @@
 import { registerDevTrack } from '../data/tracks/index.ts';
 import type { TrackScenery } from '../data/tracks/scenery.ts';
 import { simSprint } from '../../tools/sim-test-track.ts';
-import { forestTest, forestTestDusk, forestTestScenery } from '../../tools/forest-test-track.ts';
 
 /** Plain desert dressing: nothing on the course a landmark could hide or a hazard bind to. */
 const DEV_SCENERY: TrackScenery = {
@@ -19,15 +18,9 @@ const DEV_SCENERY: TrackScenery = {
   landmarks: [],
 };
 
-/**
- * Synthetic tracks by id, each with its scenery and the world whose cups and pay it borrows.
- * Elderwood's test scene (by day and at dusk) gathers every forest landmark on one short loop,
- * for checking the kit; it races for Elderwood's pay.
- */
+/** Synthetic tracks by id, each with its scenery and the world whose cups, pay and look it borrows. */
 const DEV_COURSES = {
   [simSprint.id]: { def: simSprint, scenery: DEV_SCENERY, worldId: 'desert' },
-  [forestTest.id]: { def: forestTest, scenery: forestTestScenery, worldId: 'forest' },
-  [forestTestDusk.id]: { def: forestTestDusk, scenery: forestTestScenery, worldId: 'forest' },
 };
 
 /** Registers the dev track `id` and returns it, or throws naming the ones there are. */

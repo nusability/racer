@@ -174,7 +174,7 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   const palette = def.palette;
   const detail = GRAPHICS_PROFILE.ultra.detail;
   const scene = new THREE.Scene();
-  const air = atmosphere(worldOfTrack(def.id).biome, detail);
+  const air = atmosphere(detail);
   const env = applyEnvironment(scene, palette, air);
   disposers.push(() => env.dispose());
   // Every effect of the world's look, as the ultra level draws it; the debug switches are the
