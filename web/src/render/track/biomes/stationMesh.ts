@@ -6,7 +6,8 @@ import type { P3 } from '../builder.ts';
 // built in a canonical local frame and placed by a rigid matrix. Every vertex carries what the
 // station material (render/stationMaterial.ts) needs to draw its detail: a surface coordinate
 // in metres (plates, windows and cells keep their real size on any part), the surface kind, a
-// seed, and a baked contact shade where a part meets the big bodies it is bolted to.
+// seed, a baked contact shade where a part meets the big bodies it is bolted to, and which
+// spinner (if any) turns it in the vertex shader, so a turning wheel costs no draw of its own.
 
 /** What a surface is made of; the material draws each differently (render/stationMaterial.ts). */
 export const SURFACE = { hull: 0, steel: 1, radiator: 2, solar: 3, glow: 4, glass: 5, hangar: 6, sign: 7, hazard: 8, foil: 9 } as const;
@@ -36,6 +37,7 @@ export class StationMesh {
   private readonly nrm: number[] = [];
   private readonly col: number[] = [];
   private readonly surf: number[] = [];
+  private readonly spins: number[] = [];
   private readonly occluders: Occluder[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly nm = new THREE.Matrix3();
@@ -44,6 +46,8 @@ export class StationMesh {
   private seed = 0;
   /** Whether the vertices being added take the contact shade. */
   private contact = true;
+  /** The spinner turning the vertices being added (render/stationMaterial.ts), 0 for none. */
+  private spinner = 0;
 
   get triangles(): number {
     return this.pos.length / 9;
@@ -65,6 +69,12 @@ export class StationMesh {
     else this.tint.copy(tint);
     this.seed = seed;
     this.contact = contact;
+    return this;
+  }
+
+  /** The following parts turn with spinner `id` (from addSpinner, render/stationMaterial.ts); 0 holds them still. */
+  spin(id: number): this {
+    this.spinner = id;
     return this;
   }
 
@@ -99,6 +109,7 @@ export class StationMesh {
     this.nrm.push(n.x, n.y, n.z);
     this.col.push(this.tint.r * shade, this.tint.g * shade, this.tint.b * shade);
     this.surf.push(u, v, this.kind, this.seed);
+    this.spins.push(this.spinner);
   }
 
   /**
@@ -333,6 +344,7 @@ export class StationMesh {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('aSurf', new THREE.Float32BufferAttribute(this.surf, 4));
+    g.setAttribute('aSpin', new THREE.Float32BufferAttribute(this.spins, 1));
     g.computeBoundingSphere();
     return g;
   }

@@ -10,7 +10,9 @@ import * as THREE from 'three';
 //  - micro, fading out first: window frames, solar cells, radiator ribs, foil crumple.
 // Each scale fades to its own average once it is under a pixel, so far hull keeps its light
 // pattern instead of going grey or flickering. Kinds that emit (glow, sign, hangar) take their
-// vertex colour as HDR light.
+// vertex colour as HDR light. Parts that turn (a station's wheel) are turned in the vertex
+// shader about their spinner's axis, so they stay in the structure's one draw; their surface
+// coordinate turns with them, so the detail rides along rather than swimming.
 
 /** Hull sections (m, along and up): each its own tone and occupancy. */
 const SECTION: readonly [number, number] = [48, 24];
@@ -75,12 +77,78 @@ const HANGAR_RACK = 5;
 
 const f = (n: number) => n.toFixed(4);
 
+/** Turning parts a scene may hold: the uniform arrays' size (a track's stations bring one wheel each). */
+export const MAX_SPINNERS = 8;
+
+/** Parts that turn about a fixed axis: a pivot, a unit axis and a rate (rad/s) per spinner. Ids are 1-based; 0 is still. */
+export interface Spinners {
+  pivot: THREE.Vector3[];
+  axis: THREE.Vector3[];
+  rate: number[];
+}
+
+/** Registers a spinner and returns its id. Throws past MAX_SPINNERS: the shaders' arrays hold no more. */
+export function addSpinner(s: Spinners, pivot: THREE.Vector3, axis: THREE.Vector3, rate: number): number {
+  if (s.rate.length >= MAX_SPINNERS) throw new Error(`stationMaterial: more than ${MAX_SPINNERS} spinners`);
+  s.pivot.push(pivot.clone());
+  s.axis.push(axis.clone().normalize());
+  s.rate.push(rate);
+  return s.rate.length;
+}
+
+/** The spinners' shader uniforms (shared by every material that turns parts) and their per-frame update. */
+export function spinUniforms(s: Spinners): { uniforms: Record<string, THREE.IUniform>; setTime(t: number): void } {
+  const pad = <T>(xs: T[], fill: () => T) => Array.from({ length: MAX_SPINNERS }, (_, i) => xs[i] ?? fill());
+  const turn = pad<THREE.Vector2>([], () => new THREE.Vector2(1, 0));
+  const uniforms = {
+    uSpinPivot: { value: pad(s.pivot, () => new THREE.Vector3()) },
+    uSpinAxis: { value: pad(s.axis, () => new THREE.Vector3(0, 1, 0)) },
+    uSpinTurn: { value: turn },
+  };
+  return {
+    uniforms,
+    setTime(t) {
+      // The angle is wrapped here, in double precision: a float in the shader would lose the turn as the clock grows.
+      s.rate.forEach((rate, i) => {
+        const a = (rate * t) % (Math.PI * 2);
+        turn[i].set(Math.cos(a), Math.sin(a));
+      });
+    },
+  };
+}
+
+/** Vertex shader declarations for turning parts: aSpin is the spinner id (0 still), uSpinTurn each one's cos and sin. */
+export const SPIN_VERTEX_PARS = /* glsl */ `
+attribute float aSpin;
+uniform vec3 uSpinPivot[${MAX_SPINNERS}];
+uniform vec3 uSpinAxis[${MAX_SPINNERS}];
+uniform vec2 uSpinTurn[${MAX_SPINNERS}];
+// Rodrigues' rotation of v about spinner i's axis.
+vec3 slTurn(vec3 v, int i) {
+  vec3 k = uSpinAxis[i];
+  vec2 cs = uSpinTurn[i];
+  return v * cs.x + cross(k, v) * cs.y + k * dot(k, v) * (1.0 - cs.x);
+}
+vec3 slSpinPoint(vec3 p) {
+  int i = int(aSpin + 0.5) - 1;
+  return i < 0 ? p : uSpinPivot[i] + slTurn(p - uSpinPivot[i], i);
+}
+vec3 slSpinDir(vec3 v) {
+  int i = int(aSpin + 0.5) - 1;
+  return i < 0 ? v : slTurn(v, i);
+}`;
+
 const VERTEX_PARS = /* glsl */ `
 attribute vec4 aSurf;
-varying vec4 vSurf;`;
+varying vec4 vSurf;
+${SPIN_VERTEX_PARS}`;
 
 const VERTEX = /* glsl */ `
-vSurf = aSurf;`;
+vSurf = aSurf;
+transformed = slSpinPoint(transformed);`;
+
+const VERTEX_NORMAL = /* glsl */ `
+objectNormal = slSpinDir(objectNormal);`;
 
 const FRAGMENT_PARS = /* glsl */ `
 varying vec4 vSurf;
@@ -270,20 +338,31 @@ const FRAGMENT = /* glsl */ `
 #endif
 }`;
 
-/** Station structure's material (see the header); `low` drops the bump and glints. */
-export function stationMaterial(accent: number, sunDir: THREE.Vector3, sun: THREE.Color, low: boolean): { material: THREE.MeshLambertMaterial; setTime(t: number): void } {
+/** `src` with `add` right after `marker`; throws when a three.js update has renamed the marker, rather than drawing without it. */
+function after(src: string, marker: string, add: string): string {
+  if (!src.includes(marker)) throw new Error(`stationMaterial: the shader has no ${marker}`);
+  return src.replace(marker, `${marker}\n${add}`);
+}
+
+/**
+ * Station structure's material (see the header); `low` drops the bump and glints. Its geometry
+ * names its spinners by id (stationMesh.ts); `spin` turns them (spinUniforms, shared with
+ * anything else that turns with them).
+ */
+export function stationMaterial(accent: number, sunDir: THREE.Vector3, sun: THREE.Color, low: boolean, spin: Record<string, THREE.IUniform>): { material: THREE.MeshLambertMaterial; setTime(t: number): void } {
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
   const uniforms = {
     uTime: { value: 0 },
     uSunDir: { value: sunDir.clone() },
     uSun: { value: sun.clone() },
     uAccent: { value: new THREE.Color(accent) },
+    ...spin,
   };
   if (low) material.defines = { STATION_LOW: '' };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX_PARS}`).replace('#include <begin_vertex>', `#include <begin_vertex>\n${VERTEX}`);
-    shader.fragmentShader = shader.fragmentShader.replace('void main() {', `${FRAGMENT_PARS}\nvoid main() {`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAGMENT}`);
+    shader.vertexShader = after(after(after(shader.vertexShader, '#include <common>', VERTEX_PARS), '#include <beginnormal_vertex>', VERTEX_NORMAL), '#include <begin_vertex>', VERTEX);
+    shader.fragmentShader = after(shader.fragmentShader, '#include <normal_fragment_maps>', FRAGMENT).replace('void main() {', `${FRAGMENT_PARS}\nvoid main() {`);
   };
   material.customProgramCacheKey = () => `station-${low ? 'low' : 'high'}`;
   return {

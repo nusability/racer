@@ -6,6 +6,7 @@ import type { Quality } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
 import type { Ground } from '../ground.ts';
 import { StationMesh, axisFrame } from './stationMesh.ts';
+import { addSpinner, type Spinners } from '../../stationMaterial.ts';
 
 // The megastructures looming off the course: each a station kilometres of hull long, built so
 // it reads as a working place at every distance. Its silhouette carries it from afar: an
@@ -18,12 +19,13 @@ import { StationMesh, axisFrame } from './stationMesh.ts';
 // pipes and greebles carry it up close. One merged mesh per structure (stationMesh.ts) in the
 // station material (render/stationMaterial.ts); its lights go to the shared light points.
 
-/** Point lights drawn as glowing dots: world position, HDR colour, size (m) and blink (period s, 0 = steady; phase). */
+/** Point lights drawn as glowing dots: world position, HDR colour, size (m), blink (period s, 0 = steady; phase) and the spinner they ride (0: none). */
 export interface Lights {
   pos: number[];
   colour: number[];
   size: number[];
   blink: number[];
+  spin: number[];
 }
 
 /** Structure keeps this far outside any road's hard boundary unless it is well above or below the road. */
@@ -80,6 +82,12 @@ const LAYOUT = {
 } as const;
 /** The wheel: where along the spine, its radius and tube, its gap behind the spine, the hub (shares of L); spokes. */
 const WHEEL = { at: 0.2, radius: 0.28, tube: 0.02, gap: 0.05, hubRadius: 0.045, hubLength: 0.06, spokes: 6, spokeRadius: 0.008, collars: 12, segments: 72, tubeSides: 10 } as const;
+/**
+ * The wheel turns for its spin gravity: a standard g at the rim's floor (ω = √(g / R), a turn
+ * every 28–35 s at these sizes), sped up by DRAMA so the turn reads in the few seconds a racer
+ * has the station in view. Its top runs the way the course does.
+ */
+const WHEEL_SPIN = { gravity: 9.81, drama: 1.6 } as const;
 /** Sphere tanks round the stern lattice: how many, their radius (share of L). */
 const TANKS = { count: 3, radius: 0.035, sides: 16, rings: 6 } as const;
 /** The comm dish at the stern: radius, depth and mast (shares of L). */
@@ -196,6 +204,7 @@ export function light(l: Lights, p: P3, c: THREE.Color, size: number, period: nu
   l.colour.push(c.r, c.g, c.b);
   l.size.push(size);
   l.blink.push(period, phase);
+  l.spin.push(0);
 }
 
 /**
@@ -272,7 +281,7 @@ export function siteBeside(cor: Corridor, k: number, side: number, gap: number):
 }
 
 /** A megastructure beside the course (see the header), as one mesh. Throws when its spine would cut the course. */
-export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, quality: Quality, lights: Lights): StationMesh {
+export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, quality: Quality, lights: Lights, spinners: Spinners): StationMesh {
   const site = siteBeside(cor, Math.round(cor.ribbon.paramToS(p.at) / cor.ribbon.step), p.side, p.distance);
   const L = p.length;
   const R = L * SPINE.radius;
@@ -387,7 +396,7 @@ export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, qual
   const wu = L * WHEEL.at;
   const wr = L * WHEEL.radius;
   const wc = apo + aftR + L * WHEEL.gap + (L * WHEEL.hubLength) / 2;
-  if (site.clear(wu - wr, wu + wr, ys - wr, ys + wr, wc - L * WHEEL.tube, wc + L * WHEEL.tube)) wheel(mesh, site, lights, L, wu, ys, apo + aftR, wc, quality);
+  if (site.clear(wu - wr, wu + wr, ys - wr, ys + wr, wc - L * WHEEL.tube, wc + L * WHEEL.tube)) wheel(mesh, site, lights, spinners, L, wu, ys, apo + aftR, wc, quality);
 
   // The stern: a lattice spine with sphere tanks round it and a dish at its end.
   mesh.paint('steel', STEEL_DARK, 20).truss(site.p(tanks[0], ys, apo), site.p(tanks[1], ys, apo), R * 0.8, L * SPINE.neckBay, R * 0.03, UP);
@@ -488,24 +497,33 @@ function drum(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, u: number
   }
 }
 
-/** The spoked wheel standing behind the spine (in the plane along and up), its hub on a spar to the hull's back. */
-function wheel(mesh: StationMesh, site: Site, lights: Lights, L: number, u: number, y: number, back: number, wc: number, quality: Quality): void {
+/**
+ * The spoked wheel standing behind the spine (in the plane along and up), its hub on a spar to
+ * the hull's back. Everything but the spar turns about the hub (WHEEL_SPIN), lights included.
+ */
+function wheel(mesh: StationMesh, site: Site, lights: Lights, spinners: Spinners, L: number, u: number, y: number, back: number, wc: number, quality: Quality): void {
   const R = L * WHEEL.radius;
   const r = L * WHEEL.tube;
   const hubR = L * WHEEL.hubRadius;
   const hubL = L * WHEEL.hubLength;
   const fr = site.frame(u, y, wc, 'w');
+  // The spar holds still: the wheel turns on a bearing at the hub's back.
+  const spar = (back + wc - hubL / 2) / 2;
+  mesh.at(site.frame(u, y, spar, 'w')).paint('foil', FOIL, 54).cylinder(hubR * 0.4, hubR * 0.4, wc - hubL / 2 - back + 2, 16, { rings: 3 });
+  // A rotation about f × up by a negative angle carries the top toward +f: along the course.
+  const axis = new THREE.Vector3().crossVectors(site.f, UP);
+  const id = addSpinner(spinners, site.p(u, y, wc), axis, -Math.sqrt(WHEEL_SPIN.gravity / R) * WHEEL_SPIN.drama);
+  const firstLight = lights.spin.length;
+  mesh.spin(id);
   mesh.at(fr).paint('hull', HULL[1], 50).torus(R, r, WHEEL.segments, WHEEL.tubeSides);
   // Collars round the ring's tube.
   for (let i = 0; i < WHEEL.collars; i++) {
     const t = (i / WHEEL.collars) * Math.PI * 2;
     mesh.at(fr).paint('steel', STEEL_DARK, 51).torus(R, r * 1.12, 2, WHEEL.tubeSides, [t - 0.012, t + 0.012]);
   }
-  // The hub and the spar back to the hull.
+  // The hub.
   mesh.at(fr).paint('hull', HULL[0], 52).cylinder(hubR, hubR, hubL, 24, { caps: true });
   mesh.at(site.frame(u, y, wc + hubL / 2, 'w')).paint('glass', GLASS, 53).dome(hubR * 0.8, 24, 5, 0.5);
-  const spar = (back + wc - hubL / 2) / 2;
-  mesh.at(site.frame(u, y, spar, 'w')).paint('foil', FOIL, 54).cylinder(hubR * 0.4, hubR * 0.4, wc - hubL / 2 - back + 2, 16, { rings: 3 });
   mesh.occluder(site.p(u, y, wc - hubL / 2), site.p(u, y, wc + hubL / 2), hubR);
   // Spokes from the hub to the ring, each with a lift tube beside it.
   for (let i = 0; i < WHEEL.spokes; i++) {
@@ -528,6 +546,8 @@ function wheel(mesh: StationMesh, site: Site, lights: Lights, L: number, u: numb
     const t = ((i + 0.5) / (WHEEL.collars * 2)) * Math.PI * 2;
     light(lights, site.p(u + Math.cos(t) * R, y + Math.sin(t) * R, wc - r - 0.5), RUNNING, RUNNING_SIZE * 1.5, 0, 0);
   }
+  mesh.spin(0);
+  lights.spin.fill(id, firstLight);
 }
 
 /** The comm dish at the stern: a mast along the spine's axis and a dish facing out along it. */

@@ -5,7 +5,7 @@ import type { SpaceScenery } from '../../../data/tracks/scenery.ts';
 import { sunDirection } from '../environment.ts';
 import { hullPlateTexture } from '../deckTexture.ts';
 import { pavingTexture, rockTexture, sandTexture } from '../textures.ts';
-import { stationMaterial } from '../../stationMaterial.ts';
+import { SPIN_VERTEX_PARS, spinUniforms, stationMaterial, type Spinners } from '../../stationMaterial.ts';
 import type { BiomeKit, DressContext, Dressing } from './kit.ts';
 import { farRockMesh, fieldRocks, nearRocks, type Placed } from './spaceRocks.ts';
 import { gantries } from './spaceGantry.ts';
@@ -22,7 +22,8 @@ import { moonGround } from './spaceMoon.ts';
 // deck), asteroid fields and a belt of far rocks, and the lights on all of it. Station
 // structure is merged per structure (a megastructure, a stretch of tube, a span of gantries)
 // in one material, so each culls on its own and costs one draw; rocks and lights are one
-// instanced draw per kind. Solar arrays (spaceArrays.ts) are one more structure, and a bore
+// instanced draw per kind; a station's wheel turns in the shader, inside its structure's draw
+// (stationMaterial.ts's spinners). Solar arrays (spaceArrays.ts) are one more structure, and a bore
 // through a giant asteroid (spaceBores.ts) one more draw. One track has ground: a moon
 // (spaceMoon.ts), with regolith where the decks have void.
 
@@ -73,6 +74,7 @@ export function spaceKit(scenery: SpaceScenery, palette: TrackPalette): BiomeKit
 }
 
 const LIGHT_VERTEX = /* glsl */ `
+${SPIN_VERTEX_PARS}
 attribute float aSize;
 attribute vec3 aColor;
 attribute vec2 aBlink;
@@ -81,7 +83,7 @@ uniform float uHalfHeight;
 uniform float uPx;
 varying vec3 vColor;
 void main() {
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vec4 mv = modelViewMatrix * vec4(slSpinPoint(position), 1.0);
   gl_Position = projectionMatrix * mv;
   float on = aBlink.x > 0.0 ? step(1.0 - ${BLINK_ON.toFixed(2)}, fract(uTime / aBlink.x + aBlink.y)) : 1.0;
   vColor = aColor;
@@ -99,18 +101,20 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-function lightPoints(l: Lights): { points: THREE.Points; material: THREE.ShaderMaterial; dispose(): void } | null {
+/** The lights as one draw; `spin` turns those riding a spinner with it (stationMaterial.ts's spinUniforms). */
+function lightPoints(l: Lights, spin: Record<string, THREE.IUniform>): { points: THREE.Points; material: THREE.ShaderMaterial; dispose(): void } | null {
   if (l.size.length === 0) return null;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(l.pos, 3));
   geo.setAttribute('aColor', new THREE.Float32BufferAttribute(l.colour, 3));
   geo.setAttribute('aSize', new THREE.Float32BufferAttribute(l.size, 1));
   geo.setAttribute('aBlink', new THREE.Float32BufferAttribute(l.blink, 2));
+  geo.setAttribute('aSpin', new THREE.Float32BufferAttribute(l.spin, 1));
   geo.computeBoundingSphere();
   const material = new THREE.ShaderMaterial({
     vertexShader: LIGHT_VERTEX,
     fragmentShader: LIGHT_FRAGMENT,
-    uniforms: { uTime: { value: 0 }, uHalfHeight: { value: 1 }, uPx: { value: 1 } },
+    uniforms: { uTime: { value: 0 }, uHalfHeight: { value: 1 }, uPx: { value: 1 }, ...spin },
     blending: THREE.AdditiveBlending,
     transparent: true,
     depthWrite: false,
@@ -129,9 +133,10 @@ function lightPoints(l: Lights): { points: THREE.Points; material: THREE.ShaderM
 function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPalette): Dressing {
   const rng = mulberry32(ctx.seed ^ 0x5bace);
   const main = ctx.corridors[0];
-  const lights: Lights = { pos: [], colour: [], size: [], blink: [] };
+  const lights: Lights = { pos: [], colour: [], size: [], blink: [], spin: [] };
+  const spinners: Spinners = { pivot: [], axis: [], rate: [] };
   const structures: [string, StationMesh][] = [];
-  for (const p of scenery.stations) structures.push(['megastructure', megastructure(main, p, rng, ctx.quality, lights)]);
+  for (const p of scenery.stations) structures.push(['megastructure', megastructure(main, p, rng, ctx.quality, lights, spinners)]);
   // On a moon a tube runs through the ground's own rock: there is no hull to dress.
   if (scenery.moon === null) for (const c of ctx.corridors) for (const t of tubeDressing(c, rng, ctx.quality, lights)) structures.push(['tubeHull', t]);
   const gates = gantries(main, scenery.gates.map((g) => [main.ribbon.paramToS(g.from), main.ribbon.paramToS(g.to)] as const), lights);
@@ -152,7 +157,8 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
 
   const objects: THREE.Object3D[] = [];
   const owned: { dispose(): void }[] = [];
-  const station = stationMaterial(palette.accent, sunDirection(palette), new THREE.Color(palette.sun), ctx.quality === 'low');
+  const spin = spinUniforms(spinners);
+  const station = stationMaterial(palette.accent, sunDirection(palette), new THREE.Color(palette.sun), ctx.quality === 'low', spin.uniforms);
   owned.push(station.material);
   structures.forEach(([name, st], i) => {
     const geo = st.build();
@@ -181,7 +187,7 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
     owned.push(far);
     objects.push(far.mesh);
   }
-  const points = lightPoints(lights);
+  const points = lightPoints(lights, spin.uniforms);
   if (points) {
     owned.push(points);
     objects.push(points.points);
@@ -190,6 +196,7 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
     objects,
     update(time, camera) {
       station.setTime(time);
+      spin.setTime(time);
       near?.update(camera);
       if (points) points.material.uniforms.uTime.value = time;
     },
