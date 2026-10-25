@@ -10,6 +10,7 @@ import type { Ground } from './ground.ts';
 // placed here beyond the hard boundary, with the ground levelled under them.
 
 export interface PlacedLandmark {
+  kind: LandmarkKind;
   landmark: Landmark;
   /** World centre and footprint radius after scaling, for culling. */
   centre: THREE.Vector3;
@@ -86,7 +87,7 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.updateMatrixWorld(true);
     toLocal.copy(g.matrixWorld).invert();
     const spot = hazard ? track.toWorld((hazard.hazard.s0 + hazard.hazard.s1) / 2, 0, 0) : null;
-    placed.push({ landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true || SKY.has(p.kind), hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
+    placed.push({ kind: p.kind, landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true || SKY.has(p.kind), hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
   });
   return placed;
 }
@@ -126,9 +127,12 @@ export function checkLandmarkClearance(placed: PlacedLandmark[], ground: Ground)
   }
 }
 
-/** Shows, hides and animates landmarks by distance from the camera. */
-export function updateLandmarks(placed: PlacedLandmark[], quality: Quality, time: number, dt: number, cameraPos: THREE.Vector3): void {
-  const view = LANDMARK_VIEW[quality];
+/**
+ * Shows, hides and animates landmarks by distance from the camera: out to `sight` (the world's
+ * fog, past which nothing shows), never past LANDMARK_VIEW.
+ */
+export function updateLandmarks(placed: PlacedLandmark[], quality: Quality, sight: number, time: number, dt: number, cameraPos: THREE.Vector3): void {
+  const view = Math.min(LANDMARK_VIEW[quality], sight);
   for (const p of placed) {
     // Horizon-sized pieces (a storm front kilometres wide) are always on; fog does the fading.
     const visible = p.radius > view || p.centre.distanceTo(cameraPos) - p.radius < view || (p.hazardAt !== null && p.hazardAt.distanceTo(cameraPos) < view);

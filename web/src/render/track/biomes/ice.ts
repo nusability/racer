@@ -3,7 +3,7 @@ import type { TrackPalette } from '../../../core/types.ts';
 import { mulberry32, range, type Rng } from '../../../core/rng.ts';
 import type { IceScenery } from '../../../data/tracks/scenery.ts';
 import { FlatBuilder, type P3 } from '../builder.ts';
-import { HORIZON_MAX, HORIZON_MIN, ROCK_TILE } from '../config.ts';
+import { HORIZON_MAX, HORIZON_MIN, ROCK_TILE, TERRAIN_CELLS_NEAR } from '../config.ts';
 import type { Corridor } from '../corridor.ts';
 import { instanced, type Placement } from '../instanced.ts';
 import { fbm, smoothstep } from '../noise.ts';
@@ -68,6 +68,7 @@ export function iceKit(scenery: IceScenery, palette: TrackPalette): BiomeKit {
     roadLight: 0,
     masonry: 'sandstone',
     pillar: { kind: 'rock' },
+    terrainCells: TERRAIN_CELLS_NEAR,
     ownPosts: false,
     cornerStands: true,
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),

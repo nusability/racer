@@ -139,38 +139,63 @@ export class Ground {
 
   /** The closest centreline sample of any ribbon (horizontally), or null when far away. */
   nearest(x: number, z: number): Nearest | null {
+    let found: Nearest | null = null;
+    let foundD2 = Infinity;
+    for (let v = 0; v < this.views.length; v++) {
+      const near = this.nearestOn(v, x, z);
+      if (!near) continue;
+      const { gx, gz } = this.views[v].shape;
+      const d2 = (gx[near.k] - x) ** 2 + (gz[near.k] - z) ** 2;
+      if (d2 < foundD2) {
+        foundD2 = d2;
+        found = near;
+      }
+    }
+    return found;
+  }
+
+  /** The closest centreline sample of ribbon view v, or null when far from it. */
+  nearestOn(v: number, x: number, z: number): Nearest | null {
     const i = Math.round((x - this.fx0) / FIELD_CELL);
     const j = Math.round((z - this.fz0) / FIELD_CELL);
     if (i < 0 || j < 0 || i >= this.fw || j >= this.fh) return null;
-    let found: Nearest | null = null;
-    let foundD2 = Infinity;
-    this.fields.forEach((field, v) => {
-      const start = field[j * this.fw + i];
-      if (start < 0) return;
-      const view = this.views[v];
-      const { gx, gz } = view.shape;
-      const n = gx.length;
-      const closed = view.ribbon.closed;
-      const d2 = (k: number) => (gx[k] - x) ** 2 + (gz[k] - z) ** 2;
-      // Walk downhill along the ribbon from the stamped sample to the exact local minimum.
-      let k = start;
-      let best = d2(k);
-      for (const dir of [1, -1]) {
-        for (;;) {
-          const q = closed ? (k + dir + n) % n : k + dir;
-          if (q < 0 || q >= n || view.shape.bridge[q]) break;
-          const dq = d2(q);
-          if (dq >= best) break;
-          best = dq;
-          k = q;
-        }
+    const start = this.fields[v][j * this.fw + i];
+    if (start < 0) return null;
+    const view = this.views[v];
+    const { gx, gz } = view.shape;
+    const n = gx.length;
+    const closed = view.ribbon.closed;
+    const d2 = (k: number) => (gx[k] - x) ** 2 + (gz[k] - z) ** 2;
+    // Walk downhill along the ribbon from the stamped sample to the exact local minimum.
+    let k = start;
+    let best = d2(k);
+    for (const dir of [1, -1]) {
+      for (;;) {
+        const q = closed ? (k + dir + n) % n : k + dir;
+        if (q < 0 || q >= n || view.shape.bridge[q]) break;
+        const dq = d2(q);
+        if (dq >= best) break;
+        best = dq;
+        k = q;
       }
-      if (best < foundD2) {
-        foundD2 = best;
-        found = { v, k, d: (x - gx[k]) * view.shape.rx[k] + (z - gz[k]) * view.shape.rz[k] };
-      }
-    });
-    return found;
+    }
+    return { v, k, d: (x - gx[k]) * view.shape.rx[k] + (z - gz[k]) * view.shape.rz[k] };
+  }
+
+  /**
+   * Smallest gap from (x, z) to the hard boundary of any ribbon (negative inside one), checked
+   * against every ribbon, not just the nearest centreline: beside a junction's peel the closer
+   * centreline can belong to the road whose boundary is further.
+   */
+  boundaryGap(x: number, z: number): number {
+    let gap = Infinity;
+    for (let v = 0; v < this.views.length; v++) {
+      const near = this.nearestOn(v, x, z);
+      if (!near) continue;
+      const smp = this.views[v].ribbon.samples[near.k];
+      gap = Math.min(gap, Math.abs(near.d) - (near.d < 0 ? smp.edgeL : smp.edgeR));
+    }
+    return gap;
   }
 
   /**

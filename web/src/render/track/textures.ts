@@ -136,15 +136,16 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     ctx.fillStyle = css(palette.road, 0.95, 0.55);
     for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
   };
-  // A city street is laned: two dashed lane lines instead of one centre line. A forest trail
+  // A city street is laned: two dashed lane lines instead of one centre line. A forest road
   // has no paint down its middle; its ruts mark the lines.
-  const lanes = style.surface === 'asphalt' ? CITY_LANES : style.surface === 'trail' ? [] : [0.5];
+  const lanes = style.surface === 'asphalt' ? CITY_LANES : forest ? [] : [0.5];
   for (const lane of lanes) {
     for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
       paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');
     }
   }
-  for (const mirror of [false, true]) {
+  // A forest trail is bounded by its trunks and ferns, not by paint: no edge lines, no kerbs.
+  for (const mirror of forest ? [] : [false, true]) {
     const x = (u: number) => (mirror ? R - u * R : u * R);
     const l0 = x(EDGE_LINE[0]);
     const l1 = x(EDGE_LINE[1]);

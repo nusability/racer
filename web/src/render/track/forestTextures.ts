@@ -6,15 +6,22 @@ import { ROAD_TEXTURE_LENGTH, type Quality, TEXTURE_SIZE } from './config.ts';
 
 // Elderwood's canvas painters: the trail and the logging road (packed earth worn into two
 // racing ruts, roots crossing it), the forest-floor run-off (moss and leaf litter) and the
-// near-white detail maps for moss and mossy stone. The road's paint (edge lines, kerbs) stays
-// textures.ts's, so the edges read exactly as in every other world.
+// near-white detail maps for moss and mossy stone. A forest road carries no paint: the trail
+// reads by its paler worn middle, the darker mossy litter at its edges and the trunks there.
 
 /** Roots crossing the trail every this many metres on average: the forest's sense of speed. */
-const ROOT_SPACING = 11;
+const ROOT_SPACING = 17;
 /** The two worn ruts sit at these shares of the road width. */
 const RUTS = [0.33, 0.67];
 /** Moss creeps in from each edge of a trail over this share of the road width. */
-const MOSS_CREEP = 0.12;
+const MOSS_CREEP = 0.16;
+/**
+ * The worn middle of a trail is paler than its edges, so the way reads at speed without paint:
+ * the earth's shade at the middle and at the edges, and where across the width each holds.
+ */
+const WORN_MIDDLE = 1.14;
+const WORN_EDGE = 0.72;
+const WORN_BAND: readonly [number, number] = [0.22, 0.4];
 /** Fallen leaves per square metre of road (trail) and run-off. */
 const LEAVES_ROAD = 0.35;
 const LEAVES_RUNOFF = 1.4;
@@ -31,6 +38,18 @@ const GRAVEL = 6;
  */
 export function forestRoad(ctx: CanvasRenderingContext2D, palette: TrackPalette, kind: 'trail' | 'logging', rng: Rng, R: number, H: number, pxPerM: number): void {
   const metresAcross = R / pxPerM;
+  if (kind === 'trail') {
+    // The worn band: pale down the middle, darkening to the litter at either edge.
+    const g = ctx.createLinearGradient(0, 0, R, 0);
+    g.addColorStop(0, css(palette.road, WORN_EDGE));
+    g.addColorStop(WORN_BAND[0], css(palette.road, 1));
+    g.addColorStop(WORN_BAND[1], css(palette.road, WORN_MIDDLE));
+    g.addColorStop(1 - WORN_BAND[1], css(palette.road, WORN_MIDDLE));
+    g.addColorStop(1 - WORN_BAND[0], css(palette.road, 1));
+    g.addColorStop(1, css(palette.road, WORN_EDGE));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, R, H);
+  }
   // Ruts: the racing lines, worn darker and smoother.
   for (const lane of RUTS) {
     const g = ctx.createLinearGradient((lane - 0.12) * R, 0, (lane + 0.12) * R, 0);
@@ -56,7 +75,7 @@ export function forestRoad(ctx: CanvasRenderingContext2D, palette: TrackPalette,
       const u = (i / 10) * reach;
       pts.push([(fromLeft ? u : 1 - u) * R, y0 + Math.sin(i * 1.3 + m) * pxPerM * 0.6 + (rng() - 0.5) * pxPerM * 0.3]);
     }
-    for (const [dy, colour, width] of [[0, css(palette.road, 0.42, 0.85), 5], [-2, css(palette.sand, 1.1, 0.35), 2]] as const) {
+    for (const [dy, colour, width] of [[0, css(palette.road, 0.5, 0.6), 3], [-2, css(palette.sand, 1.1, 0.3), 1.5]] as const) {
       wrapStroke(H, (wrap) => {
         ctx.strokeStyle = colour;
         ctx.lineWidth = width * (pxPerM / 16);

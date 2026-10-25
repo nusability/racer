@@ -8,6 +8,7 @@ import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
 import { biomeOfTrack, sceneryById, trackById } from '../data/tracks/index.ts';
+import { atmosphere } from '../render/track/config.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import type { AudioRival, GameAudio } from '../audio/audio.ts';
 import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
@@ -217,7 +218,7 @@ export class RaceSession {
     this.gliderEnv = look?.gliders ? worldEnvironment(renderer, look.look.env, look.look.sunDir) : null;
     const finish = this.gliderEnv && look ? { envMap: this.gliderEnv.texture, look: look.look.gliders } : null;
 
-    this.env = applyEnvironment(this.scene, def.palette, detail);
+    this.env = applyEnvironment(this.scene, def.palette, atmosphere(biomeOfTrack(def.id), detail));
     this.trackScene = buildTrackScene(this.track, detail, look);
     this.scene.add(this.trackScene.group);
     this.glowPools = look?.wetSheen

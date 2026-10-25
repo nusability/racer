@@ -2,22 +2,22 @@ import type { TrackDef } from '../../core/types.ts';
 import type { ForestScenery } from './scenery.ts';
 
 // Timberton, Elderwood's racing town: a street circuit out of the lumber town in its logged-out
-// clearing, the grandstand packed along the main street, then a lap of the woods on the broad
-// logging roads. One fork on the long haul south: the Skid Road drags its bumps through the old
+// clearing, the grandstand packed along the main street, then a lap of the woods on the
+// logging trails, narrow between the trunks. One fork on the long haul south: the Skid Road drags its bumps through the old
 // skidding trail while the Haul Road jumps a fallen giant. A log slide, a herd crossing and a
-// gentle wind gap; wide and forgiving, the rookie's circuit.
+// gentle wind gap; the most forgiving of the trails, the rookie's circuit.
 export const timberton: TrackDef = {
   id: 'timberton',
   name: 'Timberton',
-  blurb: 'The lumber town street circuit: a packed grandstand, logging roads and a herd at the crossing.',
+  blurb: 'The lumber town street circuit: a packed grandstand, logging trails and a herd at the crossing.',
   difficulty: 2,
   course: 'circuit',
   laps: 3,
   seed: 5105,
-  width: 44,
-  runoff: 12,
+  width: 20,
+  runoff: 0,
   points: [
-    { x: 0, z: 0, y: 2 },
+    { x: 0, z: 0, y: 2, width: 20 },
     { x: 0, z: -183, y: 2 },
     { x: 0, z: -367, y: 2 },
     { x: 0, z: -550, y: 2 },
@@ -69,44 +69,46 @@ export const timberton: TrackDef = {
     { x: 0, z: 720, y: 2.8 },
     { x: 0, z: 540, y: 2.6 },
     { x: 0, z: 360, y: 2.4 },
-    { x: 0, z: 180, y: 2.2 },
+    { x: 0, z: 180, y: 2.2, width: 20 },
   ],
   features: [
-    // The main street: walled, the grandstand on the left, a pair of pads off the line.
-    { kind: 'walls', from: 48.634, to: 52.8 },
-    { kind: 'walls', from: 0.109, to: 5.453 },
-    { kind: 'boostPad', at: 2.18, lateral: -10 },
-    { kind: 'boostPad', at: 2.18, lateral: 10 },
-    { kind: 'boostCells', at: 3.273, lateral: -12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 3.765, lateral: 12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 4.255, lateral: -12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 4.745, lateral: 12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 7.487, lateral: -16, count: 4, spacing: 26 },
+    // The main street, the grandstand on the left, a pair of pads off the line.
+    { kind: 'boostPad', at: 2.18, lateral: -4.5 },
+    { kind: 'boostPad', at: 2.18, lateral: 4.5 },
+    { kind: 'boostCells', at: 3.273, lateral: -5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 3.765, lateral: 5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 4.255, lateral: -5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 4.745, lateral: 5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 7.487, lateral: -7, count: 4, spacing: 26 },
     { kind: 'dunes', from: 9.479, to: 13.492, amplitude: 1.2, wavelength: 280 },
     // Logs roll off the bank on the right of the east road.
-    { kind: 'hazard', hazard: { type: 'dropper', id: 'logjam', from: 14.013, to: 15.06, count: 3, radius: 3, period: 12, warn: 2.8, stay: 3, phase: 2 } },
-    { kind: 'boostCells', at: 17.128, lateral: -16, count: 4, spacing: 26 },
+    { kind: 'hazard', hazard: { type: 'dropper', id: 'logjam', from: 14.013, to: 15.06, count: 2, radius: 2.5, period: 12, warn: 2.8, stay: 3, phase: 2 } },
+    { kind: 'boostCells', at: 17.128, lateral: -7, count: 4, spacing: 26 },
     // Haul Road (the main way through the fork): a fallen giant to jump, or the gap on the right.
     { kind: 'kicker', at: 24.704, length: 40, height: 3 },
-    { kind: 'hazard', hazard: { type: 'blocker', id: 'deadfall', at: 25.328, opening: 26, offset: 8, height: 5, warn: 3, up: 5, period: 16, phase: 4 } },
-    { kind: 'boostCells', at: 21.87, lateral: 12, count: 3, spacing: 28 },
-    { kind: 'boostCells', at: 28.08, lateral: -12, count: 3, spacing: 28 },
-    { kind: 'repairCells', at: 30.7, lateral: 12, count: 3, spacing: 28 },
-    { kind: 'boostCells', at: 33.15, lateral: -16, count: 4, spacing: 26 },
+    { kind: 'hazard', hazard: { type: 'blocker', id: 'deadfall', at: 25.328, opening: 14, offset: 4.5, height: 5, warn: 3, up: 5, period: 16, phase: 4 } },
+    { kind: 'boostCells', at: 21.87, lateral: 5.5, count: 3, spacing: 28 },
+    { kind: 'boostCells', at: 28.08, lateral: -5.5, count: 3, spacing: 28 },
+    { kind: 'repairCells', at: 30.7, lateral: 5.5, count: 3, spacing: 28 },
+    { kind: 'boostCells', at: 33.15, lateral: -7, count: 4, spacing: 26 },
     { kind: 'boostPad', at: 36.106, lateral: 0 },
     // The herd crosses the west road, two files from either side.
     { kind: 'hazard', hazard: { type: 'sweeper', id: 'herdeast', at: 38.328, radius: 6, height: 10, xFrom: 110, xTo: -110, cross: 6, hold: 1, period: 22, phase: 0 } },
     { kind: 'hazard', hazard: { type: 'sweeper', id: 'herdwest', at: 38.716, radius: 6, height: 10, xFrom: -110, xTo: 110, cross: 6, hold: 1, period: 22, phase: 9 } },
-    { kind: 'boostCells', at: 39.994, lateral: -12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 40.494, lateral: 12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 40.994, lateral: -12, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 41.443, lateral: 12, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 39.994, lateral: -5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 40.494, lateral: 5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 40.994, lateral: -5.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 41.443, lateral: 5.5, count: 1, spacing: 30 },
     // The wind gap breathes across the bends from the left.
     { kind: 'hazard', hazard: { type: 'gust', id: 'windgap', from: 42.341, to: 43.589, strength: 5, on: 5, period: 14, phase: 3 } },
     { kind: 'dunes', from: 38.883, to: 45.118, amplitude: 1.2, wavelength: 280 },
-    { kind: 'boostCells', at: 44.838, lateral: 16, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 44.838, lateral: 7, count: 4, spacing: 26 },
     // The fork on the long haul south: the Haul Road; the Skid Road (left) on the old skidding trail.
     { kind: 'route', from: 20.48, to: 29.83, name: 'Haul Road' },
+    // Glades: the trail opens round its groves and hazards, room to pick a way past.
+    { kind: 'narrow', from: 13.51, to: 15.56, width: 24, blend: 70 },
+    { kind: 'narrow', from: 24.83, to: 25.83, width: 24, blend: 70 },
+    { kind: 'narrow', from: 37.83, to: 39.22, width: 24, blend: 70 },
   ],
   branches: [
     // The old skidding trail: ruts and root bumps; no fallen giant across it.
@@ -117,8 +119,8 @@ export const timberton: TrackDef = {
       side: -1,
       from: 20.48,
       to: 29.83,
-      width: 34,
-      runoff: 10,
+      width: 18,
+      runoff: 0,
       points: [
         { x: 1979, z: -965, y: 4.4 },
         { x: 2018, z: -819, y: 2.5 },
@@ -136,8 +138,8 @@ export const timberton: TrackDef = {
         { kind: 'rough', from: 3.865, to: 4.77, amount: 0.12 },
         { kind: 'rough', from: 6.75, to: 7.742, amount: 0.12 },
         { kind: 'rough', from: 9.687, to: 10.517, amount: 0.12 },
-        { kind: 'boostCells', at: 5.051, lateral: 8, count: 3, spacing: 28 },
-        { kind: 'boostCells', at: 8.638, lateral: -8, count: 3, spacing: 28 },
+        { kind: 'boostCells', at: 5.051, lateral: 4, count: 3, spacing: 28 },
+        { kind: 'boostCells', at: 8.638, lateral: -4, count: 3, spacing: 28 },
       ],
     },
   ],
@@ -147,17 +149,20 @@ export const timberton: TrackDef = {
 
 export const timbertonScenery: ForestScenery = {
   biome: 'forest',
-  boundary: 'fence',
+  boundary: 'trunks',
   road: 'logging',
-  treesPerKm: 70,
-  treeHeight: 140,
-  trunkRadius: 3.0,
-  forestDepth: 480,
+  trunkRadius: [1.5, 2.6],
+  giantsPerKm: 2,
+  trunkGap: [2, 12],
+  woodsPerHa: 38,
+  forestDepth: 420,
+  treeHeight: 90,
   canopy: 0.45,
   undergrowth: 0.6,
   mist: 0.3,
+  lanternsPerKm: 0,
   shaftsPerKm: 12,
-  clearings: [{ from: 47.43, to: 6.3, style: 'town' }, { from: 35.8, to: 39.16, style: 'glade' }],
+  clearings: [{ from: 47.43, to: 6.3, style: 'town' }],
   landmarks: [
     { kind: 'lumberTown', at: 51.13, side: -1, distance: 6 },
     { kind: 'ropeBridge', at: 8.38, side: 1, distance: 8 },

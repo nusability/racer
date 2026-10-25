@@ -1,23 +1,23 @@
 import type { TrackDef } from '../../core/types.ts';
 import type { ForestScenery } from './scenery.ts';
 
-// The Lantern Fair: the woods' festival circuit at dusk, round the forest edge from glade to
-// glade, lanterns strung through the trees and the crowds out on the meadows. A long bulge north
+// The Lantern Fair: the woods' festival circuit at dusk, out of the festival ground and through
+// the deep woods, lanterns hung on the trunks along the trail. A long bulge north
 // round the old ruins, which the Ruin Steps cut straight through over broken, root-heaved
 // paving; south down the lantern way past a herd's crossing, west past the glow groves, a
-// falling giant to jump, and home into the festival glade.
+// falling giant to jump, and home into the festival ground.
 export const lanternfair: TrackDef = {
   id: 'lanternfair',
   name: 'Lantern Fair',
-  blurb: 'The festival circuit at dusk: glade to glade under the lanterns, and a cut through the ruins.',
+  blurb: 'The festival circuit at dusk: lanterns on the trunks, deep woods and a cut through the ruins.',
   difficulty: 3,
   course: 'circuit',
   laps: 3,
   seed: 5106,
-  width: 40,
-  runoff: 10,
+  width: 17,
+  runoff: 0,
   points: [
-    { x: 0, z: 0, y: 3 },
+    { x: 0, z: 0, y: 3, width: 20 },
     { x: 0, z: -200, y: 3 },
     { x: 0, z: -400, y: 3 },
     { x: 0, z: -600, y: 3 },
@@ -74,47 +74,51 @@ export const lanternfair: TrackDef = {
     { x: 0, z: 700, y: 5 },
     { x: 0, z: 525, y: 4.5 },
     { x: 0, z: 350, y: 4 },
-    { x: 0, z: 175, y: 3.5 },
+    { x: 0, z: 175, y: 3.5, width: 20 },
   ],
   features: [
-    // The festival glade: pads off the line out of the start.
-    { kind: 'boostPad', at: 1.75, lateral: -9 },
-    { kind: 'boostPad', at: 1.75, lateral: 9 },
-    { kind: 'boostCells', at: 2.75, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 3.15, lateral: 11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 3.549, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 4.991, lateral: -15, count: 4, spacing: 26 },
+    // The festival ground: pads off the line out of the start.
+    { kind: 'boostPad', at: 1.75, lateral: -4 },
+    { kind: 'boostPad', at: 1.75, lateral: 4 },
+    { kind: 'boostCells', at: 2.75, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 3.15, lateral: 4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 3.549, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 4.991, lateral: -5.5, count: 4, spacing: 26 },
     // The bulge round the ruins: undulating ground, strings wide of its bends.
     { kind: 'dunes', from: 10.964, to: 18.932, amplitude: 1.5, wavelength: 260 },
-    { kind: 'boostCells', at: 11.789, lateral: 13, count: 4, spacing: 26 },
-    { kind: 'boostCells', at: 16.207, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 16.641, lateral: 11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 17.075, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 17.512, lateral: 11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 21.924, lateral: -15, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 11.789, lateral: 5.5, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 16.207, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 16.641, lateral: 4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 17.075, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 17.512, lateral: 4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 21.924, lateral: -5.5, count: 4, spacing: 26 },
     // Logs roll off the bank on the right as the road turns south.
-    { kind: 'hazard', hazard: { type: 'dropper', id: 'logjam', from: 24.649, to: 25.844, count: 3, radius: 3, period: 10, warn: 2, stay: 3, phase: 1 } },
-    { kind: 'repairCells', at: 27.343, lateral: 12, count: 3, spacing: 28 },
+    { kind: 'hazard', hazard: { type: 'dropper', id: 'logjam', from: 24.649, to: 25.844, count: 2, radius: 2.5, period: 10, warn: 2, stay: 3, phase: 1 } },
+    { kind: 'repairCells', at: 27.343, lateral: 5, count: 3, spacing: 28 },
     // The herd crosses the lantern way in two files.
     { kind: 'hazard', hazard: { type: 'sweeper', id: 'herdeast', at: 32.876, radius: 6, height: 10, xFrom: 90, xTo: -90, cross: 5, hold: 1, period: 18, phase: 0 } },
     { kind: 'hazard', hazard: { type: 'sweeper', id: 'herdwest', at: 33.317, radius: 6, height: 10, xFrom: -90, xTo: 90, cross: 5, hold: 1, period: 18, phase: 7 } },
-    { kind: 'boostCells', at: 29.451, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 29.851, lateral: 11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 30.25, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 30.648, lateral: 11, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 29.451, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 29.851, lateral: 4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 30.25, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 30.648, lateral: 4.5, count: 1, spacing: 30 },
     { kind: 'boostPad', at: 38.058, lateral: 0 },
-    { kind: 'boostCells', at: 39.597, lateral: 14, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 39.597, lateral: 5.5, count: 4, spacing: 26 },
     // The wind gap roars across the bends from the right.
     { kind: 'hazard', hazard: { type: 'gust', id: 'windgap', from: 42.338, to: 43.763, strength: -9, on: 4, period: 12, phase: 2 } },
-    { kind: 'boostCells', at: 45.187, lateral: -14, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 45.187, lateral: -5.5, count: 4, spacing: 26 },
     // A dead giant comes down across the west road: the gap on the left, or jump it.
     { kind: 'kicker', at: 47.288, length: 40, height: 3 },
-    { kind: 'hazard', hazard: { type: 'blocker', id: 'deadfall', at: 47.983, opening: 20, offset: -6, height: 5, warn: 2.2, up: 5, period: 14, phase: 5 } },
+    { kind: 'hazard', hazard: { type: 'blocker', id: 'deadfall', at: 47.983, opening: 11, offset: -3.5, height: 5, warn: 2.2, up: 5, period: 14, phase: 5 } },
     { kind: 'rough', from: 49.649, to: 50.316, amount: 0.2 },
-    { kind: 'boostCells', at: 51.376, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 51.906, lateral: 11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 52.432, lateral: -11, count: 1, spacing: 30 },
-    { kind: 'boostCells', at: 55.447, lateral: 14, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 51.376, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 51.906, lateral: 4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 52.432, lateral: -4.5, count: 1, spacing: 30 },
+    { kind: 'boostCells', at: 55.447, lateral: 5.5, count: 4, spacing: 26 },
+    // Glades: the trail opens round its groves and hazards, room to pick a way past.
+    { kind: 'narrow', from: 24.15, to: 26.34, width: 22, blend: 70 },
+    { kind: 'narrow', from: 32.38, to: 33.82, width: 22, blend: 70 },
+    { kind: 'narrow', from: 47.48, to: 48.48, width: 22, blend: 70 },
   ],
   branches: [
     // Straight through the ruins over broken, root-heaved paving: walled, rough, and short.
@@ -125,7 +129,7 @@ export const lanternfair: TrackDef = {
       side: 1,
       from: 7.37,
       to: 21.25,
-      width: 20,
+      width: 12,
       runoff: 0,
       points: [
         { x: 507, z: -1040, y: 5.8 },
@@ -145,23 +149,26 @@ export const lanternfair: TrackDef = {
       ],
     },
   ],
-  // Festival dusk: violet sky over the meadows, a red-gold sun on the tree line, lantern-gold accents.
+  // Festival dusk: violet sky over the festival ground, a red-gold sun on the tree line, lantern-gold accents.
   palette: { sky: 0x34406a, horizon: 0x6a6a7c, sand: 0x464a2c, road: 0x806048, rock: 0x585c58, accent: 0xffc060, sun: 0xff9a58, dusk: 0.82 },
 };
 
 export const lanternfairScenery: ForestScenery = {
   biome: 'forest',
-  boundary: 'dune',
+  boundary: 'trunks',
   road: 'trail',
-  treesPerKm: 75,
-  treeHeight: 145,
-  trunkRadius: 3.0,
-  forestDepth: 420,
+  trunkRadius: [1.5, 2.8],
+  giantsPerKm: 3,
+  trunkGap: [2, 11],
+  woodsPerHa: 42,
+  forestDepth: 380,
+  treeHeight: 95,
   canopy: 0.5,
   undergrowth: 0.7,
   mist: 0.55,
+  lanternsPerKm: 45,
   shaftsPerKm: 5,
-  clearings: [{ from: 54.88, to: 3.5, style: 'glade' }, { from: 26.74, to: 30.45, style: 'glade' }, { from: 37.73, to: 40.83, style: 'glade' }],
+  clearings: [{ from: 54.88, to: 3.5, style: 'glade' }],
   landmarks: [
     { kind: 'glowGrove', at: 2.5, side: -1, distance: 10, scale: 1.2 },
     { kind: 'ruins', at: 5.84, side: -1, distance: 15, branch: 'ruinsteps' },

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Track } from '../core/track.ts';
 import { biomeOfTrack, sceneryById } from '../data/tracks/index.ts';
 import { FlatBuilder, SmoothBuilder } from './track/builder.ts';
-import { BOOST_SCROLL, CULL_MARGIN, FOG_FAR, ROCK_TILE, SAND_TILE, SEA_LEVEL, type Quality } from './track/config.ts';
+import { BOOST_SCROLL, CULL_MARGIN, ROCK_TILE, SAND_TILE, SEA_LEVEL, atmosphere, type Quality } from './track/config.ts';
 import { Corridor, type Scatter } from './track/corridor.ts';
 import { buildCells, type CellItem } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
@@ -66,6 +66,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const biome = biomeOfTrack(def.id);
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
   const ao = look?.ao ? look.look.ao : null;
+  const fogFar = atmosphere(biome, quality).fog.far;
   const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
@@ -135,11 +136,25 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
       }
     }
   });
-  for (const t of buildTerrain(ground, quality, mats.sand)) {
+  for (const t of buildTerrain(ground, quality, kit.terrainCells[quality], mats.sand)) {
     group.add(t);
     if (t.geometry.boundingSphere && t.geometry.boundingSphere.radius < 2000) cullable.push(t);
   }
-  const dressing = kit.dress({ corridors, ground, quality, seed: def.seed, buoys: scatter.buoys, posts: scatter, props, glow, lit: mats.plain, unlit: mats.unlit, rock: mats.rock });
+  const dressing = kit.dress({
+    corridors,
+    ground,
+    quality,
+    seed: def.seed,
+    buoys: scatter.buoys,
+    posts: scatter,
+    props,
+    glow,
+    lit: mats.plain,
+    unlit: mats.unlit,
+    rock: mats.rock,
+    fogFar,
+    landmarks: landmarks.map((l) => ({ kind: l.kind, x: l.centre.x, z: l.centre.z, radius: l.radius, bound: l.hazardAt !== null })),
+  });
   for (const o of dressing.objects) group.add(o);
   const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
   const ownBarrier = new Set(scenery.landmarks.flatMap((l) => (l.hazard !== undefined && DRAWS_OWN_BARRIER.has(l.kind) ? [l.hazard] : [])));
@@ -168,7 +183,6 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   for (const l of landmarks) group.add(l.landmark.group);
   checkLandmarkClearance(landmarks, ground);
 
-  const fogFar = FOG_FAR[quality];
   let last: number | null = null;
   return {
     group,
@@ -185,7 +199,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
         const bs = o.geometry.boundingSphere;
         if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < fogFar + CULL_MARGIN;
       }
-      updateLandmarks(landmarks, quality, time, dt, cameraPos);
+      updateLandmarks(landmarks, quality, fogFar + CULL_MARGIN, time, dt, cameraPos);
     },
     collectCell(item, branch, cell) {
       cells[item].collect(branch, cell);

@@ -36,24 +36,33 @@ export const FOAM = 0xe8f4f0;
 
 // --- Pieces -------------------------------------------------------------------------------
 
-/** Trunk segments of a landmark giant: [share of height, radius multiplier] from the buried foot up. */
+/**
+ * Trunk segments of a landmark giant: [share of height, radius multiplier] from the buried foot
+ * up. Straight columns barely tapering, like the woods' own trunks round them (biomes/forest.ts):
+ * redwoods, not spreading oaks.
+ */
 const TRUNK: readonly (readonly [number, number])[] = [
   [-0.05, 1.7],
   [0, 1.5],
   [0.04, 1.1],
-  [0.3, 0.92],
-  [0.65, 0.72],
-  [1, 0.4],
+  [0.3, 0.96],
+  [0.65, 0.88],
+  [1, 0.78],
 ];
 const TRUNK_SIDES = { high: 10, low: 7 } as const;
 /** Buttress roots round a giant's foot: how many, their reach (× radius) and height (× radius). */
 const ROOTS = 5;
 const ROOT_REACH = 2.6;
 const ROOT_HEIGHT = 1.2;
-/** A giant's crown: clumps (high, low), where they hang (height share: only high up, far over the trail) and their size (× radius): broad, flat layers. */
+/**
+ * A giant's crown: clumps (high, low), where they hang (height share: only at the very top, up
+ * in the canopy's shade, mostly out of a racer's frame), their size (× radius) and how dark they
+ * are under the canopy.
+ */
 const CROWN_CLUMPS = { high: 5, low: 3 } as const;
-const CROWN_FROM = 0.8;
-const CLUMP_SIZE: readonly [number, number] = [5, 8];
+const CROWN_FROM = 0.88;
+const CLUMP_SIZE: readonly [number, number] = [3, 5];
+const CROWN_SHADE = 0.6;
 const CLUMP_SQUASH = 0.38;
 
 export interface GiantOpts {
@@ -107,7 +116,7 @@ export function giant(kit: Kit, bucket: Bucket, x: number, z: number, h: number,
     const out = r * (1.2 + rng() * 2) * (1 - tier * 0.5);
     const y = y0 + h * (CROWN_FROM + (1 - CROWN_FROM) * tier);
     const size = r * (CLUMP_SIZE[0] + rng() * (CLUMP_SIZE[1] - CLUMP_SIZE[0])) * (1 - tier * 0.4);
-    clump(bucket, [top[0] + Math.cos(a) * out, y, top[2] + Math.sin(a) * out], size, leafColour(rng), rng);
+    clump(bucket, [top[0] + Math.cos(a) * out, y, top[2] + Math.sin(a) * out], size, shade(leafColour(rng), CROWN_SHADE), rng);
   }
 }
 

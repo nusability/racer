@@ -149,7 +149,7 @@ export function poolGeometry(): THREE.BufferGeometry {
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return g;
 }
-const POOL_SEGMENTS = 14;
+const POOL_SEGMENTS = 10;
 
 /** The sun pools' material: light added to the road in `color`, faded by fog, drawn over the road. */
 export function poolMaterial(color: THREE.Color): THREE.MeshBasicMaterial {

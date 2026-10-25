@@ -330,6 +330,24 @@ const viewer = {
         });
         return `${o.name} ${size.x.toFixed(0)}x${size.y.toFixed(0)}x${size.z.toFixed(0)} ${meshes} draws ${o.visible ? 'on' : 'off'}`;
       }),
+  /**
+   * What would draw from here, by mesh name (up to the first ':' or digit): meshes switched on and
+   * in the camera's frustum, with their triangles (× instances). For finding where a frame's cost goes.
+   */
+  drawn: () => {
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(stage.camera.projectionMatrix, stage.camera.matrixWorldInverse));
+    const out: Record<string, { draws: number; tris: number }> = {};
+    stage.trackScene.group.traverseVisible((o) => {
+      if (!(o instanceof THREE.Mesh) || (o.frustumCulled && !frustum.intersectsObject(o))) return;
+      const g = o.geometry;
+      const t = (g.index ? g.index.count : g.attributes.position.count) / 3;
+      const key = o.name.split(/[:\d]/)[0] || '(unnamed)';
+      const e = (out[key] ??= { draws: 0, tris: 0 });
+      e.draws++;
+      e.tris += o instanceof THREE.InstancedMesh ? t * o.count : t;
+    });
+    return out;
+  },
   stats: () => ({ calls: stage.renderer.info.render.calls, triangles: stage.renderer.info.render.triangles, buildMs: stage.buildMs, length: stage.track.length, memory: { ...stage.renderer.info.memory }, ...totals() }),
   /** The level being shown: changes when another is loaded. */
   get track() {

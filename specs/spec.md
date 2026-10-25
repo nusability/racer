@@ -58,10 +58,13 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    is the stunt world: walled city roads where every track has at least two loops or
    corkscrews and the pro and elite tracks four or more (double loops, a loop straight into a
    corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover).
-   Elderwood is the sprint world, a forest of giant trees: four point-to-point sprints down
-   winding, undulating trails 26–34 m wide, each forking two or three times (three on the
-   elite ones), plus two circuits with crowds, the lumber town's street circuit and the
-   lantern fair at the forest edge. Every cup mixes sprints and circuits.
+   Elderwood is the sprint world, a forest of colossal trunks: four point-to-point sprints down
+   winding, undulating trails 13–18 m wide (three to four glider widths; the elite ones the
+   tightest), walled end to end by the trunks standing at the trail's edge, opening into
+   20–26 m glades where trunks stand in the trail or a hazard comes through, each forking two
+   or three times (three on the elite ones), plus two circuits with crowds, the lumber town's
+   street circuit (its town an open clearing, its trails 20 m) and the lantern fair (17 m).
+   Every cup mixes sprints and circuits.
 2. **Race**: six racers, 2–3 laps of a circuit, or one run of a point-to-point sprint: start
    line to finish line, counted in four sectors, then a run-out where everyone glides to a
    stop on the air brake. Throttle is automatic. The craft always flies along the
@@ -116,7 +119,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Racer contact | Shoved apart by closing speed, split by armour; 0.002 hull per m/s above 8 m/s | One hit per pair per second |
 | Repair cell | +25% hull | Once per racer per lap |
 | Loop | Radius ≥ 80 m (160 m tall, ~510 m of road, crown no tighter than half the radius); below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews; flat out the starter tops a loop at ~137 m/s, so only braking up the climb stalls. A corkscrew rolls at most once per 200 m |
-| Shortcuts | 1–2 per track, 18–22 m wide, walled | Stock glider, measured (track-check): flat out saves 1.5–3.5 s for 25–45% hull; lifting saves 0.2–2 s for ≤ 10%, and at least 0.8 s less than flat out |
+| Shortcuts | 1–2 per track, 18–22 m wide (Elderwood's 12 m), walled | Stock glider, measured (track-check): flat out saves 1.5–3.5 s for 25–45% hull; lifting saves 0.2–2 s for ≤ 10%, and at least 0.8 s less than flat out |
 | Rough ground | Hull/s = 0.2 × amount × ((v/top − 0.7)/0.3)^1.5 ÷ armour above 70% of top speed; jolts up to 7 m/s sideways (seeded) | Lifting to 70% is free; boosting through costs ~2.5× flat out. AIs lift by skill (0.9 → 0.73 of top), skip shortcuts above 80–50% hull, and rookies sometimes charge through |
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | Launch boost only for a press within 0.3 s after GO |
 | False start | Any boost during the countdown: 1.0 s stall at GO, no launch boost | AIs false-start 0.25·(1−skill)², perfect-start 0.8·skill |

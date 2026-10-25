@@ -270,8 +270,8 @@ const forestLook: WorldLookFor = (p) => ({
   grade: {
     // Under the canopy the woods are dim and green; the shafts, sun pools and clearings stand
     // out from them, and the bloom (which starts low) lights them.
-    exposure: byDusk(p, 0.72, 0.9),
-    materialExposure: byDusk(p, 0.9, 1.05),
+    exposure: byDusk(p, 0.82, 0.95),
+    materialExposure: byDusk(p, 1, 1.1),
     // Green in the shadows and the light by day, gold only in the brightest (the sun's own
     // shafts); a misty blue-green by dusk.
     lift: [0, byDusk(p, 0.01, 0.008), byDusk(p, 0.002, 0.014)],

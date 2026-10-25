@@ -12,7 +12,7 @@ import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, GRAVITY, RACER_HALF_WIDTH, SIM_DT } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -33,14 +33,41 @@ const CORNER_EXIT = 1.3;
 const RUNOUT_MIN_RADIUS = 300;
 /** A beach road must sit this far above the sea so the swell never washes over it. */
 const SEA_CLEARANCE = 0.6;
-/** Narrowest walled main road (canyon, tunnel, squeeze) and narrowest shortcut. */
-const MIN_WIDTH = 18;
-/** Walled main-road sections narrower than this must be short squeezes. */
-const WALLED_WIDTH = 26;
-const SQUEEZE_MAX = 260;
-const BRANCH_WIDTH: [number, number] = [16, 22];
-/** A fork's routes are whole roads, as wide as a main road can be. */
-const ROUTE_WIDTH: [number, number] = [18, 44];
+/**
+ * The width and lane rules a course is designed against. Open worlds race on roads with run-off,
+ * walled only in canyons, tunnels and short squeezes. Elderwood races on narrow forest trails
+ * walled end to end by trunks (the trunks are the thrill): narrower everywhere, its lanes past
+ * obstacles and hazards counted in glider widths (RACER_HALF_WIDTH), no squeeze limit.
+ */
+interface WidthRules {
+  /** Narrowest road anywhere (main road, route or shortcut). */
+  minWidth: number;
+  /** Walled main-road sections narrower than this must be short squeezes (0: no limit). */
+  walledWidth: number;
+  squeezeMax: number;
+  branchWidth: [number, number];
+  /** A fork's routes are whole roads, as wide as a main road can be. */
+  routeWidth: [number, number];
+  /** Every obstacle (and every blocker's opening) leaves a free lane at least this wide on the main road and routes. */
+  openLane: number;
+  /** Shortcuts are the risky line: a tighter free lane is enough there. */
+  branchLane: number;
+  /** A rookie track's blocker opening. */
+  rookieOpening: number;
+}
+const ROAD_RULES: WidthRules = { minWidth: 18, walledWidth: 26, squeezeMax: 260, branchWidth: [16, 22], routeWidth: [18, 44], openLane: 16, branchLane: 8, rookieOpening: 24 };
+/** A forest trail's lane: two glider widths with a little air; a rookie's opening three. */
+const TRAIL_LANE = 4 * RACER_HALF_WIDTH + 0.4;
+const TRAIL_RULES: WidthRules = {
+  minWidth: 12,
+  walledWidth: 0,
+  squeezeMax: 0,
+  branchWidth: [10, 14],
+  routeWidth: [12, 22],
+  openLane: TRAIL_LANE,
+  branchLane: 2 * RACER_HALF_WIDTH + 2.6,
+  rookieOpening: 6 * RACER_HALF_WIDTH - 1.2,
+};
 /**
  * Road length of a lap, metres: about a minute on the starter. Up to 10 km of ground plan, plus
  * the road a stunt track's vertical loops add (~390 m each, three at most).
@@ -61,12 +88,8 @@ const LANDING_TOLERANCE = 1;
 const FLIGHT_STEP = 1;
 /** Nothing solid within this after a landing or a kicker touchdown. */
 const LANDING_CLEAR = 150;
-/** Every obstacle must leave a free lane at least this wide somewhere across the course. */
-const OPEN_LANE = 16;
 /** Past a junction a branch is still peeling away from the main road for this long. */
 const DIVERGE = 320;
-/** Shortcuts are the risky line: a tighter free lane is enough there. */
-const BRANCH_LANE = 8;
 
 interface Flight {
   landed: boolean;
@@ -132,7 +155,7 @@ function minRadiusBetween(t: Ribbon, s0: number, len: number): number {
 const fmt = (n: number) => (Number.isFinite(n) ? n.toFixed(0) : 'inf');
 
 /** Checks shared by the main loop and every branch. `quiet` spans (junctions) get no features. */
-function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, label: string, warn: string[], isMain: boolean) {
+function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, label: string, warn: string[], isMain: boolean, rules: WidthRules) {
   const w = (m: string) => warn.push(`${label}: ${m}`);
   const sAt = (u: number) => t.paramToS(u);
   const uAt = (s: number) => {
@@ -171,12 +194,12 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
   // Widths: walled main road stays generous except in short squeezes.
   let squeeze = 0;
   for (const smp of t.samples) {
-    if (smp.width < MIN_WIDTH - 0.01) w(`width ${smp.width.toFixed(1)} < ${MIN_WIDTH} at s=${fmt(smp.s)}`);
+    if (smp.width < rules.minWidth - 0.01) w(`width ${smp.width.toFixed(1)} < ${rules.minWidth} at s=${fmt(smp.s)}`);
     const walled = smp.edgeL - smp.width / 2 < 1 && smp.edgeR - smp.width / 2 < 1;
-    if (isMain && walled && smp.width < WALLED_WIDTH - 0.01) {
+    if (isMain && walled && smp.width < rules.walledWidth - 0.01) {
       squeeze += t.step;
-      if (squeeze > SQUEEZE_MAX) {
-        w(`walled squeeze under ${WALLED_WIDTH}m runs past ${SQUEEZE_MAX}m at s=${fmt(smp.s)}`);
+      if (squeeze > rules.squeezeMax) {
+        w(`walled squeeze under ${rules.walledWidth}m runs past ${rules.squeezeMax}m at s=${fmt(smp.s)}`);
         squeeze = -Infinity;
       }
     } else if (squeeze > 0) squeeze = 0;
@@ -275,12 +298,12 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
       cursor = Math.max(cursor, b);
     }
     widest = Math.max(widest, t.maxXAt(o.s) - cursor);
-    const lane = isMain ? OPEN_LANE : BRANCH_LANE;
-    if (widest < lane) w(`${o.kind} at s=${fmt(o.s)} leaves no ${lane}m lane (widest ${widest.toFixed(1)}m)`);
+    const lane = isMain ? rules.openLane : rules.branchLane;
+    if (widest < lane) w(`${o.kind} at s=${fmt(o.s)} leaves no ${lane.toFixed(1)}m lane (widest ${widest.toFixed(1)}m)`);
   }
   for (const a of t.arches) {
-    const lane = isMain ? OPEN_LANE : BRANCH_LANE;
-    if (a.openMax - a.openMin < lane) w(`arch at s=${fmt(a.s)} opening ${(a.openMax - a.openMin).toFixed(0)}m < ${lane}m`);
+    const lane = isMain ? rules.openLane : rules.branchLane;
+    if (a.openMax - a.openMin < lane) w(`arch at s=${fmt(a.s)} opening ${(a.openMax - a.openMin).toFixed(0)}m < ${lane.toFixed(1)}m`);
   }
 }
 
@@ -380,7 +403,6 @@ const DROP_JUNCTION_CLEAR = 120;
 /** Rookie hazards (difficulty ≤ ROOKIE): long warnings, wide openings, gentle gusts. */
 const ROOKIE = 2;
 const ROOKIE_WARN = 2.5;
-const ROOKIE_OPENING = 24;
 const ROOKIE_GUST = 5;
 const ROOKIE_CROSS = 3;
 /** Any hazard: at least this much warning and a lane this wide. */
@@ -436,7 +458,7 @@ function loopPassGap(t: Ribbon, loop: LoopSpan): number {
 }
 
 /** Loops, corkscrews, drops, slick and hazards. */
-function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: string[], difficulty: number, junctions: [number, number, number][]) {
+function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: string[], difficulty: number, junctions: [number, number, number][], rules: WidthRules) {
   const w = (m: string) => warn.push(`${label}: ${m}`);
   const sAt = (u: number) => t.paramToS(u);
   const straightAround = (s0: number, s1: number, what: string) => {
@@ -488,16 +510,16 @@ function checkShapes(t: Ribbon, features: TrackFeature[], label: string, warn: s
         }
         case 'blocker': {
           if (d.offset - d.opening / 2 < t.minXAt(h.s0) || d.offset + d.opening / 2 > t.maxXAt(h.s0)) w(`blocker ${d.id} opening leaves the course`);
-          if (d.opening < OPEN_LANE) w(`blocker ${d.id} opening ${d.opening}m < ${OPEN_LANE}m`);
+          if (d.opening < rules.openLane) w(`blocker ${d.id} opening ${d.opening}m < ${rules.openLane.toFixed(1)}m`);
           {
             // The way through must be on the paved road: an opening out on the run-off reads as
             // a wall across the course, and the whole field dies on it.
             const half = t.widthAt(h.s0) / 2;
             const paved = Math.min(half, d.offset + d.opening / 2) - Math.max(-half, d.offset - d.opening / 2);
-            if (paved < OPEN_LANE) w(`blocker ${d.id} opening has only ${paved.toFixed(0)}m on the road (< ${OPEN_LANE}m)`);
+            if (paved < rules.openLane) w(`blocker ${d.id} opening has only ${paved.toFixed(0)}m on the road (< ${rules.openLane.toFixed(1)}m)`);
           }
           if (d.warn < HAZARD_WARN) w(`blocker ${d.id} warns only ${d.warn}s`);
-          if (rookie && (d.opening < ROOKIE_OPENING || d.warn < ROOKIE_WARN)) w(`blocker ${d.id} too harsh for a rookie track (opening ${d.opening}, warn ${d.warn})`);
+          if (rookie && (d.opening < rules.rookieOpening || d.warn < ROOKIE_WARN)) w(`blocker ${d.id} too harsh for a rookie track (opening ${d.opening}, warn ${d.warn})`);
           break;
         }
         case 'dropper': {
@@ -706,7 +728,8 @@ function check(def: TrackDef): string[] {
   const lineR = Math.min(...raceLines.map((s) => minRadiusBetween(t, t.wrap(s - 100), 300)));
   const run = def.course === 'circuit' ? `${def.laps} laps  lap@${STARTER_SPEED}` : `sprint  run@${STARTER_SPEED}`;
   console.log(`\n${def.id} "${def.name}" d${def.difficulty} ${run} ${(t.raceLength / STARTER_SPEED).toFixed(0)}s`);
-  checkRibbon(t, def.features, def.points.length, 'main', warn, true);
+  const rules = sceneryById(def.id).biome === 'forest' ? TRAIL_RULES : ROAD_RULES;
+  checkRibbon(t, def.features, def.points.length, 'main', warn, true, rules);
   const mainJunctions = t.branches.flatMap((b): [number, number][] => [
     [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH],
     [b.exitS - BRANCH_JUNCTION_LENGTH, b.exitS],
@@ -729,8 +752,8 @@ function check(def: TrackDef): string[] {
     const span = b.exitS - b.entryS;
     const saving = span - r.length;
     console.log(`  ${label} (${b.def.kind}) "${b.def.name}" side ${b.side > 0 ? 'right' : 'left'} @${b.def.from}..${b.def.to}: skips ${fmt(span)}m, runs ${fmt(r.length)}m, saves ${fmt(saving)}m = ${(saving / RACE_SPEED).toFixed(1)}s at ${RACE_SPEED} m/s`);
-    checkRibbon(r, b.def.features, b.def.points.length + 4, label, warn, b.def.kind === 'route');
-    const widths = b.def.kind === 'route' ? ROUTE_WIDTH : BRANCH_WIDTH;
+    checkRibbon(r, b.def.features, b.def.points.length + 4, label, warn, b.def.kind === 'route', rules);
+    const widths = b.def.kind === 'route' ? rules.routeWidth : rules.branchWidth;
     if (b.def.width < widths[0] || b.def.width > widths[1]) warn.push(`${label}: width ${b.def.width} outside ${widths.join('..')}`);
     // A shortcut is a trade of hull for time; a route is measured with its fork's other ways.
     if (b.def.kind === 'shortcut') checkTradeOff(t, b, label, warn);
@@ -789,8 +812,8 @@ function check(def: TrackDef): string[] {
     [b.entryS, b.entryS + BRANCH_JUNCTION_LENGTH, b.side],
     [b.exitS - BRANCH_JUNCTION_LENGTH, b.exitS, b.side],
   ]);
-  checkShapes(t, def.features, 'main', warn, def.difficulty, sided);
-  for (const b of t.branches) checkShapes(b.ribbon, b.def.features, `branch ${b.def.id}`, warn, def.difficulty, []);
+  checkShapes(t, def.features, 'main', warn, def.difficulty, sided, rules);
+  for (const b of t.branches) checkShapes(b.ribbon, b.def.features, `branch ${b.def.id}`, warn, def.difficulty, [], rules);
   const st = 5;
   for (let a = 0; a < t.samples.length; a += st) {
     for (let b = a + st; b < t.samples.length; b += st) {

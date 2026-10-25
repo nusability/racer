@@ -6,8 +6,12 @@ import type { LandmarkKind } from '../../render/landmarks/types.ts';
 
 export type ScatterKind = 'rocks' | 'cacti' | 'bones' | 'shards';
 
-/** What marks the hard boundary at the outside of the run-off (water run-off gets buoys). */
-export type BoundaryStyle = 'dune' | 'rock' | 'fence';
+/**
+ * What marks the hard boundary at the outside of the run-off (water run-off gets buoys).
+ * 'trunks': a forest trail's colonnade, drawn by the forest kit standing right at the hard
+ * boundary where it collides; the corridor lays only the forest floor's low bank there.
+ */
+export type BoundaryStyle = 'dune' | 'rock' | 'fence' | 'trunks';
 
 interface SceneryBase {
   boundary: BoundaryStyle;
@@ -91,33 +95,45 @@ export interface ForestClearing {
   style: 'glade' | 'town';
 }
 
-/** Elderwood: a forest of giant ancient trees, the canopy far overhead, ferns, moss and mist. */
+/**
+ * Elderwood: a forest of colossal ancient trunks. The course is a narrow trail along the forest
+ * floor walled by a colonnade of trunks right at its edge (what you see is what you hit), the
+ * woods layered behind it into mist, the canopy a dark ceiling far overhead.
+ */
 export interface ForestScenery extends SceneryBase {
   biome: 'forest';
+  boundary: 'trunks';
   /**
-   * What the road is: 'trail' is dark packed earth with moss creeping in at its edges (most
-   * races, through the woods); 'logging' is a pale compacted logging road, the street circuits'.
+   * What the trail is: 'trail' is packed earth, paler down its middle, ferns spilling over its
+   * edges (most races, through the woods); 'logging' is a pale compacted logging road, the
+   * street circuit's.
    */
   road: 'trail' | 'logging';
-  /** Giant trees lining the course per kilometre of lap, both sides together (80–110 reads as a colonnade). */
-  treesPerKm: number;
+  /** Radius of the colonnade's trunks above their root flare, metres (min, max): 1.5–3 is trunks 3–6 m across. */
+  trunkRadius: [number, number];
+  /** True giants (8–12 m across) standing in the colonnade per kilometre of trail, both sides together. */
+  giantsPerKm: number;
   /**
-   * Typical giant's height to the top of its crown, metres (120–180): the crowns start three
-   * quarters of the way up, so this is how high the canopy ceiling stands over the course.
+   * Gap between neighbouring trunks of the colonnade (flare to flare), metres (min, max): small
+   * keeps the boundary a wall of bark, the second rank behind closing what shows between.
    */
-  treeHeight: number;
-  /** Typical trunk radius above the root flare, metres (2.5–4: trunks 5–8 m across). */
-  trunkRadius: number;
-  /** How far out from the course the woods stand before the mist takes them, metres. */
+  trunkGap: [number, number];
+  /** Trunks per hectare of the woods right behind the colonnade; they thin with distance into the mist. */
+  woodsPerHa: number;
+  /** How far out from the trail the woods are drawn, metres (the mist takes them by then). */
   forestDepth: number;
-  /** How closed the canopy ceiling over the course is: 0 open sky, 1 a near-solid roof with gaps. */
+  /** How high the canopy ceiling hangs over the trail, metres (the trunks rise into it out of frame). */
+  treeHeight: number;
+  /** How closed the canopy ceiling is: 0 open sky, 1 a near-solid roof with a few bright gaps. */
   canopy: number;
-  /** Ferns, shrubs, fallen logs and mossy boulders on the forest floor: 0 bare, 1 lush. */
+  /** Ferns, shrubs and fallen logs on the forest floor: 0 bare, 1 lush. */
   undergrowth: number;
   /** Ground mist drifting between the trunks: 0 clear, 1 thick. */
   mist: number;
   /** Shafts of sunlight through canopy gaps per kilometre of lap. */
   shaftsPerKm: number;
+  /** Lanterns hung on the colonnade's trunks, facing the trail, per kilometre (a festival's; 0 for none). */
+  lanternsPerKm: number;
   /** Main-loop spans where the woods open into a glade or a logged-out town. */
   clearings: ForestClearing[];
 }
