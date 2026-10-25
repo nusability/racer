@@ -87,7 +87,7 @@ export interface StationPlacement {
   side: -1 | 1;
   /** Gap between the road's hard boundary and the structure's nearest face, metres. */
   distance: number;
-  /** Length along the course of its main spine, metres (its height and depth follow). */
+  /** Length along the course of its main spine, metres (its height and depth follow); under ~560 m its parts no longer fit their places and the build throws. */
   length: number;
 }
 

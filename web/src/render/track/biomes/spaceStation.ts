@@ -10,8 +10,9 @@ import { StationMesh, axisFrame } from './stationMesh.ts';
 // The megastructures looming off the course: each a station kilometres of hull long, built so
 // it reads as a working place at every distance. Its silhouette carries it from afar: an
 // octagonal spine broken by an open lattice neck, habitat drums standing through it under
-// domes, a spoked wheel rising behind it, sphere tanks and a dish at one end, a solar mast,
-// radiators hung under it, a gantry crane on its back. Its light carries it in between:
+// domes, a spoked wheel rising behind it, sphere tanks and a dish at one end, a solar mast on
+// the neck with radiators hung under it, a gantry crane and a command tower on its back. Each
+// part has its own stretch of the spine (see LAYOUT), so nothing stands inside anything else. Its light carries it in between:
 // hangar mouths and window decks glowing warm against the cool hull, running lights along its
 // edges, red and green navigation lights at its extremities, beacons on its masts. Its plates,
 // pipes and greebles carry it up close. One merged mesh per structure (stationMesh.ts) in the
@@ -58,24 +59,50 @@ const SPINE = {
   collarProud: 0.035,
 } as const;
 
-/** Habitat drums standing through the spine: how many per hull section, radius and reach above/below (shares of L), a foil band (share of the drum's height). */
-const DRUMS = { perSection: 2, radius: [0.035, 0.055], above: [0.06, 0.16], below: [0.05, 0.14], foilBand: 0.08, sides: 24, ringEvery: 12 } as const;
+/** Habitat drums standing through the spine: radius and reach above/below (shares of L), a foil band (share of the drum's height). */
+const DRUMS = { radius: [0.035, 0.055], above: [0.06, 0.16], below: [0.05, 0.14], foilBand: 0.08, sides: 24, ringEvery: 12 } as const;
+/** A drum's collars stand this proud of it (share of its radius); drums and what stands beside them keep this far apart (m). */
+const DRUM_COLLAR = 1.04;
+const PART_GAP = 3;
+/**
+ * The spine's layout (shares of L, along it): a drum pierces its hull top to bottom, so each
+ * owns a slot outright, two in the fore hull and one at the aft hull's neck end; the solar mast
+ * and the radiators share the neck, over and under its lattice; the gantry crane and the
+ * command tower share the rest of the aft hull's back. Every slot is wider than the widest
+ * drum with its collars, and the neck than the solar wings and the radiators.
+ */
+const LAYOUT = {
+  drums: [
+    [-0.45, -0.285],
+    [-0.285, -0.12],
+    [0.04, 0.17],
+  ],
+} as const;
 /** The wheel: where along the spine, its radius and tube, its gap behind the spine, the hub (shares of L); spokes. */
 const WHEEL = { at: 0.2, radius: 0.28, tube: 0.02, gap: 0.05, hubRadius: 0.045, hubLength: 0.06, spokes: 6, spokeRadius: 0.008, collars: 12, segments: 72, tubeSides: 10 } as const;
 /** Sphere tanks round the stern lattice: how many, their radius (share of L). */
 const TANKS = { count: 3, radius: 0.035, sides: 16, rings: 6 } as const;
 /** The comm dish at the stern: radius, depth and mast (shares of L). */
 const DISH = { radius: 0.04, depth: 0.012, mast: 0.03 } as const;
-/** Solar mast on the fore hull: height, arms and panel size (shares of L). */
-const SOLAR = { at: -0.3, height: 0.22, arms: 3, armReach: 0.11, panel: [0.09, 0.045], truss: 0.012, bay: 0.012 } as const;
-/** Radiators hung under the fore hull: drop and panel size (shares of L), panels each side. */
-const RADIATORS = { at: -0.25, drop: 0.15, panel: [0.07, 0.035], perSide: 3 } as const;
+/**
+ * Solar mast standing on the neck's lattice: height, truss, bay and panel width (shares of L);
+ * a panel on each arm, its height a share of the arms' spacing so rows never touch; panels
+ * stand this far clear of the mast (m) and the arms run this far behind them (m).
+ */
+const SOLAR = { height: 0.28, arms: 4, panelWidth: 0.065, panelFill: 0.8, truss: 0.012, bay: 0.012, gap: 2, armBehind: 0.3 } as const;
+/** A solar panel's and a radiator's thickness (m). */
+const PANEL_THICK = 0.8;
+const RADIATOR_THICK = 1;
+/** Radiators hung under the neck's lattice: drop and panel size (shares of L), panels each side, clear of the truss (m). */
+const RADIATORS = { drop: 0.15, panel: [0.06, 0.035], perSide: 3, gap: 1, bracket: 1.4 } as const;
 /** A gantry crane on the aft hull's back: legs apart, height (shares of L). */
-const CRANE = { from: 0.1, to: 0.24, height: 0.05, truss: 0.008 } as const;
-/** A command tower on the aft hull: footprint and tiers (shares of L). */
-const TOWER = { at: 0.3, width: 0.05, height: 0.03, glass: 0.018 } as const;
-/** Hangar mouths on the road face: how many per hull section, width (share of L), frame (m). */
-const HANGARS = { perSection: 2, width: [0.03, 0.05], frame: 3, depth: 4, sill: 3 } as const;
+const CRANE = { from: 0.19, to: 0.3, height: 0.05, truss: 0.008 } as const;
+/** A command tower on the aft hull's back, past the crane: footprint and tiers (shares of L). */
+const TOWER = { at: 0.345, width: 0.05, height: 0.03, glass: 0.018 } as const;
+/** The tower's roof overhangs its walls by this share. */
+const TOWER_ROOF = 1.05;
+/** Hangar mouths on the road face, each filling the bay between two collars: how many per hull section; frame, depth and sill (m). */
+const HANGARS = { perSection: 2, frame: 3, depth: 4, sill: 3 } as const;
 /** Greebles on the hull's back and belly, per kilometre of hull. */
 const GREEBLES_PER_KM = 320;
 /** Pipe runs along the road face's edges: radius (share of the spine radius). */
@@ -90,6 +117,18 @@ const ARM_CLEAR = 26;
 const ARM_HEIGHT: readonly [number, number] = [14, 46];
 /** Lights along an arm's underside, metres apart. */
 const ARM_LIGHT_SPACING = 18;
+/** An arm's docking ring reaches this far round its axis (share of the truss): what it needs clear along the spine. */
+const ARM_RING_REACH = 0.7;
+/** Tries at a clear place for each arm before it is left out. */
+const ARM_TRIES = 8;
+
+/** A hull's road face an arm can stand out of: its stretch along the spine, its plane (w) and half its height round the axis. */
+interface ArmFace {
+  u0: number;
+  u1: number;
+  face: number;
+  half: number;
+}
 
 /** Paint (sRGB): hull panels pale to dark, structural steel, gold foil, solar cells, radiators, glass. */
 const HULL = [0x9aa1ab, 0x868d97, 0x737a84, 0x8e8a84];
@@ -123,6 +162,14 @@ const STROBE_PERIOD = 1.1;
 const RUNNING_EVERY = 0.025;
 
 const UP = new THREE.Vector3(0, 1, 0);
+
+/** A stretch along the spine (station u, m). */
+type Span = readonly [number, number];
+
+/** Whether span a comes within `gap` of any of `others`. */
+function overlaps(a: Span, others: readonly Span[], gap: number): boolean {
+  return others.some(([b0, b1]) => a[0] < b1 + gap && b0 < a[1] + gap);
+}
 
 /** Whether a box (horizontal footprint corners, vertical span) keeps clear of every road. */
 export function clearOfRoads(g: Ground, corners: P3[], y0: number, y1: number): boolean {
@@ -266,18 +313,46 @@ export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, qual
     mesh.at(site.frame((neck[0] + neck[1]) / 2, ys + dy * off, apo + dw * off, 'u')).paint('steel', STEEL, 7).cylinder(R * 0.06, R * 0.06, neck[1] - neck[0], 8, { along: true });
   }
 
-  // Collars round both hulls: the rhythm that gives the spine its scale from afar.
-  for (const [u0, u1, r] of [[fore[0], fore[1], R], [aft[0], aft[1], aftR]] as const) {
-    const step = L * SPINE.collarEvery;
-    const depth = L * SPINE.collarDepth;
-    for (let u = u0 + step / 2; u < u1 - depth; u += step) {
-      const rc = r * (1 + SPINE.collarProud);
-      const fr = site.frame(u, ys, apo, 'u');
-      mesh.at(fr).paint('steel', STEEL_DARK, 8).cylinder(rc, rc, depth, 8, { along: true, phase: site.toward - Math.PI / 8, smooth: false });
-      mesh.annulus(r, rc, -depth / 2, 8, -1, site.toward - Math.PI / 8).annulus(r, rc, depth / 2, 8, 1, site.toward - Math.PI / 8);
-      // Two running lights on the collar's road-face corners.
-      for (const dy of [-1, 1]) light(lights, site.p(u, ys + dy * rc * Math.sin(Math.PI / 8), -0.5 - rc + r), RUNNING, RUNNING_SIZE, 0, 0);
+  // The drums' and hangars' places first: the collars, the arms and the greebles keep off them.
+  const drums = LAYOUT.drums.map(([a, b]) => {
+    const r = L * range(rng, DRUMS.radius[0], DRUMS.radius[1]);
+    const room = ((b - a) * L) / 2 - r * DRUM_COLLAR - PART_GAP;
+    if (room < 0) throw new Error(`space: a ${L} m station is too short for its drums`);
+    return { u: ((a + b) / 2) * L + range(rng, -room, room), r };
+  });
+  const drumSpans: Span[] = drums.map((d) => [d.u - d.r * DRUM_COLLAR, d.u + d.r * DRUM_COLLAR]);
+  // Collars round both hulls every SPINE.collarEvery: the rhythm that gives the spine its scale
+  // from afar. None runs through a drum; each hangar fills the bay between two of them.
+  const collarStep = L * SPINE.collarEvery;
+  const collarDepth = L * SPINE.collarDepth;
+  const hulls = [[fore[0], fore[1], R], [aft[0], aft[1], aftR]] as const;
+  const hangars: { u0: number; u1: number; bottom: number; top: number; face: number }[] = [];
+  const collars: { u: number; r: number }[] = [];
+  for (const [u0, u1, r] of hulls) {
+    const grid: number[] = [];
+    for (let u = u0 + collarStep / 2; u < u1 - collarDepth; u += collarStep) grid.push(u);
+    for (const u of grid) if (!overlaps([u - collarDepth / 2, u + collarDepth / 2], drumSpans, PART_GAP)) collars.push({ u, r });
+    const face = apo - r * Math.cos(Math.PI / 8);
+    const top = ys + r * Math.sin(Math.PI / 8) - HANGARS.frame * 2;
+    const bottom = BAND_HEIGHT + HANGARS.sill;
+    const inset = collarDepth / 2 + PART_GAP + HANGARS.frame;
+    const bays = grid.slice(1).map((_, k) => k);
+    if (bays.length < HANGARS.perSection || collarStep <= 2 * inset) throw new Error(`space: a ${L} m station's hull has no room for its hangars`);
+    for (let i = 0; i < HANGARS.perSection; i++) {
+      const k = bays.splice(Math.floor(rng() * bays.length), 1)[0];
+      hangars.push({ u0: grid[k] + inset, u1: grid[k + 1] - inset, bottom, top, face });
     }
+  }
+  // A hangar's frame stands proud of the face: an arm there would run through it.
+  const hangarSpans: Span[] = hangars.map((h) => [h.u0 - HANGARS.frame, h.u1 + HANGARS.frame]);
+  const collarSpans: Span[] = collars.map(({ u }) => [u - collarDepth / 2, u + collarDepth / 2]);
+  for (const { u, r } of collars) {
+    const rc = r * (1 + SPINE.collarProud);
+    const fr = site.frame(u, ys, apo, 'u');
+    mesh.at(fr).paint('steel', STEEL_DARK, 8).cylinder(rc, rc, collarDepth, 8, { along: true, phase: site.toward - Math.PI / 8, smooth: false });
+    mesh.annulus(r, rc, -collarDepth / 2, 8, -1, site.toward - Math.PI / 8).annulus(r, rc, collarDepth / 2, 8, 1, site.toward - Math.PI / 8);
+    // Two running lights on the collar's road-face corners.
+    for (const dy of [-1, 1]) light(lights, site.p(u, ys + dy * rc * Math.sin(Math.PI / 8), -0.5 - rc + r), RUNNING, RUNNING_SIZE, 0, 0);
   }
 
   // Pipe runs along the road face's top and bottom edges.
@@ -298,29 +373,14 @@ export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, qual
   }
 
   // Hangar mouths in the road faces, over the guide band, lit warm from within.
-  for (const [u0, u1, r] of [[fore[0], fore[1], R], [aft[0], aft[1], aftR]] as const) {
-    const face = apo - r * Math.cos(Math.PI / 8);
-    const top = ys + r * Math.sin(Math.PI / 8) - HANGARS.frame * 2;
-    const bottom = BAND_HEIGHT + HANGARS.sill;
-    const slot = (u1 - u0) / HANGARS.perSection;
-    for (let i = 0; i < HANGARS.perSection; i++) {
-      const w = L * range(rng, HANGARS.width[0], HANGARS.width[1]);
-      const c = u0 + slot * (i + 0.5) + range(rng, -0.25, 0.25) * (slot - w);
-      hangar(mesh, site, lights, c - w / 2, c + w / 2, bottom, top, face);
-    }
-  }
+  for (const h of hangars) hangar(mesh, site, lights, h.u0, h.u1, h.bottom, h.top, h.face);
 
-  // Habitat drums through the hulls, domed.
-  for (const [u0, u1] of [fore, aft] as const) {
-    for (let i = 0; i < DRUMS.perSection; i++) {
-      const slot = (u1 - u0) / DRUMS.perSection;
-      const r = L * range(rng, DRUMS.radius[0], DRUMS.radius[1]);
-      const u = u0 + slot * (i + 0.5) + range(rng, -0.2, 0.2) * slot;
-      const top = ys + apo + L * range(rng, DRUMS.above[0], DRUMS.above[1]);
-      const bottom = ys - apo - L * range(rng, DRUMS.below[0], DRUMS.below[1]);
-      if (!site.clear(u - r, u + r, bottom - r, top + r, apo - r, apo + r)) continue;
-      drum(mesh, site, lights, rng, u, apo, r, bottom, top, quality);
-    }
+  // Habitat drums through the hulls, domed, each in its own slot.
+  for (const { u, r } of drums) {
+    const top = ys + apo + L * range(rng, DRUMS.above[0], DRUMS.above[1]);
+    const bottom = ys - apo - L * range(rng, DRUMS.below[0], DRUMS.below[1]);
+    if (!site.clear(u - r, u + r, bottom - r, top + r, apo - r, apo + r)) continue;
+    drum(mesh, site, lights, rng, u, apo, r, bottom, top, quality);
   }
 
   // The wheel behind the aft hull.
@@ -344,19 +404,33 @@ export function megastructure(cor: Corridor, p: StationPlacement, rng: Rng, qual
   }
   dish(mesh, site, lights, L, tanks[1], ys, apo);
 
-  // A solar mast on the fore hull's back, radiators under it.
-  if (site.clear(L * SOLAR.at - L * SOLAR.armReach * 1.5, L * SOLAR.at + L * SOLAR.armReach * 1.5, ys + apo, ys + apo + L * SOLAR.height, apo - 10, apo + 10)) solarMast(mesh, site, lights, L, ys + apo, apo);
-  if (site.clear(L * RADIATORS.at - L * RADIATORS.panel[0] * 1.2, L * RADIATORS.at + L * RADIATORS.panel[0] * 1.2, ys - apo - L * RADIATORS.drop, ys - apo, apo - 10, apo + 10)) radiators(mesh, site, L, ys - apo, apo);
-  // A gantry crane and a command tower on the aft hull's back.
-  crane(mesh, site, lights, L, ys + aftR * Math.cos(Math.PI / 8), apo);
-  tower(mesh, site, lights, rng, L, ys + aftR * Math.cos(Math.PI / 8), apo, aftR);
+  // The neck's kit: a solar mast standing on its lattice, radiators hung under it, both inside
+  // the neck's length so neither reaches over a hull and its drums.
+  const nu = (neck[0] + neck[1]) / 2;
+  const neckHalf = (R * SPINE.neckTruss) / 2;
+  const room = (neck[1] - neck[0]) / 2 - PART_GAP;
+  const solarReach = L * SOLAR.truss * 0.5 + SOLAR.gap + L * SOLAR.panelWidth;
+  const radiatorReach = L * SOLAR.truss * 0.5 + RADIATORS.gap + L * RADIATORS.panel[0];
+  if (solarReach > room || radiatorReach > room) throw new Error(`space: a ${L} m station's neck is too short for its solar mast and radiators`);
+  if (site.clear(nu - solarReach, nu + solarReach, ys + neckHalf, ys + neckHalf + L * SOLAR.height, apo - 10, apo + 10)) solarMast(mesh, site, lights, L, nu, ys + neckHalf, apo);
+  if (site.clear(nu - radiatorReach, nu + radiatorReach, ys - neckHalf - L * RADIATORS.drop, ys - neckHalf, apo - 10, apo + 10)) radiators(mesh, site, L, nu, ys - neckHalf, apo);
+  // A gantry crane and a command tower on the aft hull's back, past its drum.
+  const aftTop = ys + aftR * Math.cos(Math.PI / 8);
+  const crane = craneSpan(L);
+  const tower = towerSpan(L);
+  if (overlaps(crane, [...drumSpans, tower], PART_GAP)) throw new Error(`space: a ${L} m station's crane runs into its drum or tower`);
+  gantryCrane(mesh, site, lights, L, aftTop, apo);
+  commandTower(mesh, site, lights, rng, L, aftTop, apo, aftR);
 
   if (quality === 'high') {
-    greebles(mesh, site, rng, fore[0], fore[1], ys, apo, R);
-    greebles(mesh, site, rng, aft[0], aft[1], ys, apo, aftR);
+    greebles(mesh, site, rng, fore[0], fore[1], ys, apo, R, drumSpans, drumSpans);
+    greebles(mesh, site, rng, aft[0], aft[1], ys, apo, aftR, [...drumSpans, crane, tower], drumSpans);
   }
 
-  docking(mesh, site, lights, rng, p.distance, L);
+  docking(mesh, site, lights, rng, p.distance, L, [
+    { u0: fore[0], u1: fore[1], face: apo - R * Math.cos(Math.PI / 8), half: R * Math.sin(Math.PI / 8) },
+    { u0: aft[0], u1: aft[1], face: apo - aftR * Math.cos(Math.PI / 8), half: aftR * Math.sin(Math.PI / 8) },
+  ], ys, [...hangarSpans, ...collarSpans]);
 
   // Navigation lights at the extremities: red to one end, green to the other, strobes over them.
   light(lights, site.p(bow[0] - R * SPINE.dockTube, ys, apo), BEACON_RED, NAV_SIZE, 0, 0);
@@ -469,49 +543,67 @@ function dish(mesh: StationMesh, site: Site, lights: Lights, L: number, u: numbe
   light(lights, site.p(u + mast + d * 2.5, y, w), BEACON_RED, BEACON_SIZE, 2.2, 0.3);
 }
 
-/** A lattice mast with solar wings: arms each side along the course, panels on them, the cells' blue a colour against the hull. */
-function solarMast(mesh: StationMesh, site: Site, lights: Lights, L: number, base: number, w: number): void {
-  const u = L * SOLAR.at;
-  const top = base + L * SOLAR.height;
+/**
+ * A lattice mast with solar wings, standing on the neck at u: a panel each side on every arm,
+ * the cells' blue a colour against the hull. The panels face the course in one plane, rows
+ * apart and clear of the mast; the arms that carry them run just behind them, not through them.
+ */
+function solarMast(mesh: StationMesh, site: Site, lights: Lights, L: number, u: number, base: number, w: number): void {
+  const height = L * SOLAR.height;
+  const top = base + height;
   const size = L * SOLAR.truss;
+  const arm = size * 0.3;
   mesh.paint('steel', STEEL_DARK, 70).truss(site.p(u, base, w), site.p(u, top, w), size, L * SOLAR.bay, size * 0.12, site.f);
+  // Arms evenly up the mast, the top one just under its head.
+  const pitch = height / (SOLAR.arms + 0.5);
+  const ph = pitch * SOLAR.panelFill;
+  const pw = L * SOLAR.panelWidth;
+  const near = size / 2 + SOLAR.gap;
+  const armW = w + PANEL_THICK / 2 + SOLAR.armBehind + arm / 2;
   for (let i = 0; i < SOLAR.arms; i++) {
-    const y = base + L * SOLAR.height * ((i + 1) / (SOLAR.arms + 0.5));
+    const y = base + pitch * (i + 1);
     for (const s of [-1, 1]) {
-      const reach = L * SOLAR.armReach;
-      mesh.paint('steel', STEEL, 71).beam(site.p(u + (s * size) / 2, y, w), site.p(u + s * reach, y, w), size * 0.3, size * 0.3, UP);
-      const pw = L * SOLAR.panel[0];
-      const ph = L * SOLAR.panel[1];
-      const c = u + s * (size / 2 + pw / 2 + 2);
+      mesh.paint('steel', STEEL, 71).beam(site.p(u + (s * size) / 2, y, armW), site.p(u + s * (near + pw), y, armW), arm, arm, UP);
       mesh.paint('solar', SOLAR_CELLS, 72);
-      site.box(mesh, c - pw / 2, c + pw / 2, y - ph - 1, y - 1, w - 0.4, w + 0.4);
-      site.box(mesh, c - pw / 2, c + pw / 2, y + 1, y + ph + 1, w - 0.4, w + 0.4);
+      site.box(mesh, u + s * near, u + s * (near + pw), y - ph / 2, y + ph / 2, w - PANEL_THICK / 2, w + PANEL_THICK / 2);
     }
   }
   light(lights, site.p(u, top + BEACON_SIZE / 2, w), BEACON_RED, BEACON_SIZE, 1.9, 0.7);
 }
 
-/** Radiators hung under the hull on a lattice: pale ribbed panels each side of it. */
-function radiators(mesh: StationMesh, site: Site, L: number, base: number, w: number): void {
-  const u = L * RADIATORS.at;
+/** Radiators hung under the neck at u on a lattice: pale ribbed panels each side of it, each on a bracket along its top edge. */
+function radiators(mesh: StationMesh, site: Site, L: number, u: number, base: number, w: number): void {
   const bottom = base - L * RADIATORS.drop;
   const size = L * SOLAR.truss;
   mesh.paint('steel', STEEL_DARK, 80).truss(site.p(u, base, w), site.p(u, bottom, w), size, L * SOLAR.bay, size * 0.12, site.f);
   const pw = L * RADIATORS.panel[0];
   const ph = L * RADIATORS.panel[1];
+  const near = size / 2 + RADIATORS.gap;
   for (let i = 0; i < RADIATORS.perSide; i++) {
     const y = base - L * RADIATORS.drop * ((i + 0.6) / RADIATORS.perSide);
     for (const s of [-1, 1]) {
-      const c = u + s * (size / 2 + pw / 2 + 1);
       mesh.paint('radiator', RADIATOR, 81);
-      site.box(mesh, c - pw / 2, c + pw / 2, y - ph / 2, y + ph / 2, w - 0.5, w + 0.5);
-      mesh.paint('steel', STEEL, 82).beam(site.p(u, y + ph / 2, w), site.p(c + (s * pw) / 2, y + ph / 2, w), 1.4, 1.4, UP);
+      site.box(mesh, u + s * near, u + s * (near + pw), y - ph / 2, y + ph / 2, w - RADIATOR_THICK / 2, w + RADIATOR_THICK / 2);
+      const bracket = y + ph / 2 + RADIATORS.bracket / 2;
+      mesh.paint('steel', STEEL, 82).beam(site.p(u + (s * size) / 2, bracket, w), site.p(u + s * (near + pw), bracket, w), RADIATORS.bracket, RADIATORS.bracket, UP);
     }
   }
 }
 
+/** Where the gantry crane stands along the spine, its legs' feet included. */
+function craneSpan(L: number): Span {
+  const size = L * CRANE.truss;
+  return [L * CRANE.from - size, L * CRANE.to + size];
+}
+
+/** Where the command tower stands along the spine, its roof's overhang included. */
+function towerSpan(L: number): Span {
+  const half = ((L * TOWER.width) / 2) * TOWER_ROOF;
+  return [L * TOWER.at - half, L * TOWER.at + half];
+}
+
 /** A gantry crane over the aft hull's back: lattice legs, a lattice beam, a lit trolley. */
-function crane(mesh: StationMesh, site: Site, lights: Lights, L: number, deck: number, w: number): void {
+function gantryCrane(mesh: StationMesh, site: Site, lights: Lights, L: number, deck: number, w: number): void {
   const u0 = L * CRANE.from;
   const u1 = L * CRANE.to;
   const top = deck + L * CRANE.height;
@@ -532,7 +624,7 @@ function crane(mesh: StationMesh, site: Site, lights: Lights, L: number, deck: n
 }
 
 /** A command tower on the aft hull: a hull block, a glass observation tier, a roof with masts. */
-function tower(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, L: number, deck: number, w: number, r: number): void {
+function commandTower(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, L: number, deck: number, w: number, r: number): void {
   const u = L * TOWER.at;
   const half = (L * TOWER.width) / 2;
   const depth = r * Math.sin(Math.PI / 8) * 0.8;
@@ -543,7 +635,7 @@ function tower(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, L: numbe
   mesh.paint('glass', GLASS, 101);
   site.box(mesh, u - half * 0.9, u + half * 0.9, deck + h, deck + h + g, w - depth * 0.9, w + depth * 0.9);
   mesh.paint('hull', hullTint(rng), 102);
-  site.box(mesh, u - half * 1.05, u + half * 1.05, deck + h + g, deck + h + g + 2.5, w - depth * 1.05, w + depth * 1.05);
+  site.box(mesh, u - half * TOWER_ROOF, u + half * TOWER_ROOF, deck + h + g, deck + h + g + 2.5, w - depth * TOWER_ROOF, w + depth * TOWER_ROOF);
   for (const s of [-1, 1]) {
     const mh = h * 0.9;
     mesh.at(site.frame(u + s * half * 0.6, deck + h + g + mh / 2, w, 'y')).paint('steel', STEEL, 103).cylinder(0.9, 0.5, mh, 6, {});
@@ -551,8 +643,12 @@ function tower(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, L: numbe
   }
 }
 
-/** Greebles on a hull's back and belly: equipment boxes, tanks, pipe stubs and small domes. */
-function greebles(mesh: StationMesh, site: Site, rng: Rng, u0: number, u1: number, ys: number, apo: number, r: number): void {
+/**
+ * Greebles on a hull's back and belly: equipment boxes, tanks, pipe stubs and small domes. A
+ * greeble that would reach into what stands on that face (`back`, `belly`: drums, crane, tower)
+ * is left out.
+ */
+function greebles(mesh: StationMesh, site: Site, rng: Rng, u0: number, u1: number, ys: number, apo: number, r: number, back: readonly Span[], belly: readonly Span[]): void {
   const n = Math.round(((u1 - u0) / 1000) * GREEBLES_PER_KM);
   const halfFace = r * Math.sin(Math.PI / 8) * 0.9;
   const faceY = r * Math.cos(Math.PI / 8);
@@ -565,40 +661,59 @@ function greebles(mesh: StationMesh, site: Site, rng: Rng, u0: number, u1: numbe
     const roll = rng();
     const tint = tints[Math.floor(rng() * tints.length)];
     const kind = tint === FOIL ? 'foil' : tint === STEEL ? 'steel' : 'hull';
+    const taken = up > 0 ? back : belly;
+    const clear = (reach: number) => !overlaps([u - reach, u + reach], taken, PART_GAP);
     if (roll < 0.55) {
       const bw = range(rng, 3, 16);
       const bd = range(rng, 3, Math.min(14, halfFace));
       const bh = range(rng, 1.5, 9);
+      if (!clear(bw / 2)) continue;
       mesh.paint(kind, tint, 110 + i);
       site.box(mesh, u - bw / 2, u + bw / 2, up > 0 ? base : base - bh, up > 0 ? base + bh : base, w - bd / 2, w + bd / 2);
     } else if (roll < 0.75) {
       const tr = range(rng, 2, 6);
       const th = range(rng, 4, 12);
+      if (!clear(tr)) continue;
       mesh.at(site.frame(u, base + (up * th) / 2, w, 'y')).paint(kind, tint, 110 + i).cylinder(tr, tr, th, 10, { caps: true });
     } else if (roll < 0.9) {
       const pr = range(rng, 0.6, 1.6);
       const pl = range(rng, 12, 60);
+      if (!clear(pl / 2)) continue;
       mesh.at(site.frame(u, base + up * pr, w, 'u')).paint('steel', STEEL, 110 + i).cylinder(pr, pr, pl, 6, { along: true, caps: true });
     } else {
       const dr = range(rng, 3, 9);
+      if (!clear(dr)) continue;
       mesh.at(axisFrame(site.p(u, base, w), UP.clone().multiplyScalar(up))).paint(rng() < 0.5 ? 'glass' : 'hull', rng() < 0.5 ? GLASS : HULL[0], 110 + i).dome(dr, 12, 3, 0.6);
     }
   }
 }
 
 /** Docking arms reaching toward the road: lattice booms round a pressure tube, a docking ring at the tip, guide lights under them. */
-function docking(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, distance: number, L: number): void {
+function docking(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, distance: number, L: number, faces: readonly ArmFace[], ys: number, taken: readonly Span[]): void {
   const reach = distance - ARM_CLEAR;
   if (reach <= 0) return;
+  const half = ARM_TRUSS * ARM_RING_REACH;
   const arms = Math.round(range(rng, ARMS[0], ARMS[1]));
   for (let i = 0; i < arms; i++) {
-    const u = range(rng, -L * 0.4, L * 0.4);
-    const y = range(rng, ARM_HEIGHT[0], ARM_HEIGHT[1]);
-    if (!site.clear(u - ARM_TRUSS, u + ARM_TRUSS, y - ARM_TRUSS, y + ARM_TRUSS, -reach, 0)) continue;
-    mesh.paint('steel', STEEL_DARK, 120 + i).truss(site.p(u, y, 0), site.p(u, y, -reach), ARM_TRUSS, ARM_BAY, ARM_MEMBER, UP);
-    mesh.at(site.frame(u, y, -reach / 2, 'w')).paint('hull', HULL[0], 121).cylinder(ARM_TRUSS * 0.28, ARM_TRUSS * 0.28, reach, 10, { rings: 2 });
-    mesh.at(site.frame(u, y, -reach, 'w')).paint('steel', STEEL, 122).torus(ARM_TRUSS * 0.55, ARM_TRUSS * 0.12, 16, 6);
-    for (let o = -reach + ARM_LIGHT_SPACING / 2; o < 0; o += ARM_LIGHT_SPACING) light(lights, site.p(u, y - ARM_TRUSS / 2 - 0.5, o), GUIDE, GUIDE_SIZE, 0, 0);
-    light(lights, site.p(u, y + ARM_TRUSS * 0.75, -reach), BEACON_RED, BEACON_SIZE * 0.7, range(rng, BEACON_PERIOD[0], BEACON_PERIOD[1]), rng());
+    // An arm stands out of a hull's road face, between its hangars and collars: a few tries at a place, else none.
+    for (let attempt = 0; attempt < ARM_TRIES; attempt++) {
+      const u = range(rng, -L * 0.4, L * 0.4);
+      const y = range(rng, ARM_HEIGHT[0], ARM_HEIGHT[1]);
+      const face = faces.find((f) => u - half >= f.u0 + PART_GAP && u + half <= f.u1 - PART_GAP && Math.abs(y - ys) + ARM_TRUSS / 2 <= f.half);
+      if (!face || overlaps([u - half, u + half], taken, PART_GAP)) continue;
+      if (!site.clear(u - ARM_TRUSS, u + ARM_TRUSS, y - ARM_TRUSS, y + ARM_TRUSS, -reach, face.face)) continue;
+      arm(mesh, site, lights, rng, i, u, y, face.face, reach);
+      break;
+    }
   }
+}
+
+/** One docking arm at (u, y), from the road face at w = root out to w = -reach. */
+function arm(mesh: StationMesh, site: Site, lights: Lights, rng: Rng, i: number, u: number, y: number, root: number, reach: number): void {
+  const length = root + reach;
+  mesh.paint('steel', STEEL_DARK, 120 + i).truss(site.p(u, y, root), site.p(u, y, -reach), ARM_TRUSS, ARM_BAY, ARM_MEMBER, UP);
+  mesh.at(site.frame(u, y, (root - reach) / 2, 'w')).paint('hull', HULL[0], 121).cylinder(ARM_TRUSS * 0.28, ARM_TRUSS * 0.28, length, 10, { rings: 2 });
+  mesh.at(site.frame(u, y, -reach, 'w')).paint('steel', STEEL, 122).torus(ARM_TRUSS * 0.55, ARM_TRUSS * 0.12, 16, 6);
+  for (let o = -reach + ARM_LIGHT_SPACING / 2; o < root; o += ARM_LIGHT_SPACING) light(lights, site.p(u, y - ARM_TRUSS / 2 - 0.5, o), GUIDE, GUIDE_SIZE, 0, 0);
+  light(lights, site.p(u, y + ARM_TRUSS * 0.75, -reach), BEACON_RED, BEACON_SIZE * 0.7, range(rng, BEACON_PERIOD[0], BEACON_PERIOD[1]), rng());
 }
