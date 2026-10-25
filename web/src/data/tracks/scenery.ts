@@ -80,7 +80,38 @@ export interface CityScenery extends SceneryBase {
   billboardsPerKm: number;
 }
 
-export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery;
+/** A station megastructure standing off the course: where it looms, and how big it is. */
+export interface StationPlacement {
+  /** Main-loop position it stands abeam of, and the side. */
+  at: TrackParam;
+  side: -1 | 1;
+  /** Gap between the road's hard boundary and the structure's nearest face, metres. */
+  distance: number;
+  /** Length along the course of its main spine, metres (its height and depth follow). */
+  length: number;
+}
+
+/**
+ * An orbital ring station over a gas giant: no ground at all. Every road is a deck hanging in
+ * the void (rails where it is walled, a lit open edge where it is a drop), the planet and the
+ * stars below and around it, station structure looming off the course and asteroid fields the
+ * road weaves through.
+ */
+export interface SpaceScenery extends SceneryBase {
+  biome: 'space';
+  /** Megastructures off the course. */
+  stations: StationPlacement[];
+  /** Main-loop spans of asteroid field: big rocks crowd the road's edges, more hang beyond. */
+  asteroidFields: { from: TrackParam; to: TrackParam }[];
+  /** Big rocks right beside the road per kilometre of field, both sides together. */
+  rocksPerKm: number;
+  /** Far rocks, drawn as flat impostors, scattered round the whole course. */
+  farRocks: number;
+  /** Main-loop spans with lit gantries spanning the deck, close overhead, every few dozen metres. */
+  gates: { from: TrackParam; to: TrackParam }[];
+}
+
+export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery | SpaceScenery;
 
 export interface LandmarkPlacement {
   kind: LandmarkKind;

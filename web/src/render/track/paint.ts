@@ -11,15 +11,19 @@ const STRATUM = 4.2;
 const POUR = 3;
 /** Concrete pours vary this little in tone: cast walls read as one material, not geology. */
 const POUR_VARIATION = 0.07;
+/** A hull's plate rows, metres tall, and how much their tone varies (more than a pour: plates are fitted, not cast). */
+const PLATE_ROW = 4.5;
+const PLATE_VARIATION = 0.22;
 /** Cast concrete's own grey, and how far the palette's rock tints it. */
 const CONCRETE = 0x9a9ca4;
 const CONCRETE_TINT = 0.25;
 
 /**
- * What the course's rock is: layered sandstone (strata, crooked faces), or cast concrete
- * (straight faces, even pours) for a city's barriers, retaining walls and underpasses.
+ * What the course's rock is: layered sandstone (strata, crooked faces), cast concrete
+ * (straight faces, even pours) for a city's barriers, retaining walls and underpasses, or a
+ * station's hull plating (straight faces in the palette's own rock colour, rows of plates).
  */
-export type Masonry = 'sandstone' | 'concrete';
+export type Masonry = 'sandstone' | 'concrete' | 'hull';
 
 function hash(n: number): number {
   const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
@@ -63,6 +67,10 @@ export function makePaint(palette: TrackPalette, masonry: Masonry): Paint {
       if (masonry === 'concrete') {
         const pour = Math.floor(y / POUR);
         return out.copy(rock).multiplyScalar(shade * (1 - POUR_VARIATION / 2 + POUR_VARIATION * hash(pour)));
+      }
+      if (masonry === 'hull') {
+        const row = Math.floor(y / PLATE_ROW);
+        return out.copy(rock).multiplyScalar(shade * (1 - PLATE_VARIATION / 2 + PLATE_VARIATION * hash(row)));
       }
       const band = Math.floor(y / STRATUM);
       const h = hash(band);

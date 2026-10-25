@@ -65,11 +65,13 @@ const SCENERY: Record<string, TrackScenery> = {
  */
 const DEV_TRACKS = new Map<string, { def: TrackDef; scenery: TrackScenery }>();
 
-/** Dev builds only: makes a synthetic track raceable, in `worldId`'s cups, pay and look. */
+/** Dev builds only: makes a synthetic track raceable, in `worldId`'s cups and pay, drawn as its scenery's biome. */
 export function registerDevTrack(def: TrackDef, scenery: TrackScenery, worldId: string): void {
   if (TRACKS.some((t) => t.id === def.id)) throw new Error(`Dev track "${def.id}" would shadow a real track`);
+  // The level viewer registers every dev track up front; loading one again changes nothing.
+  if (DEV_TRACKS.has(def.id)) return;
   DEV_TRACKS.set(def.id, { def, scenery });
-  registerDevTrackWorld(def.id, worldId);
+  registerDevTrackWorld(def.id, worldId, scenery.biome);
 }
 
 export function trackById(id: string): TrackDef {

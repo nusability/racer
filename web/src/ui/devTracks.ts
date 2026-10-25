@@ -1,8 +1,11 @@
-// Dev builds only (main.ts, `?devtrack=<id>`): the synthetic courses of the headless sim check
-// made raceable in the browser, so a new race mechanic (a sprint, a fork) can be driven end to
-// end before any real track uses it. Loaded by a dynamic import that a production build drops.
+// Dev builds only (main.ts, `?devtrack=<id>`; the level viewer; the debug menu): synthetic
+// courses made raceable in the browser. The headless sim check's sprint drives a new race
+// mechanic end to end before any real track uses it; a look-dev track judges a new world's look
+// on one course before the world is built. Loaded by a dynamic import that a production build drops.
 import { registerDevTrack } from '../data/tracks/index.ts';
 import type { TrackScenery } from '../data/tracks/scenery.ts';
+import type { TrackDef } from '../core/types.ts';
+import { spacetest, spacetestScenery } from '../data/tracks/spacetest.ts';
 import { simSprint } from '../../tools/sim-test-track.ts';
 
 /** Plain desert dressing: nothing on the course a landmark could hide or a hazard bind to. */
@@ -18,12 +21,25 @@ const DEV_SCENERY: TrackScenery = {
   landmarks: [],
 };
 
-/** Synthetic tracks by id, each with its scenery and the world whose cups, pay and look it borrows. */
-const DEV_COURSES = {
-  [simSprint.id]: { def: simSprint, scenery: DEV_SCENERY, worldId: 'desert' },
+interface DevCourse {
+  def: TrackDef;
+  scenery: TrackScenery;
+  /** The world whose cups and pay it borrows (open from the start, so a fresh dev career can race it); it is drawn as its scenery's biome. */
+  worldId: string;
+  /** A would-be real course (look-dev): track-check holds it to a real track's rules. */
+  lookDev: boolean;
+}
+
+/** Synthetic tracks by id. */
+const DEV_COURSES: Record<string, DevCourse> = {
+  [simSprint.id]: { def: simSprint, scenery: DEV_SCENERY, worldId: 'desert', lookDev: false },
+  [spacetest.id]: { def: spacetest, scenery: spacetestScenery, worldId: 'desert', lookDev: true },
 };
 
-/** Registers the dev track `id` and returns it, or throws naming the ones there are. */
+/** Every dev track, for the level viewer's picker and the debug menu. */
+export const DEV_TRACKS: { id: string; name: string; lookDev: boolean }[] = Object.values(DEV_COURSES).map((c) => ({ id: c.def.id, name: c.def.name, lookDev: c.lookDev }));
+
+/** Registers the dev track `id` and returns the world it races in, or throws naming the ones there are. */
 export function loadDevTrack(id: string): string {
   const course = DEV_COURSES[id];
   if (!course) throw new Error(`devtrack: no synthetic track "${id}" (have ${Object.keys(DEV_COURSES).join(', ')})`);

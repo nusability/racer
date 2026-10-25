@@ -2,7 +2,8 @@
 // corner radii, widths, jump clear speeds, flight paths that hit something, whether every
 // obstacle leaves an open way round, shortcut sanity and saving, how evenly a fork's routes
 // race, and parts of the course that crowd each other. Exit code 1 when any check warns.
-import { TRACKS, sceneryById } from '../src/data/tracks/index.ts';
+import { TRACKS, sceneryById, trackById } from '../src/data/tracks/index.ts';
+import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
 import { SEA_LEVEL } from '../src/render/track/config.ts';
 import { Ribbon, Track, type Branch, type Fork } from '../src/core/track.ts';
@@ -825,7 +826,10 @@ declare const process: { exitCode: number; argv: string[] };
 let warnings = 0;
 // Track ids on the command line check only those (the shortcut runs make a full check slow).
 const only = process.argv.slice(2);
-const chosen = only.length === 0 ? TRACKS : TRACKS.filter((d) => only.includes(d.id));
+// Look-dev tracks (ui/devTracks.ts) are would-be real courses: held to the same rules.
+const lookDev = DEV_TRACKS.filter((d) => d.lookDev).map((d) => (loadDevTrack(d.id), trackById(d.id)));
+const all = [...TRACKS, ...lookDev];
+const chosen = only.length === 0 ? all : all.filter((d) => only.includes(d.id));
 if (only.length > 0 && chosen.length !== only.length) {
   throw new Error(`track-check: unknown track id in ${only.join(', ')}`);
 }
@@ -836,5 +840,5 @@ if (forkTable.length > 0) {
   console.log(`\nForks (stock ${MEASURE_RACER}, skill ${MEASURE_EYES}: each way's time against the main road's to ${MEASURE_TAIL} m past the rejoin, band ±${ROUTE_TIME_BAND}s):`);
   for (const line of forkTable) console.log(`  ${line}`);
 }
-console.log(`\n${chosen.length} tracks, ${warnings} warnings`);
+console.log(`\n${chosen.length} tracks (${lookDev.length} look-dev), ${warnings} warnings`);
 process.exitCode = warnings > 0 ? 1 : 0;

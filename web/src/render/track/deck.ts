@@ -16,6 +16,10 @@ const DECK_DEPTH = 1.6;
 /** Painted hazard band along a drop edge, on the road surface. */
 const DROP_BAND = 1.6;
 const DROP_BAND_LIFT = 0.04;
+/** Line of light along the top of a rail hanging in the void, metres tall. */
+const RAIL_LIGHT = 0.22;
+/** Lit strip along a deck's open edge, metres wide. */
+const EDGE_LIGHT = 0.7;
 /** Piers stand this far apart along a deck, metres. */
 const PIER_SPACING = 46;
 const PIER_WIDTH = 2.4;
@@ -48,8 +52,24 @@ export function deckStrip(cor: Corridor, c: Chunk, a: number, b: number): void {
     const r = cor.ribbon.samples[cor.idx(a)].right;
     const out = { x: r.x * side, y: r.y * side, z: r.z * side };
     const inward = { x: -out.x, y: -out.y, z: -out.z };
-    // Inner face of the rail, painted so the edge reads at speed (unlit).
-    quadFacing(cor.glow, cor.banked(a, inner(a), 0), cor.banked(b, inner(b), 0), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(a, inner(a), RAIL_HEIGHT), inward, block ? cor.paint.accent : cor.paint.white);
+    // An open drop has no rail (falling off is a wreck there, so nothing may look like a wall):
+    // the deck's edge face, and a lit strip along the edge so it reads at speed.
+    if (cor.drop(a, side) || cor.drop(b, side)) {
+      quadFacing(c.rock, cor.banked(a, inner(a), -DECK_DEPTH), cor.banked(b, inner(b), -DECK_DEPTH), cor.banked(b, inner(b), 0), cor.banked(a, inner(a), 0), out, STEEL_DARK, STEEL);
+      const strip = (k: number) => side * (cor.edge(k, side) - EDGE_LIGHT);
+      const lift = (k: number, x: number) => cor.banked(k, x, DROP_BAND_LIFT);
+      quadFacing(cor.glow, lift(a, strip(a)), lift(b, strip(b)), lift(b, inner(b)), lift(a, inner(a)), up(a), block ? cor.paint.accent : cor.paint.white);
+      continue;
+    }
+    if (cor.hanging) {
+      // A rail in the void is lit steel with a line of light along its top: the edge reads at
+      // speed without a wall of paint between the road and the view.
+      quadFacing(c.rock, cor.banked(a, inner(a), 0), cor.banked(b, inner(b), 0), cor.banked(b, inner(b), RAIL_HEIGHT - RAIL_LIGHT), cor.banked(a, inner(a), RAIL_HEIGHT - RAIL_LIGHT), inward, STEEL_DARK, STEEL);
+      quadFacing(cor.glow, cor.banked(a, inner(a), RAIL_HEIGHT - RAIL_LIGHT), cor.banked(b, inner(b), RAIL_HEIGHT - RAIL_LIGHT), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(a, inner(a), RAIL_HEIGHT), inward, block ? cor.paint.accent : cor.paint.white);
+    } else {
+      // Inner face of the rail, painted so the edge reads at speed (unlit).
+      quadFacing(cor.glow, cor.banked(a, inner(a), 0), cor.banked(b, inner(b), 0), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(a, inner(a), RAIL_HEIGHT), inward, block ? cor.paint.accent : cor.paint.white);
+    }
     // Rail top and the outer face down to the bottom of the deck.
     quadFacing(c.rock, cor.banked(a, inner(a), RAIL_HEIGHT), cor.banked(b, inner(b), RAIL_HEIGHT), cor.banked(b, outer(b), RAIL_HEIGHT), cor.banked(a, outer(a), RAIL_HEIGHT), up(a), STEEL);
     if (stunt) {

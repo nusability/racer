@@ -45,7 +45,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-applyEnvironment(scene, palette, atmosphere(quality));
+applyEnvironment(scene, palette, atmosphere(quality, 'desert'));
 const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE).rotateX(-Math.PI / 2);
 scene.add(new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ color: palette.sand })));
 const road = new THREE.Mesh(new THREE.PlaneGeometry(GROUND_SIZE, ROAD_WIDTH).rotateX(-Math.PI / 2).translate(0, 0.05, 0), new THREE.MeshLambertMaterial({ color: palette.road }));

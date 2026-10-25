@@ -41,6 +41,7 @@ export function iceKit(scenery: IceScenery, palette: TrackPalette): BiomeKit {
   const rock = new THREE.Color(palette.rock);
   const h = scenery.driftHeight;
   return {
+    terrain: true,
     ground: {
       base: (minRoadY) => minRoadY - FLOOR_BELOW_ROAD,
       natural(g, x, z, ripple) {

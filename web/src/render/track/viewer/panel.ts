@@ -1,4 +1,5 @@
 import type { Ribbon, Track } from '../../../core/track.ts';
+import type { TrackDef } from '../../../core/types.ts';
 import { TRACKS } from '../../../data/tracks/index.ts';
 import { WORLDS } from '../../../data/worlds.ts';
 import { button, h, segmented } from '../../../ui/kit.ts';
@@ -141,7 +142,8 @@ export interface ViewerUi {
   setPanelOpen(open: boolean): void;
 }
 
-export function buildUi(api: ViewerApi, stage: HTMLElement[]): ViewerUi {
+/** `devTracks`: synthetic and look-dev tracks a dev build lists after the worlds (none in production). */
+export function buildUi(api: ViewerApi, stage: HTMLElement[], devTracks: TrackDef[]): ViewerUi {
   // --- Top bar.
   const back = h('a', 'btn btn--icon vw-back', '‹');
   back.href = './';
@@ -162,6 +164,12 @@ export function buildUi(api: ViewerApi, stage: HTMLElement[]): ViewerUi {
     picker.append(group);
   }
   if (n !== TRACKS.length) throw new Error(`level viewer: worlds list ${n} tracks, the game has ${TRACKS.length}`);
+  if (devTracks.length > 0) {
+    const group = h('optgroup');
+    group.label = 'Dev and look-dev';
+    for (const t of devTracks) group.append(new Option(t.name, t.id));
+    picker.append(group);
+  }
   picker.addEventListener('change', () => api.loadTrack(picker.value));
   const play: HTMLButtonElement = button({ id: 'viewer_play_button', label: '❚❚', aria: 'Play or pause the camera', variant: 'icon', onTap: () => (api.state.paused = !api.state.paused) });
   const playLabel = label(play);

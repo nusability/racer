@@ -193,6 +193,11 @@ export function corridorShape(r: Ribbon): CorridorShape {
   return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge: new Uint8Array(n), junction: new Uint8Array(n), sink: new Float32Array(n) };
 }
 
+/** A course without ground under it: every sample outside a tunnel stands on a deck. */
+export function hangInVoid(sh: CorridorShape): void {
+  for (let k = 0; k < sh.deck.length; k++) if (!sh.tunnel[k]) sh.deck[k] = 1;
+}
+
 /** Samples of the other stretch searched either side of a crossing, metres of s. */
 const CROSS_WINDOW = 420;
 /** The bridge deck runs on this far past the lower corridor's reach. */

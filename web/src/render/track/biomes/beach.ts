@@ -28,6 +28,7 @@ export function beachKit(scenery: BeachScenery, palette: TrackPalette, sea: SeaL
   const grass = new THREE.Color(0x7f9a44).lerp(new THREE.Color(palette.sand), 0.15);
   const rock = new THREE.Color(palette.rock);
   return {
+    terrain: true,
     ground: {
       base: () => SEA_LEVEL - SEA_FLOOR,
       natural(g, x, z, ripple) {

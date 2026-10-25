@@ -54,6 +54,28 @@ export function debugScreen(ctx: AppCtx): Screen {
     );
   }
 
+  /**
+   * Dev builds only: race or fly round the synthetic and look-dev tracks (ui/devTracks.ts), which
+   * no world lists. A race opens with a career of its own (main.ts), so it never pays into this save.
+   */
+  function devTracksPanel(): HTMLElement | null {
+    if (!import.meta.env.DEV) return null;
+    const rows = h('div', 'debug__list');
+    void import('../devTracks.ts').then(({ DEV_TRACKS }) =>
+      rows.replaceChildren(
+        ...DEV_TRACKS.map((t) =>
+          h(
+            'div',
+            'debug__row',
+            button({ id: `debug_race_${t.id}_button`, label: `RACE ${t.name.toUpperCase()}`, aria: `Race the dev track ${t.name}`, variant: 'primary', onTap: () => location.assign(`./?devtrack=${t.id}`) }),
+            button({ id: `debug_view_${t.id}_button`, label: 'VIEW', aria: `Open ${t.name} in the level viewer`, onTap: () => location.assign(`./track-viewer.html?track=${t.id}&level=${graphicsLevel(career.save.settings)}`) }),
+          ),
+        ),
+      ),
+    );
+    return panel('DEV TRACKS', h('p', 'note', 'Dev builds only. Synthetic and look-dev tracks no world lists.'), rows);
+  }
+
   /** Switches for each part of a world's look, so the owner can A/B its look and frame rate. */
   function lookPanel(): HTMLElement {
     const look = loadDebugFlags(ctx.store).look;
@@ -216,7 +238,7 @@ export function debugScreen(ctx: AppCtx): Screen {
     const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
-      h('div', 'debug__body list-scroll', flagsPanel(), toolsPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
+      h('div', 'debug__body list-scroll', flagsPanel(), toolsPanel(), devTracksPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
       note.el,
     );
     root.querySelector('.debug__body')?.scrollTo(0, scroll);

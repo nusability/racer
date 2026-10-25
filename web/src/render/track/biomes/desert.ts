@@ -26,6 +26,7 @@ export function desertKit(scenery: DesertScenery, palette: TrackPalette): BiomeK
   const sandLight = new THREE.Color(palette.sand).lerp(new THREE.Color(0xffffff), 0.18);
   const h = scenery.duneHeight;
   return {
+    terrain: true,
     ground: {
       base: (minRoadY) => minRoadY - FLOOR_BELOW_ROAD,
       natural(g, x, z, ripple) {

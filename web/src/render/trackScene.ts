@@ -17,7 +17,7 @@ import { buildJunctions, type SignQuads } from './track/junction.ts';
 import { DRAWS_OWN_BARRIER, checkLandmarkClearance, placeLandmarks, updateLandmarks } from './track/landmarks.ts';
 import { makePaint } from './track/paint.ts';
 import { buildPosts } from './track/posts.ts';
-import { ribbonViews } from './track/shape.ts';
+import { hangInVoid, ribbonViews } from './track/shape.ts';
 import { buildTerrain } from './track/terrain.ts';
 import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
 import { biomeKit } from './track/biomes/index.ts';
@@ -67,17 +67,18 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const biome = worldOfTrack(def.id).biome;
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
   const ao = look?.ao ? look.look.ao : null;
-  const fogFar = atmosphere(quality).fog.far;
+  const viewFar = atmosphere(quality, biome).cull;
   const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
+  if (!kit.terrain) for (const v of views) hangInVoid(v.shape);
   const ground = new Ground(views, kit.ground, def.seed);
   // Landmarks first: they level the ground the corridor and terrain then read.
   const landmarks = placeLandmarks(track, scenery, ground, quality);
   const glow = new FlatBuilder();
   const scatter: Scatter = { pylons: [], lights: [], buoys: [] };
   const cover = ao ? roadCover(views, ao) : null;
-  const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter, ao && cover ? { look: ao, cover: cover[i] } : null));
+  const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter, ao && cover ? { look: ao, cover: cover[i] } : null, !kit.terrain));
   for (const c of corridors) {
     buildHazards(c);
     buildRockFeatures(c, def.seed);
@@ -137,9 +138,11 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
       }
     }
   });
-  for (const t of buildTerrain(ground, quality, mats.sand)) {
-    group.add(t);
-    if (t.geometry.boundingSphere && t.geometry.boundingSphere.radius < 2000) cullable.push(t);
+  if (kit.terrain) {
+    for (const t of buildTerrain(ground, quality, mats.sand)) {
+      group.add(t);
+      if (t.geometry.boundingSphere && t.geometry.boundingSphere.radius < 2000) cullable.push(t);
+    }
   }
   const dressing = kit.dress({
     corridors,
@@ -192,9 +195,9 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
       dressing.update(time, cameraPos);
       for (const o of cullable) {
         const bs = o.geometry.boundingSphere;
-        if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < fogFar + CULL_MARGIN;
+        if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < viewFar + CULL_MARGIN;
       }
-      updateLandmarks(landmarks, quality, fogFar + CULL_MARGIN, time, dt, cameraPos);
+      updateLandmarks(landmarks, quality, viewFar + CULL_MARGIN, time, dt, cameraPos);
     },
     collectCell(item, branch, cell) {
       cells[item].collect(branch, cell);

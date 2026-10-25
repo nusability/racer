@@ -77,6 +77,19 @@ export const BIOME_BEDS: Record<Biome, BiomeBed> = {
     cues: ['honk', 'honk', 'siren', 'buzz'],
     gap: [3, 9],
   },
+  // A ring station: the air handlers' low rush, the deep hum of its reactors through the deck,
+  // and the hull ticking as it turns in and out of the star's light.
+  space: {
+    loop: {
+      noise: { filter: 'lowpass', hz: 240, q: 0.5, gain: 0.7 },
+      tone: { wave: 'sawtooth', hz: 38, gain: 0.07 },
+      lfo: { wave: 'sine', hz: 0.05, amp: 0.3, filterHz: 90 },
+      gain: 0.3,
+      wet: 0.65,
+    },
+    cues: ['tick', 'buzz', 'rumble'],
+    gap: [5, 12],
+  },
 };
 
 const crowd: SoundFamily = {

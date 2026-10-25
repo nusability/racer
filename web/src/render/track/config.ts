@@ -1,3 +1,5 @@
+import type { BiomeId } from '../../data/worlds.ts';
+
 // Track rendering tunables. Kept beside the renderer rather than in data/tuning.ts because
 // nothing here changes how a race plays: only how the course looks and what it costs to draw.
 
@@ -15,20 +17,34 @@ export const CULL_MARGIN = 150;
 // --- Fog (also the visible range: nothing past fogFar is drawn) ---
 export const FOG_NEAR = { low: 220, high: 320 } as const;
 export const FOG_FAR = { low: 1500, high: 2600 } as const;
+/**
+ * Space has no air to fog, so nothing hides the far course: corridor chunks are kept this far
+ * instead (a road 3 km off is a hairline, so its pop-in is under a pixel's change), and the
+ * camera sees out to SPACE_FAR so a megastructure kilometres away is never cut by the far plane.
+ */
+export const SPACE_VIEW = { low: 2600, high: 4000 } as const;
+export const SPACE_FAR = 14000;
 
 export interface FogRange {
   near: number;
   far: number;
 }
 
-/** How the air closes round the course. */
+/** How the air (or the void) closes round the course. */
 export interface Atmosphere {
-  /** Where the fog starts and where it hides everything (the culling range too). */
-  fog: FogRange;
+  /** Where the fog starts and where it hides everything; null where there is no air to fog. */
+  fog: FogRange | null;
+  /** Corridor chunks, near terrain and landmarks farther than this (plus CULL_MARGIN) are hidden. */
+  cull: number;
+  /** The camera's far plane, or null where the fog hides everything before the camera's own. */
+  far: number | null;
+  /** What is drawn at infinity: a sky of air with its sun, or space (stars, nebula, a planet). */
+  sky: 'air' | 'space';
 }
 
-export function atmosphere(quality: Quality): Atmosphere {
-  return { fog: { near: FOG_NEAR[quality], far: FOG_FAR[quality] } };
+export function atmosphere(quality: Quality, biome: BiomeId): Atmosphere {
+  if (biome === 'space') return { fog: null, cull: SPACE_VIEW[quality], far: SPACE_FAR, sky: 'space' };
+  return { fog: { near: FOG_NEAR[quality], far: FOG_FAR[quality] }, cull: FOG_FAR[quality], far: null, sky: 'air' };
 }
 
 // --- Corridor ---

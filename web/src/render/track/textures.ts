@@ -23,9 +23,15 @@ const CONCRETE_JOINT = 4;
 
 /** What the paved road and its run-off strip are made of. */
 export interface RoadStyle {
-  surface: 'packed' | 'causeway' | 'boardwalk' | 'asphalt';
+  surface: 'packed' | 'causeway' | 'boardwalk' | 'asphalt' | 'deck';
   runoff: 'sand' | 'wetsand' | 'concrete';
 }
+
+/** A station deck's steel plates: their length along the road and how many span its width. */
+const DECK_PLATE = 4;
+const DECK_PLATES_ACROSS = 6;
+/** Rivets along each plate seam, per plate width. */
+const DECK_RIVETS = 5;
 
 /** Boardwalk plank depth along the road, metres, and the gap between planks. */
 const PLANK = 0.32;
@@ -56,6 +62,20 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
       ctx.fillRect(0, y, R, Math.max(1, PLANK_GAP * pxPerM));
       for (let x = 0.12; x < 1; x += 0.25) ctx.fillRect(x * R, y + (PLANK * pxPerM) / 2, 2, 2);
     }
+  } else if (style.surface === 'deck') {
+    // Steel plates, each its own tone, with dark seams and rivet rows: no cracks, no gravel.
+    const pw = R / DECK_PLATES_ACROSS;
+    for (let y = 0; y < H; y += DECK_PLATE * pxPerM) {
+      for (let i = 0; i < DECK_PLATES_ACROSS; i++) {
+        ctx.fillStyle = css(palette.road, 0.9 + rng() * 0.2);
+        ctx.fillRect(i * pw, y, pw, DECK_PLATE * pxPerM);
+        ctx.fillStyle = css(palette.road, 0.5, 0.9);
+        ctx.fillRect(i * pw, y, 2, DECK_PLATE * pxPerM);
+        ctx.fillRect(i * pw, y, pw, 2);
+        ctx.fillStyle = css(palette.road, 1.4, 0.7);
+        for (let r = 0; r < DECK_RIVETS; r++) ctx.fillRect(i * pw + ((r + 0.5) * pw) / DECK_RIVETS, y + 4, 2, 2);
+      }
+    }
   } else if (style.surface === 'causeway') {
     // Concrete slabs with sand blown across them.
     for (let y = 0; y < H; y += 4 * pxPerM) {
@@ -83,7 +103,8 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     ctx.fillStyle = css(palette.road, v, 0.8);
     ctx.fillRect(rng() * R, rng() * H, 1 + rng() * 1.5, 1 + rng() * 1.5);
   }
-  for (let i = 0; i < 900; i++) {
+  const metal = style.surface === 'deck';
+  for (let i = 0; i < (metal ? 0 : 900); i++) {
     ctx.fillStyle = css(palette.road, rng() < 0.5 ? 0.62 : 1.25, 0.9);
     ctx.beginPath();
     ctx.arc(rng() * R, rng() * H, 1.2 + rng() * 2.2, 0, Math.PI * 2);
@@ -105,7 +126,7 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
   }
   // Cracks: wandering dark lines, mostly along the road.
   ctx.lineWidth = 1.2;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < (metal ? 0 : 40); i++) {
     let x = rng() * R;
     let y = rng() * H;
     ctx.strokeStyle = css(palette.road, 0.45, 0.7);
@@ -132,8 +153,8 @@ export function roadTexture(palette: TrackPalette, style: RoadStyle, seed: numbe
     ctx.fillStyle = css(palette.road, 0.95, 0.55);
     for (let i = 0; i < (w * h) / 40; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 1 + rng() * 2, 1 + rng() * 2);
   };
-  // A city street is laned: two dashed lane lines instead of one centre line.
-  const lanes = style.surface === 'asphalt' ? CITY_LANES : [0.5];
+  // A city street (and a station deck) is laned: two dashed lane lines instead of one centre line.
+  const lanes = style.surface === 'asphalt' || metal ? CITY_LANES : [0.5];
   for (const lane of lanes) {
     for (let m = 0; m < ROAD_TEXTURE_LENGTH; m += CENTRE_DASH + CENTRE_GAP) {
       paint(R * lane - 2, m * pxPerM, 4, CENTRE_DASH * pxPerM, 'rgba(244,240,232,0.75)');

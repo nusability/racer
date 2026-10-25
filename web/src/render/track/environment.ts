@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { TrackPalette } from '../../core/types.ts';
 import type { Atmosphere } from './config.ts';
+import { applySpaceSky } from './spaceSky.ts';
 
-// Sky, sun, fog and light. The sky is drawn at infinity (no camera following needed) and its
+// Sky, sun, fog and light (space has its own: spaceSky.ts). The sky is drawn at infinity (no camera following needed) and its
 // horizon colour equals the fog colour, so fogged terrain melts into it.
 
 /** Sun elevation at midday and at deep dusk, radians. */
@@ -56,6 +57,8 @@ export function applyEnvironment(
   palette: TrackPalette,
   air: Atmosphere,
 ): { sun: THREE.DirectionalLight; dispose(): void } {
+  if (air.sky === 'space') return applySpaceSky(scene, palette);
+  if (!air.fog) throw new Error('environment: a sky of air needs its fog range');
   const horizon = new THREE.Color(palette.horizon);
   const dusk = palette.dusk;
   scene.background = horizon.clone();
