@@ -39,7 +39,7 @@ function deck(kit: Kit): void {
   const under = shade(wood, 0.55);
   kit.solid.add(box(NECK.w, DECK_T, NECK.z1 - NECK.z0), wood, T(0, DECK_Y - DECK_T, (NECK.z0 + NECK.z1) / 2));
   kit.solid.add(box(PLAT.x1 - PLAT.x0, DECK_T, PLAT.z1 - PLAT.z0), wood, T((PLAT.x0 + PLAT.x1) / 2, DECK_Y - DECK_T, (PLAT.z0 + PLAT.z1) / 2));
-  // Stilts with cross braces: the deck stands on a forest of legs.
+  // Stilts with cross braces: the deck stands on a thicket of legs.
   const stilt = (x: number, z: number): void => {
     const foot = z < -110 ? 0 : SEA_FLOOR;
     kit.solid.add(beam([x, foot, z], [x, DECK_Y - DECK_T, z], 0.45, 4), under);

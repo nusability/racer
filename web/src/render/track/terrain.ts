@@ -3,6 +3,7 @@ import { SmoothBuilder } from './builder.ts';
 import {
   SAND_TILE,
   TERRAIN_CELLS_FAR,
+  TERRAIN_CELLS_NEAR,
   TERRAIN_MARGIN,
   TERRAIN_NEAR_DIST,
   TERRAIN_SKIRT,
@@ -22,7 +23,8 @@ const UP = { x: 0, y: 1, z: 0 };
  * (so they cull), the rest share one coarse mesh. Every tile hangs a skirt so resolution
  * changes between neighbours never open a crack.
  */
-export function buildTerrain(ground: Ground, quality: Quality, nearCells: number, material: THREE.Material): THREE.Mesh[] {
+export function buildTerrain(ground: Ground, quality: Quality, material: THREE.Material): THREE.Mesh[] {
+  const nearCells = TERRAIN_CELLS_NEAR[quality];
   // Tile borders share vertices only when the coarse count divides the fine one.
   if (nearCells % TERRAIN_CELLS_FAR[quality] !== 0) throw new Error(`terrain: ${nearCells} near cells is not a multiple of ${TERRAIN_CELLS_FAR[quality]}`);
   const samples = ground.views.flatMap((v) => v.ribbon.samples);

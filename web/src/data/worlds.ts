@@ -2,7 +2,7 @@
 // variety; cups inside a world add difficulty, so a new world's rookie cup is about as hard as
 // the desert's. Winning a world's rookie cup opens the next world.
 
-export type BiomeId = 'desert' | 'beach' | 'ice' | 'jungle' | 'city' | 'forest' | 'space';
+export type BiomeId = 'desert' | 'beach' | 'ice' | 'jungle' | 'city' | 'space';
 
 export interface WorldDef {
   id: string;
@@ -60,16 +60,6 @@ export const WORLDS: WorldDef[] = [
     cupIds: ['neon', 'skyline', 'zenith'],
     unlockedBy: 'frost',
     card: { from: 0xff2fb4, to: 0x2a1060 },
-  },
-  {
-    id: 'forest',
-    name: 'Elderwood',
-    blurb: 'Point to point through a forest of giants, by whichever way through the roots you dare.',
-    biome: 'forest',
-    trackIds: ['mossway', 'timberton', 'glowmere', 'lanternfair', 'deeproot', 'thunderfall'],
-    cupIds: ['fernway', 'canopy', 'eldercrown'],
-    unlockedBy: 'neon',
-    card: { from: 0x1f5a2e, to: 0xd8a83a },
   },
 ];
 

@@ -139,10 +139,10 @@ export const simDraftOval: TrackDef = {
 };
 
 /**
- * A point-to-point sprint of about 8 km: a three-way fork on a long straight (a rooty left
- * route, a tree-studded right route and the clear main road between), a grove of trunks
- * standing in the road, a falling tree across part of it, a herd crossing, log kickers and a
- * finish at the far end. The builder adds the grid apron and the run-out.
+ * A point-to-point sprint of about 8 km: a three-way fork on a long straight (a rough left
+ * route, a pillar-studded right route and the clear main road between), a field of pillars
+ * standing in the road, a blocker across part of it, a pair of sweepers crossing, kickers and
+ * a finish at the far end. The builder adds the grid apron and the run-out.
  */
 export const simSprint: TrackDef = {
   id: 'simsprint',
@@ -170,19 +170,19 @@ export const simSprint: TrackDef = {
     { kind: 'boostCells', at: 0.3, lateral: 8, count: 5, spacing: 30 },
     { kind: 'kicker', at: 0.7, length: 40, height: 2 },
     { kind: 'route', from: 3.2, to: 3.95, name: 'Middle Way' },
-    { kind: 'hazard', hazard: { type: 'sweeper', id: 'herd1', at: 5.4, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 0 } },
-    { kind: 'hazard', hazard: { type: 'sweeper', id: 'herd2', at: 5.45, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 1.2 } },
-    // A grove standing in the road: 26 trunks over ~800 m, staggered so a lane stays open.
+    { kind: 'hazard', hazard: { type: 'sweeper', id: 'sweep1', at: 5.4, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 0 } },
+    { kind: 'hazard', hazard: { type: 'sweeper', id: 'sweep2', at: 5.45, radius: 5, height: 6, xFrom: -70, xTo: 70, cross: 4, hold: 0.5, period: 13, phase: 1.2 } },
+    // A field of pillars standing in the road: 26 over ~800 m, staggered so a lane stays open.
     ...Array.from({ length: 26 }, (_, i) => ({ kind: 'pillar' as const, at: 6.1 + i * 0.033, lateral: (i % 2 === 0 ? -1 : 1) * (6 + (i % 3) * 3), radius: 2.5 })),
-    { kind: 'hazard', hazard: { type: 'blocker', id: 'falltree', at: 7.5, opening: 22, offset: 9, height: 3, warn: 2.5, up: 6, period: 14, phase: 0 } },
+    { kind: 'hazard', hazard: { type: 'blocker', id: 'barrier', at: 7.5, opening: 22, offset: 9, height: 3, warn: 2.5, up: 6, period: 14, phase: 0 } },
     { kind: 'boostCells', at: 8.2, lateral: -8, count: 5, spacing: 30 },
     { kind: 'kicker', at: 8.5, length: 40, height: 2.5 },
   ],
   branches: [
     {
-      id: 'roots',
+      id: 'rough',
       kind: 'route',
-      name: 'Root Hollow',
+      name: 'Rough Way',
       side: -1,
       from: 3.2,
       to: 3.95,
@@ -196,9 +196,9 @@ export const simSprint: TrackDef = {
       features: [{ kind: 'rough', from: 2.2, to: 4.0, amount: 0.15 }],
     },
     {
-      id: 'trunks',
+      id: 'pillars',
       kind: 'route',
-      name: 'Trunk Row',
+      name: 'Pillar Row',
       side: 1,
       from: 3.2,
       to: 3.95,

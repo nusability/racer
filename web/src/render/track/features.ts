@@ -5,11 +5,9 @@ import type { FlatBuilder, P3 } from './builder.ts';
 import { RUNOFF_MIN } from './config.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing } from './paint.ts';
-import type { PillarLook } from './biomes/kit.ts';
 
-// What stands on the road: arches and pillars (rock columns; a forest kit draws its pillars as
-// trunks with its own). Their visual radius matches the collision cylinders in core/track.ts so
-// a racer never clips what it can't see, or hits air.
+// What stands on the road: arches and pillars, as rock. Their visual radius matches the
+// collision cylinders in core/track.ts so a racer never clips what it can't see, or hits air.
 
 /** Thickness of an arch span (vertical) and its depth along the road. */
 const ARCH_THICKNESS = 6.5;
@@ -39,12 +37,11 @@ const PILLAR_RINGS: [number, number][] = [
 /** Polygon sides of legs and pillars. */
 const ROCK_SIDES = 9;
 
-export function buildRockFeatures(cor: Corridor, seed: number, pillar: PillarLook): void {
+export function buildRockFeatures(cor: Corridor, seed: number): void {
   const rng = mulberry32(seed ^ 0x51ab);
   const track = cor.ribbon;
   for (const o of track.obstacles) {
-    if (o.kind !== 'pillar') continue;
-    if (pillar.kind === 'rock') column(cor, cor.chunkAt(o.s).rock, o, PILLAR_RINGS, rng);
+    if (o.kind === 'pillar') column(cor, cor.chunkAt(o.s).rock, o, PILLAR_RINGS, rng);
   }
   for (const a of track.arches) {
     const legs = track.obstacles.filter((o) => o.kind === 'archLeg' && Math.abs(track.delta(o.s, a.s)) < 0.01);

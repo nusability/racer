@@ -85,7 +85,7 @@ export function applyEnvironment(
 
   const lerp = (r: [number, number]) => r[0] + (r[1] - r[0]) * dusk;
   const sunCol = new THREE.Color(palette.sun);
-  const sun = new THREE.DirectionalLight(sunCol, lerp(SUN_INTENSITY) * air.sun);
+  const sun = new THREE.DirectionalLight(sunCol, lerp(SUN_INTENSITY));
   sun.position.copy(dir).multiplyScalar(1000);
   sun.target.position.set(0, 0, 0);
   scene.add(sun, sun.target);

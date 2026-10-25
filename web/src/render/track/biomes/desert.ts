@@ -6,7 +6,7 @@ import { buildInstanced } from '../instanced.ts';
 import { fbm, smoothstep } from '../noise.ts';
 import { rockTexture, sandTexture } from '../textures.ts';
 import type { BiomeKit } from './kit.ts';
-import { ROCK_TILE, TERRAIN_CELLS_NEAR } from '../config.ts';
+import { ROCK_TILE } from '../config.ts';
 
 // The Mirage Desert: rolling dunes, sandstone mesas and spires, scatter of rocks, cacti,
 // bones or glass shards.
@@ -49,10 +49,6 @@ export function desertKit(scenery: DesertScenery, palette: TrackPalette): BiomeK
     road: { surface: 'packed', runoff: 'sand' },
     roadLight: 0,
     masonry: 'sandstone',
-    pillar: { kind: 'rock' },
-    terrainCells: TERRAIN_CELLS_NEAR,
-    ownPosts: false,
-    cornerStands: true,
     detail: (seed, quality) => ({ sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) }),
     dress(ctx) {
       const main = ctx.corridors[0];

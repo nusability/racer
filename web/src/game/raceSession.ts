@@ -7,7 +7,8 @@ import { makeFrame, Track } from '../core/track.ts';
 import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import type { WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
-import { biomeOfTrack, sceneryById, trackById } from '../data/tracks/index.ts';
+import { sceneryById, trackById } from '../data/tracks/index.ts';
+import { worldOfTrack } from '../data/worlds.ts';
 import { atmosphere } from '../render/track/config.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import type { AudioRival, GameAudio } from '../audio/audio.ts';
@@ -196,7 +197,7 @@ export class RaceSession {
     const renderer = ctx.renderer;
     const level = graphicsLevel(ctx.settings);
     const detail = GRAPHICS_PROFILE[level].detail;
-    this.look = resolveLook(biomeOfTrack(def.id), level, loadDebugFlags(ctx.store).look, PostFx.supported(renderer), def.palette);
+    this.look = resolveLook(worldOfTrack(def.id).biome, level, loadDebugFlags(ctx.store).look, PostFx.supported(renderer), def.palette);
     this.toneMappingBefore = { mapping: renderer.toneMapping, exposure: renderer.toneMappingExposure };
     const look = this.look;
     if (look && !look.post) {
@@ -218,7 +219,7 @@ export class RaceSession {
     this.gliderEnv = look?.gliders ? worldEnvironment(renderer, look.look.env, look.look.sunDir) : null;
     const finish = this.gliderEnv && look ? { envMap: this.gliderEnv.texture, look: look.look.gliders } : null;
 
-    this.env = applyEnvironment(this.scene, def.palette, atmosphere(biomeOfTrack(def.id), detail));
+    this.env = applyEnvironment(this.scene, def.palette, atmosphere(detail));
     this.trackScene = buildTrackScene(this.track, detail, look);
     this.scene.add(this.trackScene.group);
     this.glowPools = look?.wetSheen

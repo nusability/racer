@@ -145,13 +145,13 @@ export const ENGINE_RECIPES: Record<RacerStyle, EngineRecipe> = {
 };
 
 /** What the air cushion is riding on. */
-export type EngineSurface = 'road' | 'sand' | 'water' | 'snow' | 'ice' | 'concrete' | 'litter';
+export type EngineSurface = 'road' | 'sand' | 'water' | 'snow' | 'ice' | 'concrete';
 
 /**
  * The cushion's noise band per surface. One band-pass for all so the filter never changes
  * type mid-flight (that clicks): smooth road is a low hum, sand a gritty mid, water a hiss
- * of spray, snow a soft hush, ice a thin glassy sizzle, concrete run-off a coarse rattle
- * over its joints, harsher than the road, and a forest's leaf litter a dry rustling hiss.
+ * of spray, snow a soft hush, ice a thin glassy sizzle, and concrete run-off a coarse rattle
+ * over its joints, harsher than the road.
  */
 export const SURFACE_RECIPES: Record<EngineSurface, { hz: number; q: number; gain: number }> = {
   road: { hz: 170, q: 0.8, gain: 0.12 },
@@ -160,5 +160,4 @@ export const SURFACE_RECIPES: Record<EngineSurface, { hz: number; q: number; gai
   snow: { hz: 900, q: 0.4, gain: 0.16 },
   ice: { hz: 3600, q: 1.2, gain: 0.09 },
   concrete: { hz: 260, q: 0.9, gain: 0.18 },
-  litter: { hz: 1300, q: 0.5, gain: 0.17 },
 };

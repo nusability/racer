@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Track } from '../core/track.ts';
-import { biomeOfTrack, sceneryById } from '../data/tracks/index.ts';
+import { sceneryById } from '../data/tracks/index.ts';
+import { worldOfTrack } from '../data/worlds.ts';
 import { FlatBuilder, SmoothBuilder } from './track/builder.ts';
 import { BOOST_SCROLL, CULL_MARGIN, ROCK_TILE, SAND_TILE, SEA_LEVEL, atmosphere, type Quality } from './track/config.ts';
 import { Corridor, type Scatter } from './track/corridor.ts';
@@ -63,10 +64,10 @@ const CORNER_STANDS = { low: 1, high: 3 } as const;
 export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook | null): TrackScene {
   const def = track.def;
   const scenery = sceneryById(def.id);
-  const biome = biomeOfTrack(def.id);
+  const biome = worldOfTrack(def.id).biome;
   if (scenery.biome !== biome) throw new Error(`Track ${def.id}: scenery is ${scenery.biome} but its world is ${biome}`);
   const ao = look?.ao ? look.look.ao : null;
-  const fogFar = atmosphere(biome, quality).fog.far;
+  const fogFar = atmosphere(quality).fog.far;
   const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
@@ -79,11 +80,11 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const corridors = views.map((v, i) => new Corridor(v, i, ground, paint, scenery.boundary, quality, glow, scatter, ao && cover ? { look: ao, cover: cover[i] } : null));
   for (const c of corridors) {
     buildHazards(c);
-    buildRockFeatures(c, def.seed, kit.pillar);
+    buildRockFeatures(c, def.seed);
     buildRoughGround(c, def.seed, quality);
   }
   const props = new FlatBuilder();
-  buildDressing(corridors[0], props, def.seed, kit.cornerStands ? CORNER_STANDS[quality] : 0, track.course === 'circuit' ? [0] : [track.startS, track.startS + track.raceLength], track.raceLength);
+  buildDressing(corridors[0], props, def.seed, CORNER_STANDS[quality], track.course === 'circuit' ? [0] : [track.startS, track.startS + track.raceLength], track.raceLength);
   const signs: SignQuads = { pos: [], uv: [] };
   buildJunctions(corridors[0], corridors.slice(1), track, signs);
 
@@ -136,7 +137,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
       }
     }
   });
-  for (const t of buildTerrain(ground, quality, kit.terrainCells[quality], mats.sand)) {
+  for (const t of buildTerrain(ground, quality, mats.sand)) {
     group.add(t);
     if (t.geometry.boundingSphere && t.geometry.boundingSphere.radius < 2000) cullable.push(t);
   }
@@ -146,14 +147,8 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
     quality,
     seed: def.seed,
     buoys: scatter.buoys,
-    posts: scatter,
-    props,
-    glow,
     lit: mats.plain,
-    unlit: mats.unlit,
     rock: mats.rock,
-    fogFar,
-    landmarks: landmarks.map((l) => ({ kind: l.kind, x: l.centre.x, z: l.centre.z, radius: l.radius, bound: l.hazardAt !== null })),
   });
   for (const o of dressing.objects) group.add(o);
   const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
@@ -161,7 +156,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, { glow, props }, bound, ownBarrier, quality);
   for (const o of scheduled.objects) group.add(o);
   add(props.build(), mats.plain, 'props');
-  if (!kit.ownPosts) for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
+  for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
   for (const c of corridors) {
     const boulders = buildGameplayBoulders(c, quality, mats.plain, def.seed);
     if (boulders) group.add(boulders);

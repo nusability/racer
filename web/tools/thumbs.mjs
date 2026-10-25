@@ -73,12 +73,6 @@ const SHOTS = {
   undercity: { at: 19.5, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the viaduct over the old town' },
   skyway: { at: 1.68, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the double loop on the ring road' },
   zenithtower: { at: 12.67, ds: -60, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 120, why: 'the double loop off the west flyover' },
-  mossway: { at: 11.73, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'herdeast', why: 'the herd crossing the mossy trail' },
-  timberton: { at: 51.13, view: 'orbit', yaw: -0.5, pitch: 0.25, dist: 120, why: 'the grandstand along the town street' },
-  glowmere: { at: 16.47, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'herdnorth', why: 'the herd crossing at dusk' },
-  lanternfair: { at: 39.29, ds: -130, why: 'the glow groves at sunset off the west road' },
-  deeproot: { at: 12.85, ds: -90, hazard: 'deadfall', why: 'a dead giant down across the trail, the kicker to jump it' },
-  thunderfall: { at: 38.86, ds: -90, hazard: 'deadfall', why: 'a falling giant across the trail at dusk' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
