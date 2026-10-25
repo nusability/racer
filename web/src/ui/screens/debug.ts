@@ -55,11 +55,10 @@ export function debugScreen(ctx: AppCtx): Screen {
   }
 
   /**
-   * Dev builds only: race or fly round the synthetic and look-dev tracks (ui/devTracks.ts), which
-   * no world lists. A race opens with a career of its own (main.ts), so it never pays into this save.
+   * Race or fly round the synthetic and look-dev tracks (ui/devTracks.ts), which no world lists.
+   * Shipped to the live prototype too, so the owner judges a new world's look on the phone. A race opens with a career of its own (main.ts), so it never pays into this save.
    */
-  function devTracksPanel(): HTMLElement | null {
-    if (!import.meta.env.DEV) return null;
+  function devTracksPanel(): HTMLElement {
     const rows = h('div', 'debug__list');
     void import('../devTracks.ts').then(({ DEV_TRACKS }) =>
       rows.replaceChildren(
@@ -73,7 +72,7 @@ export function debugScreen(ctx: AppCtx): Screen {
         ),
       ),
     );
-    return panel('DEV TRACKS', h('p', 'note', 'Dev builds only. Synthetic and look-dev tracks no world lists.'), rows);
+    return panel('DEV TRACKS', h('p', 'note', 'Synthetic and look-dev tracks no world lists. Their races use a career of their own.'), rows);
   }
 
   /** Switches for each part of a world's look, so the owner can A/B its look and frame rate. */

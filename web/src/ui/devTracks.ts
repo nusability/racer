@@ -1,7 +1,7 @@
-// Dev builds only (main.ts, `?devtrack=<id>`; the level viewer; the debug menu): synthetic
+// Reached through the debug menu (main.ts `?devtrack=<id>`, the level viewer), live builds too: synthetic
 // courses made raceable in the browser. The headless sim check's sprint drives a new race
 // mechanic end to end before any real track uses it; a look-dev track judges a new world's look
-// on one course before the world is built. Loaded by a dynamic import that a production build drops.
+// on one course before the world is built. Loaded by a dynamic import, so a normal start never pays for it.
 import { registerDevTrack } from '../data/tracks/index.ts';
 import type { TrackScenery } from '../data/tracks/scenery.ts';
 import type { TrackDef } from '../core/types.ts';

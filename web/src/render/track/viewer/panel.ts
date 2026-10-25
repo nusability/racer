@@ -142,7 +142,7 @@ export interface ViewerUi {
   setPanelOpen(open: boolean): void;
 }
 
-/** `devTracks`: synthetic and look-dev tracks a dev build lists after the worlds (none in production). */
+/** `devTracks`: synthetic and look-dev tracks listed after the worlds. */
 export function buildUi(api: ViewerApi, stage: HTMLElement[], devTracks: TrackDef[]): ViewerUi {
   // --- Top bar.
   const back = h('a', 'btn btn--icon vw-back', '‹');

@@ -69,7 +69,7 @@ export function worldById(id: string): WorldDef {
   return w;
 }
 
-/** Dev builds only: the world each synthetic track (data/tracks/index.ts registerDevTrack) races in. */
+/** Dev tracks only: the world each synthetic track (data/tracks/index.ts registerDevTrack) races in. */
 const DEV_TRACK_WORLDS = new Map<string, WorldDef>();
 
 /**

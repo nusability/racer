@@ -173,15 +173,13 @@ const api: ViewerApi = {
 };
 
 const firstTrack = params.get('track') ?? TRACKS[0].id;
-// Dev builds: the synthetic scenes (ui/devTracks.ts: the sim's sprint, look-dev tracks) are
-// registered first and listed in the picker after the worlds.
+// The synthetic scenes (ui/devTracks.ts: the sim's sprint, look-dev tracks) are registered
+// first and listed in the picker after the worlds.
 const devTracks: TrackDef[] = [];
-if (import.meta.env.DEV) {
-  const dev = await import('../../ui/devTracks.ts');
-  for (const d of dev.DEV_TRACKS) {
-    dev.loadDevTrack(d.id);
-    devTracks.push(trackById(d.id));
-  }
+const dev = await import('../../ui/devTracks.ts');
+for (const d of dev.DEV_TRACKS) {
+  dev.loadDevTrack(d.id);
+  devTracks.push(trackById(d.id));
 }
 build(trackById(firstTrack));
 const ui = buildUi(api, [stats, map.el, fly], devTracks);
