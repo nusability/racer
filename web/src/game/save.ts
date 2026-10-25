@@ -8,7 +8,7 @@ import type { UpgradeLevels } from '../data/upgrades.ts';
 import { isGraphicsLevel } from '../render/graphics.ts';
 import type { Settings } from './types.ts';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'mirage-racer.save';
 /** How many applied race ids are remembered to make applying an outcome idempotent. */
 export const APPLIED_RACE_MEMORY = 16;
@@ -178,6 +178,22 @@ function migrateV2(d: Record<string, unknown>): void {
   d.version = 3;
 }
 
+/** The Elderwood world's cups and tracks, removed from the game in v4. */
+const REMOVED_CUPS: ReadonlySet<string> = new Set(['fernway', 'canopy', 'eldercrown']);
+const REMOVED_TRACKS: ReadonlySet<string> = new Set(['mossway', 'timberton', 'glowmere', 'lanternfair', 'deeproot', 'thunderfall']);
+
+/**
+ * v3 → v4 (Elderwood removed): its cups won, a cup run in progress there and its track records
+ * go; everything else a player earned is kept. Only these exact ids are dropped, so any other
+ * unknown id still fails validation loudly.
+ */
+function migrateV3(d: Record<string, unknown>): void {
+  if (isStrArr(d.wonCups)) d.wonCups = d.wonCups.filter((id) => !REMOVED_CUPS.has(id));
+  if (isObj(d.cup) && typeof d.cup.cupId === 'string' && REMOVED_CUPS.has(d.cup.cupId)) d.cup = null;
+  if (isObj(d.records)) for (const id of REMOVED_TRACKS) delete d.records[id];
+  d.version = 4;
+}
+
 /**
  * The 'cooling' upgrade became the 'tank' upgrade (heat was replaced by a boost tank). Levels
  * carry over so a player keeps what they paid for.
@@ -199,6 +215,7 @@ export function decodeSave(raw: string | null): SaveData {
     if (!isObj(parsed)) throw new SaveInvalid('not an object');
     if (parsed.version === 1) migrateV1(parsed);
     if (parsed.version === 2) migrateV2(parsed);
+    if (parsed.version === 3) migrateV3(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);
