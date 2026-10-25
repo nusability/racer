@@ -6,7 +6,8 @@ import { LANDMARKS_B } from './setB.ts';
 import { LANDMARKS_C } from './setC.ts';
 import { LANDMARKS_D } from './setD.ts';
 import { LANDMARKS_E } from './setE.ts';
+import { LANDMARKS_F } from './setF.ts';
 
-export const LANDMARKS: Record<LandmarkKind, LandmarkFactory> = { ...LANDMARKS_A, ...LANDMARKS_B, ...LANDMARKS_C, ...LANDMARKS_D, ...LANDMARKS_E };
+export const LANDMARKS: Record<LandmarkKind, LandmarkFactory> = { ...LANDMARKS_A, ...LANDMARKS_B, ...LANDMARKS_C, ...LANDMARKS_D, ...LANDMARKS_E, ...LANDMARKS_F };
 
 export type { Landmark, LandmarkFactory, LandmarkKind, LandmarkOptions } from './types.ts';

@@ -5,7 +5,6 @@
 import { registerDevTrack } from '../data/tracks/index.ts';
 import type { TrackScenery } from '../data/tracks/scenery.ts';
 import type { TrackDef } from '../core/types.ts';
-import { spacetest, spacetestScenery } from '../data/tracks/spacetest.ts';
 import { simSprint } from '../../tools/sim-test-track.ts';
 
 /** Plain desert dressing: nothing on the course a landmark could hide or a hazard bind to. */
@@ -33,7 +32,6 @@ interface DevCourse {
 /** Synthetic tracks by id. */
 const DEV_COURSES: Record<string, DevCourse> = {
   [simSprint.id]: { def: simSprint, scenery: DEV_SCENERY, worldId: 'desert', lookDev: false },
-  [spacetest.id]: { def: spacetest, scenery: spacetestScenery, worldId: 'desert', lookDev: true },
 };
 
 /** Every dev track, for the level viewer's picker and the debug menu. */

@@ -167,9 +167,10 @@ export class AudioEnvironment {
       case 'ice':
         return 'snow';
       case 'city':
-      case 'space':
-        // Station decks and the city's run-off are both hard plating under the cushion.
         return 'concrete';
+      case 'space':
+        // Station decks are hard plating under the cushion; a moon's run-off is loose regolith.
+        return scenery.moon ? 'sand' : 'concrete';
       case 'beach': {
         const w = track.wrap(s);
         return branch < 0 && this.lagoons.some(([a, b]) => w >= a && w <= b) ? 'water' : 'sand';

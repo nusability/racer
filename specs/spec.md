@@ -33,7 +33,7 @@ Next IDs: F-002 · US2 · FR-002 · NFR-001 · SC-002
 
 Mirage Racer is a racing game for phones. Pilots fly ground-effect skimmers (low, wide
 racing wings riding a cushion of air a hand's width above the ground, pushed by ducted
-fans) across worlds of salt pans, canyons, lagoons, sea caves, glaciers and neon cities at 600–800 km/h. The
+fans) across worlds of salt pans, canyons, lagoons, sea caves, glaciers, neon cities and decks hung in the void of space at 600–800 km/h. The
 opponents are there, but the real rival is the track: chasms to jump, kickers that throw you into the air, tunnels through
 mesas, canyons barely wider than your engines, rock arches with off-centre openings and
 fields of pillars. Learning a track's lines is how you win.
@@ -49,7 +49,7 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 ## Core Game Loop
 
 1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
-   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian; more to come) has six to
+   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian, Orbital Reach; more to come) has six to
    eight tracks and three cups, rookie → pro → elite. Winning a world's rookie cup opens the
    next world. Every world mixes track archetypes: a forgiving rookie loop, a technical track
    of switchbacks, a speed track with a 2–2.7 km straight, and a gimmick track (vertical loop,
@@ -58,8 +58,14 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    is the stunt world: walled city roads where every track has at least two loops or
    corkscrews and the pro and elite tracks four or more (double loops, a loop straight into a
    corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover).
-   A course can also be a point-to-point sprint, and a road can fork into routes (below); no
-   world's track is a sprint or forks yet.
+   Orbital Reach, opened by the Neon Cup, is the space world: steel decks hung in the void over a
+   gas giant, railed or with lit open edges (falling off one is a wreck), station modules and
+   asteroids to fly through, gaps in the void to jump, and loops and corkscrews held in floating
+   cages rather than standing on anything. Its six tracks are three circuits (the habitat ring,
+   the refinery's dock yard, a solar farm whose array masts stand in the road) and three
+   point-to-point sprints (a mine run bored through an asteroid, a moon crossing with ground,
+   craters to hop and a crater to jump, and a skim low over the gas giant's cloud tops); three of
+   them fork. A course can be a point-to-point sprint, and a road can fork into routes (below).
 2. **Race**: six racers, 2–3 laps of a circuit, or one run of a point-to-point sprint: start
    line to finish line, counted in four sectors, then a run-out where everyone glides to a
    stop on the air brake. Throttle is automatic. The craft always flies along the
@@ -72,7 +78,9 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    hazards the player can read and dodge (a sand beast arching over and slamming across the
    road, a digger dropping ore, ships and rotor wash pushing racers sideways, whales and
    freighters blocking a causeway, avalanches, calving glaciers, herds crossing, a maglev train crossing the avenue, a crane dropping
-   girders, a collapsing facade, a cargo airship's downdraft). Every track
+   girders, a collapsing facade, a cargo airship's downdraft, a docking arm swinging across the
+   deck, a hoist dropping cargo pods, an airlock's blast door, a vent jetting gas, a drifting
+   asteroid). Every track
    has a walled shortcut that is a trade-off, not a free cut: rough ground (marked by hazard
    kerbs and wall stripes) batters the hull at speed, mixed with squeezes, boulders or drops.
    Flat out it saves 1.5–3.5 s for about a third of a stock hull; lifted through, it saves
@@ -131,8 +139,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Slipstream | 4–40 m behind another racer, inside a wake 2.5 m wide close up narrowing to 1.2 m: up to +6% top speed and +0.02/s tank; pulling out after 0.8 s of full draft keeps the bonus 0.6 s (slingshot) | Everyone drafts; AIs tuck in on straights and pull out to pass |
 | Championship pay | 1400/1050/770/560/350/210 × tier × world | Cup bonus 1200/2400/4000 × world; repeat wins 25%; DNF pays 0 |
 | Glider top speeds | 150 / 158 / 166 / 174 / 182 / 192 m/s; Neon Meridian's two: 202 / 212 m/s | Halo Comet ~28% faster than the starter; each city glider another ~5% |
-| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 60 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132); the Orbis Gyre's upgrade set is then the long tail, bought from city replays (~6.8k a race in the Zenith Crown) |
-| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won |
+| Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 60 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132); the Orbis Gyre's upgrade set is then the long tail, finished with Orbital Reach's winnings during its Supernova Trophy (race 160 of 164, ~102k spare after every cup) |
+| World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6, Orbital Reach 5.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won. Orbital Reach (decent player, sim): ~4.4k a race in the Apogee Cup, ~8.6k in the Perihelion Cup, ~11.0k in the Supernova Trophy; it opens with the Neon Cup (race 108) |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 
 ## Platforms & Scope

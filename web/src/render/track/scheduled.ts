@@ -23,8 +23,8 @@ export interface DebrisLook {
   glow: number;
   dust: number;
   streak: number;
-  /** What falls: a rock, or a bundle of steel girders (a city's cranes). */
-  shape: 'rock' | 'girder';
+  /** What falls: a rock, a bundle of steel girders (a city's cranes) or a cargo pod (a station's hoists). */
+  shape: 'rock' | 'girder' | 'pod';
 }
 
 /** Last seconds of a dropper's warning in which the object is seen falling in. */
@@ -199,7 +199,7 @@ export function buildScheduled(
   const rings = inst(new THREE.RingGeometry(0.84, 1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }), dropCount, 'hazardRings');
   const shadows = inst(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }), soft ? dropCount : 0, 'hazardShadows');
   const debrisMat = new THREE.MeshLambertMaterial({ color: look.color, emissive: new THREE.Color(0xff4a10).multiplyScalar(look.glow), flatShading: true });
-  const debris = inst(look.shape === 'girder' ? girderBundle() : new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
+  const debris = inst(look.shape === 'girder' ? girderBundle() : look.shape === 'pod' ? cargoPod() : new THREE.IcosahedronGeometry(1, 0), debrisMat, dropCount, 'hazardDebris');
   const dust = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: look.dust, transparent: true, opacity: 0.5, depthWrite: false }), soft ? dropCount : 0, 'hazardDust');
   const items: DropItem[] = [];
 
@@ -388,6 +388,33 @@ export function girderBundle(): THREE.BufferGeometry {
   g.computeVertexNormals();
   return g;
 }
+
+/**
+ * A cargo pod lying on its side across the road: a banded octagonal drum with domed ends,
+ * filling the unit cylinder a dropped object is scaled into (length 2 along x, height 2).
+ */
+export function cargoPod(): THREE.BufferGeometry {
+  const drum = new THREE.CylinderGeometry(POD_RADIUS, POD_RADIUS, 2 - 2 * POD_CAP, POD_SIDES, 1).rotateZ(Math.PI / 2);
+  const caps = [-1, 1].map((end) => new THREE.SphereGeometry(POD_RADIUS, POD_SIDES, 3, 0, Math.PI * 2, 0, Math.PI / 2).scale(POD_CAP / POD_RADIUS, 1, 1).rotateZ((-end * Math.PI) / 2).translate(end * (1 - POD_CAP), 0, 0));
+  const bands = [-0.45, 0.45].map((x) => new THREE.CylinderGeometry(POD_RADIUS * POD_BAND, POD_RADIUS * POD_BAND, 0.12, POD_SIDES, 1).rotateZ(Math.PI / 2).translate(x, 0, 0));
+  const pos: number[] = [];
+  for (const p of [drum, ...caps, ...bands]) {
+    const flat = p.toNonIndexed();
+    pos.push(...(flat.getAttribute('position').array as Float32Array));
+    flat.dispose();
+    p.dispose();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** The pod's drum radius (it sits on the road at y = -1), its end caps' length, its sides and the bands' swell. */
+const POD_RADIUS = 1;
+const POD_CAP = 0.35;
+const POD_SIDES = 8;
+const POD_BAND = 1.06;
 
 /** I-beam section in the unit bundle: flange thickness and width, web depth and thickness. */
 const GIRDER_FLANGE = 0.14;

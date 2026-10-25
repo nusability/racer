@@ -7,6 +7,9 @@ import { quadFacing, rockQuad } from './paint.ts';
 
 // Road that leaves the ground: loops, corkscrews and bridge decks get guard rails, a structural
 // underside and piers; open drops get a sheer face falling away from a hazard-painted edge.
+// With no ground at all (a deck in the void) nothing can stand on anything: the frames round a
+// loop or a corkscrew close underneath into rings, joined by stringers into one floating cage
+// held by thruster pods, and a bridge deck hangs from its own structure without piers.
 
 /** Guard rail height and thickness at the hard boundary of a deck. */
 const RAIL_HEIGHT = 1.3;
@@ -30,6 +33,10 @@ const FRAME_BEAM = 1.8;
 const LOOP_FRAMES = [0.2, 0.35, 0.5, 0.65, 0.8];
 /** Corkscrew frames every this many metres. */
 const SCREW_FRAME_SPACING = 40;
+/** A ring in the void: its light strips (share of the beam), stringers between rings, the thruster pods on its lower corners. */
+const RING_LIGHT = 0.35;
+const STRINGER = 0.9;
+const POD = 2.6;
 const STEEL = new THREE.Color(0x5b6168);
 const STEEL_DARK = new THREE.Color(0x34383e);
 
@@ -110,15 +117,31 @@ export function buildSupports(cor: Corridor): void {
   }
   for (const l of r.loops) {
     const sweep = [Math.ceil(l.s0 / r.step), Math.floor(l.s1 / r.step)] as const;
-    for (const t of LOOP_FRAMES) frame(cor, Math.round((l.s0 + (l.s1 - l.s0) * t) / r.step), l.shift, sweep);
+    cage(cor, LOOP_FRAMES.map((t) => frame(cor, Math.round((l.s0 + (l.s1 - l.s0) * t) / r.step), l.shift, sweep)));
   }
   for (const f of cor.view.features) {
     if (f.kind === 'corkscrew') {
       const s0 = r.paramToS(f.from);
       const s1 = r.paramToS(f.to);
       const sweep = [Math.ceil(s0 / r.step), Math.floor(s1 / r.step)] as const;
-      for (let s = s0 + SCREW_FRAME_SPACING / 2; s < s1; s += SCREW_FRAME_SPACING) frame(cor, Math.round(s / r.step), 0, sweep);
+      const rings: Ring[] = [];
+      for (let s = s0 + SCREW_FRAME_SPACING / 2; s < s1; s += SCREW_FRAME_SPACING) rings.push(frame(cor, Math.round(s / r.step), 0, sweep));
+      cage(cor, rings);
     }
+  }
+}
+
+/** A frame's four corners (left and right, bottom and top), for the stringers of a cage in the void. */
+type Ring = { k: number; corners: [P3, P3, P3, P3] };
+
+/** In the void, stringers join consecutive rings at their corners into one rigid cage. */
+function cage(cor: Corridor, rings: Ring[]): void {
+  if (!cor.hanging) return;
+  for (let i = 0; i + 1 < rings.length; i++) {
+    const a = rings[i];
+    const b = rings[i + 1];
+    const c = cor.chunkAt(cor.ribbon.samples[cor.idx(a.k)].s);
+    for (let q = 0; q < 4; q++) bar(c.rock, a.corners[q], b.corners[q], STRINGER);
   }
 }
 
@@ -128,6 +151,8 @@ function pier(cor: Corridor, k: number) {
   const smp = cor.ribbon.samples[kk];
   const c = cor.chunkAt(smp.s);
   const top = cor.banked(kk, 0, -1);
+  // A deck in the void hangs from its own structure: there is nothing for a pier to stand on.
+  if (cor.hanging) return;
   if (!cor.ground.clearOfCourse(top.x, top.z, 2)) return;
   const g = cor.ground.height(top.x, top.z) - 2;
   if (top.y - g < 3) return;
@@ -145,7 +170,7 @@ function pier(cor: Corridor, k: number) {
  * the stunt that passes under it. A loop's crown and a corkscrew's rolled edges pass the frame's
  * plane away from the station it stands at, so the beam clears the whole `sweep` of samples.
  */
-function frame(cor: Corridor, k: number, shift: number, sweep: readonly [number, number]) {
+function frame(cor: Corridor, k: number, shift: number, sweep: readonly [number, number]): Ring {
   const kk = cor.idx(k);
   const smp = cor.ribbon.samples[kk];
   const c = cor.chunkAt(smp.s);
@@ -156,23 +181,46 @@ function frame(cor: Corridor, k: number, shift: number, sweep: readonly [number,
   const centre = { x: cor.shape.gx[kk] + rx * (shift / 2), z: cor.shape.gz[kk] + rz * (shift / 2) };
   // The highest point (road, its back or a rail top) within reach of the beam's plane.
   let topY = -Infinity;
+  let lowY = Infinity;
   for (let q = sweep[0]; q <= sweep[1]; q++) {
     for (const x of [-cor.edge(q, -1) - RAIL_WIDTH, 0, cor.edge(q, 1) + RAIL_WIDTH]) {
       for (const y of [-DECK_DEPTH, RAIL_HEIGHT]) {
         const p = cor.banked(q, x, y);
         const along = (p.x - centre.x) * -rz + (p.z - centre.z) * rx;
-        if (Math.abs(along) < FRAME_BEAM / 2 + FRAME_CLEAR) topY = Math.max(topY, p.y);
+        if (Math.abs(along) < FRAME_BEAM / 2 + FRAME_CLEAR) {
+          topY = Math.max(topY, p.y);
+          lowY = Math.min(lowY, p.y);
+        }
       }
     }
   }
   topY += FRAME_CLEAR * 0.5;
+  // In the void the frame closes into a ring under the lowest part of the stunt it passes.
+  const footY = (x: number, z: number) => (cor.hanging ? lowY - FRAME_CLEAR * 0.5 - FRAME_BEAM : cor.ground.height(x, z) - 2);
   const legs: P3[] = [];
+  const feet: P3[] = [];
   for (const side of [-1, 1]) {
     const x = centre.x + rx * side * (reach - Math.abs(shift) / 2);
     const z = centre.z + rz * side * (reach - Math.abs(shift) / 2);
-    const g = cor.ground.height(x, z) - 2;
+    const g = footY(x, z);
     column(c.rock, x, z, g, topY, FRAME_BEAM, rx, rz);
     legs.push({ x, y: topY, z });
+    feet.push({ x, y: g, z });
+    if (cor.hanging) {
+      // The leg's inner face is a strip of light, and a thruster pod holds each lower corner.
+      const inward = { x: -rx * side, y: 0, z: -rz * side };
+      const fx = (-rz * FRAME_BEAM * RING_LIGHT) / 2;
+      const fz = (rx * FRAME_BEAM * RING_LIGHT) / 2;
+      const ix = x - (rx * side * FRAME_BEAM) / 2 - rx * side * 0.05;
+      const iz = z - (rz * side * FRAME_BEAM) / 2 - rz * side * 0.05;
+      quadFacing(cor.glow, { x: ix - fx, y: g + FRAME_BEAM, z: iz - fz }, { x: ix + fx, y: g + FRAME_BEAM, z: iz + fz }, { x: ix + fx, y: topY, z: iz + fz }, { x: ix - fx, y: topY, z: iz - fz }, inward, cor.paint.accent);
+      column(c.rock, x + rx * side * POD * 0.6, z + rz * side * POD * 0.6, g - POD * 0.4, g + POD * 0.6, POD, rx, rz);
+      const n = { x: 0, y: -1, z: 0 };
+      const h = POD * 0.35;
+      const px = x + rx * side * POD * 0.6;
+      const pz = z + rz * side * POD * 0.6;
+      quadFacing(cor.glow, { x: px - h, y: g - POD * 0.41, z: pz - h }, { x: px + h, y: g - POD * 0.41, z: pz - h }, { x: px + h, y: g - POD * 0.41, z: pz + h }, { x: px - h, y: g - POD * 0.41, z: pz + h }, n, cor.paint.white);
+    }
   }
   const [a, b] = legs;
   const fw = { x: (-rz * FRAME_BEAM) / 2, y: 0, z: (rx * FRAME_BEAM) / 2 };
@@ -182,6 +230,32 @@ function frame(cor: Corridor, k: number, shift: number, sweep: readonly [number,
   quadFacing(c.rock, lo(a, -1), lo(b, -1), hi(b, -1), hi(a, -1), { x: -fw.x, y: 0, z: -fw.z }, STEEL);
   quadFacing(c.rock, hi(a, -1), hi(b, -1), hi(b, 1), hi(a, 1), { x: 0, y: 1, z: 0 }, cor.paint.accent);
   quadFacing(c.rock, lo(a, -1), lo(b, -1), lo(b, 1), lo(a, 1), { x: 0, y: -1, z: 0 }, STEEL_DARK);
+  if (cor.hanging) {
+    // The bottom beam closes the ring under the stunt, its top face lit like the legs.
+    const [fa, fb] = feet;
+    const up = (p: P3, s: number): P3 => ({ x: p.x + fw.x * s, y: p.y + FRAME_BEAM, z: p.z + fw.z * s });
+    const dn = (p: P3, s: number): P3 => ({ x: p.x + fw.x * s, y: p.y, z: p.z + fw.z * s });
+    quadFacing(c.rock, dn(fa, 1), dn(fb, 1), up(fb, 1), up(fa, 1), { x: fw.x, y: 0, z: fw.z }, STEEL);
+    quadFacing(c.rock, dn(fa, -1), dn(fb, -1), up(fb, -1), up(fa, -1), { x: -fw.x, y: 0, z: -fw.z }, STEEL);
+    quadFacing(c.rock, dn(fa, -1), dn(fb, -1), dn(fb, 1), dn(fa, 1), { x: 0, y: -1, z: 0 }, STEEL_DARK);
+    const lit = (p: P3, s: number): P3 => ({ x: p.x + fw.x * s * RING_LIGHT, y: p.y + FRAME_BEAM + 0.05, z: p.z + fw.z * s * RING_LIGHT });
+    quadFacing(cor.glow, lit(fa, -1), lit(fb, -1), lit(fb, 1), lit(fa, 1), { x: 0, y: 1, z: 0 }, cor.paint.accent);
+  }
+  const [fa, fb] = feet;
+  return { k: kk, corners: [{ ...fa, y: fa.y + FRAME_BEAM / 2 }, { ...fb, y: fb.y + FRAME_BEAM / 2 }, { ...a, y: a.y + FRAME_BEAM / 2 }, { ...b, y: b.y + FRAME_BEAM / 2 }] };
+}
+
+/** A square steel bar of width w from p to q (any direction). */
+function bar(b: FlatBuilder, p: P3, q: P3, w: number) {
+  const d = new THREE.Vector3(q.x - p.x, q.y - p.y, q.z - p.z).normalize();
+  const side = new THREE.Vector3().crossVectors(d, Math.abs(d.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(side, d).normalize();
+  const h = w / 2;
+  const at = (o: P3, u: number, v: number): P3 => ({ x: o.x + side.x * u * h + up.x * v * h, y: o.y + side.y * u * h + up.y * v * h, z: o.z + side.z * u * h + up.z * v * h });
+  for (const [u0, v0, u1, v1] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]] as const) {
+    const out = { x: side.x * (u0 + u1) + up.x * (v0 + v1), y: side.y * (u0 + u1) + up.y * (v0 + v1), z: side.z * (u0 + u1) + up.z * (v0 + v1) };
+    quadFacing(b, at(p, u0, v0), at(p, u1, v1), at(q, u1, v1), at(q, u0, v0), out, STEEL_DARK, STEEL);
+  }
 }
 
 /** A square steel column from y0 to y1, aligned with the course's right vector. */

@@ -194,6 +194,16 @@ const craneWinch: LoopRecipe = { tone: { wave: 'square', hz: 55, gain: 0.2 }, no
 const condemned: LoopRecipe = { tone: { wave: 'sawtooth', hz: 38, gain: 0.25 }, noise: { filter: 'lowpass', hz: 300, q: 1, gain: 0.8 }, lfo: { wave: 'triangle', hz: 0.4, amp: 0.4, filterHz: 150 }, gain: 0.55, wet: 0.45 };
 // An airship's ducted fans: a deep throb under a broad roar of moving air.
 const airshipFans: LoopRecipe = { tone: { wave: 'sawtooth', hz: 42, gain: 0.3 }, noise: { filter: 'bandpass', hz: 450, q: 0.9, gain: 1 }, lfo: { wave: 'sawtooth', hz: 6.5, amp: -0.4 }, gain: 0.6, wet: 0.45 };
+// A docking arm's servos and hydraulics: a whining drive over a hissing pump.
+const servos: LoopRecipe = { tone: { wave: 'sawtooth', hz: 92, gain: 0.18 }, noise: { filter: 'bandpass', hz: 1800, q: 2, gain: 0.45 }, lfo: { wave: 'sine', hz: 0.6, cents: 180, filterHz: 500 }, gain: 0.5, wet: 0.4 };
+// A cargo hoist's electric winch: a geared hum ratcheting under a motor whine.
+const winch: LoopRecipe = { tone: { wave: 'square', hz: 70, gain: 0.16 }, noise: { filter: 'bandpass', hz: 1100, q: 3, gain: 0.5 }, lfo: { wave: 'sawtooth', hz: 9, amp: -0.5 }, gain: 0.45, wet: 0.35 };
+// An airlock's pressure plant: a low throb and the hiss of air being pumped down.
+const airlock: LoopRecipe = { tone: { wave: 'sine', hz: 44, gain: 0.4 }, noise: { filter: 'highpass', hz: 2400, q: 0.6, gain: 0.3 }, lfo: { wave: 'sine', hz: 0.5, amp: 0.4 }, gain: 0.45, wet: 0.5 };
+// Coolant venting: a broad high hiss with a roar inside it.
+const venting: LoopRecipe = { noise: { filter: 'highpass', hz: 1400, q: 0.5, gain: 1 }, tone: { wave: 'sawtooth', hz: 60, gain: 0.08 }, lfo: { wave: 'sine', hz: 1.4, amp: 0.3, filterHz: 400 }, gain: 0.55, wet: 0.4 };
+// Mining tugs holding a rock: their thrusters muttering, a low grinding rumble of the rock.
+const tugs: LoopRecipe = { tone: { wave: 'sawtooth', hz: 36, gain: 0.3 }, noise: { filter: 'lowpass', hz: 380, q: 0.7, gain: 0.9 }, lfo: { wave: 'sine', hz: 0.8, amp: 0.35 }, gain: 0.55, wet: 0.5 };
 const lava: LoopRecipe = { tone: { wave: 'sine', hz: 28, gain: 0.5 }, noise: { filter: 'lowpass', hz: 140, q: 0.7, gain: 1 }, lfo: { wave: 'sine', hz: 0.2, amp: 0.4 }, gain: 0.65, wet: 0.5 };
 
 /** A hazard's voice: its loop, the level at rest, and the cues that telegraph it. */
@@ -237,6 +247,11 @@ const BOUND: Partial<Record<LandmarkKind, HazardSound>> = {
   crane: { loop: craneWinch, idle: 0.2, lead: 1.2, warn: 'clank', land: 'clang' },
   demolition: { loop: condemned, idle: 0.15, lead: 1.5, warn: 'siren', strike: 'collapse' },
   cargoAirship: { loop: airshipFans, idle: 0.35, lead: 1.5, warn: 'horn', strike: 'gust' },
+  dockingArm: { loop: servos, idle: 0.15, lead: 2, warn: 'klaxon', strike: 'whoosh' },
+  cargoHoist: { loop: winch, idle: 0.2, lead: 1.2, warn: 'clank', land: 'clang' },
+  blastDoor: { loop: airlock, idle: 0.2, lead: 1.5, warn: 'klaxon', strike: 'clang' },
+  ventStack: { loop: venting, idle: 0.05, lead: 1.2, warn: 'hiss', strike: 'gust' },
+  driftRock: { loop: tugs, idle: 0.25, lead: 1.6, warn: 'thruster' },
 };
 
 /** A hazard with no landmark bound to it (a plain rockfall) gets a generic voice by type. */
@@ -298,4 +313,9 @@ export const LANDMARK_SOUNDS: Record<LandmarkKind, SoundFamily | null> = {
   hologramDragon: scifi,
   suspensionBridge: cables,
   skyTram: machine,
+  dockingArm: { loop: servos, near: 60, far: 400 },
+  cargoHoist: { loop: winch, near: 60, far: 400 },
+  blastDoor: { loop: airlock, near: 60, far: 400 },
+  ventStack: { loop: venting, near: 50, far: 300 },
+  driftRock: { loop: tugs, near: 80, far: 500 },
 };

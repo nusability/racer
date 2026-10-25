@@ -48,6 +48,11 @@ const NAMES: Record<LandmarkKind, string> = {
   hologramDragon: 'Hologram dragon',
   suspensionBridge: 'Suspension bridge',
   skyTram: 'Sky tram',
+  dockingArm: 'Docking arm',
+  cargoHoist: 'Cargo hoist',
+  blastDoor: 'Blast door',
+  ventStack: 'Vent stack',
+  driftRock: 'Drifting rock',
 };
 
 export function landmarkName(kind: LandmarkKind): string {

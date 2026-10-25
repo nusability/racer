@@ -4,22 +4,27 @@ import type { TrackPalette } from '../../../core/types.ts';
 import type { SpaceScenery } from '../../../data/tracks/scenery.ts';
 import { sunDirection } from '../environment.ts';
 import { hullPlateTexture } from '../deckTexture.ts';
-import { pavingTexture } from '../textures.ts';
+import { pavingTexture, rockTexture, sandTexture } from '../textures.ts';
 import { stationMaterial } from '../../stationMaterial.ts';
 import type { BiomeKit, DressContext, Dressing } from './kit.ts';
 import { farRockMesh, fieldRocks, nearRocks, type Placed } from './spaceRocks.ts';
 import { gantries } from './spaceGantry.ts';
 import { megastructure, type Lights } from './spaceStation.ts';
-import type { StationMesh } from './stationMesh.ts';
+import { StationMesh } from './stationMesh.ts';
 import { tubeDressing } from './spaceTube.ts';
+import { solarArrays } from './spaceArrays.ts';
+import { boreGeometry } from './spaceBores.ts';
+import { moonGround } from './spaceMoon.ts';
 
-// The ring station (look-dev, MIRA-17): no ground, every road a steel deck hanging in the void
+// Orbital Reach's ring station (MIRA-17): no ground, every road a steel deck hanging in the void
 // over a gas giant (render/track/spaceSky.ts draws it, the stars and the light). The kit dresses
 // the course with the station (megastructures, the tube's hull kit and ribs, gantries over the
 // deck), asteroid fields and a belt of far rocks, and the lights on all of it. Station
 // structure is merged per structure (a megastructure, a stretch of tube, a span of gantries)
 // in one material, so each culls on its own and costs one draw; rocks and lights are one
-// instanced draw per kind.
+// instanced draw per kind. Solar arrays (spaceArrays.ts) are one more structure, and a bore
+// through a giant asteroid (spaceBores.ts) one more draw. One track has ground: a moon
+// (spaceMoon.ts), with regolith where the decks have void.
 
 /** The void's floor for the ground maths (Ground still answers heights): far under every road, never drawn. */
 const VOID_BELOW = 600;
@@ -41,22 +46,29 @@ const BLINK_ON = 0.15;
 const LIGHT_MIN_PX = 1.6;
 /** Asteroid fields hand the far belt a centre every this many metres. */
 const FIELD_CENTRE_EVERY = 200;
+/** Salt of the generator that varies the solar arrays, apart from the station's own. */
+const ARRAY_SALT = 0x5a1a2;
 
 export function spaceKit(scenery: SpaceScenery, palette: TrackPalette): BiomeKit {
+  // A moon (the one space track with ground): regolith run-off, walls and bores of grey rock.
+  const moon = scenery.moon;
   return {
-    terrain: false,
-    ground: {
-      base: (minRoadY) => minRoadY - VOID_BELOW,
-      natural: (g) => g.base,
-      color: (_g, _x, _z, _y, _slope, out) => out.copy(VOID),
-    },
-    road: { surface: 'deck', runoff: 'concrete' },
+    terrain: moon !== null,
+    ground: moon
+      ? moonGround(moon, palette)
+      : {
+          base: (minRoadY) => minRoadY - VOID_BELOW,
+          natural: (g) => g.base,
+          color: (_g, _x, _z, _y, _slope, out) => out.copy(VOID),
+        },
+    road: { surface: 'deck', runoff: moon ? 'sand' : 'concrete' },
     roadLight: ROAD_LIGHT,
-    masonry: 'hull',
-    detail: (seed, quality) => ({ sand: pavingTexture(seed, quality), rock: hullPlateTexture(seed, quality) }),
+    masonry: moon ? 'sandstone' : 'hull',
+    detail: (seed, quality) => (moon ? { sand: sandTexture(seed, quality), rock: rockTexture(seed, quality) } : { sand: pavingTexture(seed, quality), rock: hullPlateTexture(seed, quality) }),
     dress: (ctx) => dressSpace(ctx, scenery, palette),
-    spray: { road: palette.road, runoff: SPRAY_STEEL, water: SPRAY_STEEL },
-    debris: { color: STEEL, glow: 0, dust: DUST, streak: SPARK, shape: 'girder' },
+    spray: { road: palette.road, runoff: moon ? palette.sand : SPRAY_STEEL, water: SPRAY_STEEL },
+    // Station hoists drop cargo and ore in pods (render/landmarks/f/cargoHoist.ts throws the same pod).
+    debris: { color: STEEL, glow: 0, dust: moon ? palette.sand : DUST, streak: SPARK, shape: 'pod' },
   };
 }
 
@@ -120,9 +132,14 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
   const lights: Lights = { pos: [], colour: [], size: [], blink: [] };
   const structures: [string, StationMesh][] = [];
   for (const p of scenery.stations) structures.push(['megastructure', megastructure(main, p, rng, ctx.quality, lights)]);
-  for (const c of ctx.corridors) for (const t of tubeDressing(c, rng, ctx.quality, lights)) structures.push(['tubeHull', t]);
+  // On a moon a tube runs through the ground's own rock: there is no hull to dress.
+  if (scenery.moon === null) for (const c of ctx.corridors) for (const t of tubeDressing(c, rng, ctx.quality, lights)) structures.push(['tubeHull', t]);
   const gates = gantries(main, scenery.gates.map((g) => [main.ribbon.paramToS(g.from), main.ribbon.paramToS(g.to)] as const), lights);
   if (gates) structures.push(['gantries', gates]);
+  const arrayRng = mulberry32(ctx.seed ^ ARRAY_SALT);
+  const arrays = new StationMesh();
+  for (const a of scenery.arrays) solarArrays(main, main.ribbon.paramToS(a.from), main.ribbon.paramToS(a.to), a.side, sunDirection(palette), arrayRng, arrays, scenery.moon !== null);
+  structures.push(['solarArrays', arrays]);
 
   const rocks: Placed[] = [];
   const centres: { x: number; y: number; z: number }[] = [];
@@ -142,6 +159,14 @@ function dressSpace(ctx: DressContext, scenery: SpaceScenery, palette: TrackPale
     if (!geo) return;
     const m = new THREE.Mesh(geo, station.material);
     m.name = `${name}:${i}`;
+    m.matrixAutoUpdate = false;
+    owned.push(geo);
+    objects.push(m);
+  });
+  scenery.bores.forEach((b, i) => {
+    const geo = boreGeometry(main, main.ribbon.paramToS(b.from), main.ribbon.paramToS(b.to), ctx.seed + i);
+    const m = new THREE.Mesh(geo, ctx.lit);
+    m.name = `bore:${i}`;
     m.matrixAutoUpdate = false;
     owned.push(geo);
     objects.push(m);

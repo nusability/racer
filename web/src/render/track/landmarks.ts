@@ -33,9 +33,10 @@ const AFLOAT_BED = 6;
 const BOUND_BASE = 120;
 /**
  * Bound landmarks that are themselves a blocker's barrier across its whole blocked span (the
- * sand beast's crater, plunging body and ridge of broken road): the track draws no barrier.
+ * sand beast's crater, plunging body and ridge of broken road; the blast door's leaves): the
+ * track draws no barrier.
  */
-export const DRAWS_OWN_BARRIER: ReadonlySet<LandmarkKind> = new Set<LandmarkKind>(['sandbeast']);
+export const DRAWS_OWN_BARRIER: ReadonlySet<LandmarkKind> = new Set<LandmarkKind>(['sandbeast', 'blastDoor']);
 /** Landmarks drawn in the sky round the camera: no pad, no footprint, never culled. */
 const SKY = new Set<LandmarkKind>(['auroraSky']);
 

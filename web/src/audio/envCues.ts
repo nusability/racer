@@ -29,7 +29,9 @@ export type CueName =
   | 'chime'
   | 'whoosh'
   | 'clang'
-  | 'collapse';
+  | 'collapse'
+  | 'klaxon'
+  | 'thruster';
 
 /** A distant siren's wail: rise-fall cycles and their length, seconds. */
 const SIREN_CYCLES = 3;
@@ -37,6 +39,10 @@ const SIREN_CYCLE_S = 0.9;
 /** A transit chime: three falling notes (Hz), this far apart. */
 const CHIME_NOTES = [988, 784, 659];
 const CHIME_GAP_S = 0.28;
+/** An airlock klaxon: two alternating tones (Hz), this many blasts this long each. */
+const KLAXON_NOTES = [440, 349];
+const KLAXON_BLASTS = 4;
+const KLAXON_BLAST_S = 0.3;
 /** Footfalls in a stomp cue, and the gap between them, seconds. */
 const STOMP_STEPS = 3;
 const STOMP_GAP_S = 0.42;
@@ -157,6 +163,17 @@ export function playCue(p: ShotPlayer, out: AudioNode, name: CueName, g: number,
       p.noise(out, { filter: 'highpass', f0: 2200, dur: 0.15, gain: 0.5 * g, pan }, k);
       p.noise(out, { filter: 'lowpass', f0: 1200, f1: 160, dur: 2.6, gain: 0.95 * g, attack: 0.1, delay: 0.1, pan }, k);
       p.tone(out, { wave: 'sine', f0: 55, f1: 30, dur: 2.2, gain: 0.6 * g, delay: 0.15, pan }, k);
+      break;
+    case 'klaxon':
+      // An airlock about to cycle: a hard square two-tone through a horn's resonance.
+      for (let i = 0; i < KLAXON_BLASTS; i++) {
+        p.tone(out, { wave: 'square', f0: KLAXON_NOTES[i % 2], dur: KLAXON_BLAST_S * 0.85, gain: 0.08 * g, delay: i * KLAXON_BLAST_S, filter: 'bandpass', filterHz: 1100, q: 1.5, pan }, k);
+      }
+      break;
+    case 'thruster':
+      // A tug's burn: a rush of gas with a low roar rising under it.
+      p.noise(out, { filter: 'bandpass', f0: 900, f1: 500, q: 0.8, dur: 1.2, gain: 0.55 * g, attack: 0.15, pan }, k);
+      p.tone(out, { wave: 'sawtooth', f0: 48, f1: 70, dur: 1.2, gain: 0.2 * g, attack: 0.2, filter: 'lowpass', filterHz: 500, pan }, k);
       break;
   }
 }

@@ -55,7 +55,13 @@ export type LandmarkKind =
   | 'stadium'
   | 'hologramDragon'
   | 'suspensionBridge'
-  | 'skyTram';
+  | 'skyTram'
+  // Set F: space
+  | 'dockingArm'
+  | 'cargoHoist'
+  | 'blastDoor'
+  | 'ventStack'
+  | 'driftRock';
 
 /**
  * A landmark that IS part of the course (the sand beast that crosses the road, the digger

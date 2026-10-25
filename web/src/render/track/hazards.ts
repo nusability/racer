@@ -23,6 +23,8 @@ const PYLON_BAND = 1.2;
 /** Sand rim round a chasm: covers the terrain cells that slope into the pit. */
 const RIM = 30;
 const RIM_LIFT = 0.3;
+/** A gap in a deck over the void: the deck's cut ends show its structure this deep. */
+const VOID_DECK_DEPTH = 1.6;
 /** Size of one square on the chequered start line, metres. */
 const CHECKER = 2;
 
@@ -73,13 +75,21 @@ function chasm(cor: Corridor, j: Jump) {
   // The pit reaches as far as the lip's cross-section on each side.
   const reach = (side: number) => cor.shape.outer[sideIndex(side)][kL] - cor.edge(kL, side);
 
-  // Lip and landing faces: the corridor cross-section dropped straight to the floor.
+  // Lip and landing faces: the corridor cross-section dropped straight to the floor. Over the
+  // void there is no pit: the deck simply stops, its cut ends showing their structure, and the
+  // gap between them is open to the planet below.
   for (const [k, dir] of [[kL, 1], [kG, -1]] as const) {
     const t = r.samples[k].tangent;
     const facing = { x: t.x * dir, y: 0, z: t.z * dir };
+    if (cor.hanging) {
+      const e = (x: number, y: number) => cor.banked(k, x, y);
+      const xl = -r.samples[k].edgeL;
+      const xr = r.samples[k].edgeR;
+      quadFacing(env, e(xl, -VOID_DECK_DEPTH), e(xr, -VOID_DECK_DEPTH), e(xr, 0), e(xl, 0), facing, paint.rockDark, paint.rock);
+    }
     const left = cor.profile(k, -1).pts.slice().reverse();
     const right = cor.profile(k, 1).pts;
-    const outline = [...left, ...right];
+    const outline = cor.hanging ? [] : [...left, ...right];
     const away = { x: -facing.x * RIM, z: -facing.z * RIM };
     for (let i = 0; i + 1 < outline.length; i++) {
       const a = outline[i];
@@ -109,12 +119,14 @@ function chasm(cor: Corridor, j: Jump) {
     }
   }
 
-  // Side walls and the glowing floor, station by station across the gap.
+  // Side walls and the glowing floor, station by station across the gap (none over the void).
   const stations: number[] = [];
-  for (let k = kL; k !== kG; k = cor.idx(k + 1)) {
-    if (k === kL || (k - kL + cor.n) % cor.n % cor.stride === 0) stations.push(k);
+  if (!cor.hanging) {
+    for (let k = kL; k !== kG; k = cor.idx(k + 1)) {
+      if (k === kL || (k - kL + cor.n) % cor.n % cor.stride === 0) stations.push(k);
+    }
+    stations.push(kG);
   }
-  stations.push(kG);
   for (let q = 0; q + 1 < stations.length; q++) {
     const a = stations[q];
     const b = stations[q + 1];

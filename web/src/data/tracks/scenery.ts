@@ -109,6 +109,28 @@ export interface SpaceScenery extends SceneryBase {
   farRocks: number;
   /** Main-loop spans with lit gantries spanning the deck, close overhead, every few dozen metres. */
   gates: { from: TrackParam; to: TrackParam }[];
+  /** Main-loop spans with banks of solar panels on masts standing beside the road, one side or both. */
+  arrays: { from: TrackParam; to: TrackParam; side?: -1 | 1 }[];
+  /**
+   * Main-loop tunnel spans bored through a giant asteroid: the rock is drawn round the tube, so
+   * the road dives into the rock at one portal and out of it at the other.
+   */
+  bores: { from: TrackParam; to: TrackParam }[];
+  /**
+   * A moon's surface under the course instead of the void: the one space track with ground.
+   * Null on a station track (every road hangs in the void).
+   */
+  moon: MoonSurface | null;
+}
+
+/** Grey regolith pocked with craters, the station's lights far overhead. */
+export interface MoonSurface {
+  /** Typical crater radius, metres (the biggest are about three times it). */
+  craterRadius: number;
+  /** Share of the ground's crater cells that hold a crater, 0..1. */
+  craterShare: number;
+  /** Height of the rolling maria between the craters, metres. */
+  relief: number;
 }
 
 export type TrackScenery = DesertScenery | BeachScenery | IceScenery | CityScenery | SpaceScenery;

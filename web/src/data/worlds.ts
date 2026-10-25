@@ -61,6 +61,16 @@ export const WORLDS: WorldDef[] = [
     unlockedBy: 'frost',
     card: { from: 0xff2fb4, to: 0x2a1060 },
   },
+  {
+    id: 'space',
+    name: 'Orbital Reach',
+    blurb: 'Decks over the void, a mine inside an asteroid, a moon to cross and a gas giant to skim.',
+    biome: 'space',
+    trackIds: ['ringdeck', 'dockyard', 'hollowrock', 'craterline', 'sunfield', 'cloudtop'],
+    cupIds: ['apogee', 'perihelion', 'supernova'],
+    unlockedBy: 'neon',
+    card: { from: 0x7a6cff, to: 0x0a1040 },
+  },
 ];
 
 export function worldById(id: string): WorldDef {

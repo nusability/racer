@@ -155,6 +155,8 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
   };
   const inRange = (s: number, from: number, to: number) => {
     const a = sAt(from);
+    // On an open ribbon wrap() clamps, so a point before the range would count as inside it.
+    if (!t.closed) return s >= a && s <= sAt(to);
     return t.wrap(s - a) <= t.wrap(sAt(to) - a);
   };
 
@@ -394,6 +396,64 @@ const ROOKIE_GUST = 5;
 const ROOKIE_CROSS = 3;
 /** Any hazard: at least this much warning and a lane this wide. */
 const HAZARD_WARN = 1.2;
+
+// --- The void: a space track with no ground (scenery.moon null) hangs every road in space -------
+// Collision has to match what is drawn there: a deck ends at its rail or its open edge, so it
+// has no run-off; a loop's or corkscrew's cage closes under it, so nothing may pass close by; a
+// gap to jump is open on both sides, so no rail spans the void; and a vent stands upwind of the
+// gust it plays.
+
+/** A void gap's open edges reach this far before its ramp and past its landing. */
+const VOID_GAP_EDGE = 20;
+
+function checkVoid(t: Track, def: TrackDef, warn: string[]) {
+  const scenery = sceneryById(def.id);
+  if (scenery.biome !== 'space') return;
+  // A gust landmark stands on the side the gust blows from (a positive strength pushes toward +x).
+  for (const l of scenery.landmarks) {
+    if (l.kind !== 'ventStack' || l.hazard === undefined) continue;
+    const h = t.hazards.find((x) => x.def.id === l.hazard);
+    if (h && h.def.type === 'gust' && Math.sign(h.def.strength) === l.side) warn.push(`void: vent for gust ${h.def.id} stands downwind (side ${l.side})`);
+  }
+  if (scenery.moon !== null) return;
+  const ribbons: [string, Ribbon, number][] = [['main', t, def.runoff], ...t.branches.map((b): [string, Ribbon, number] => [`branch ${b.def.id}`, b.ribbon, b.def.runoff])];
+  for (const [label, , runoff] of ribbons) if (runoff !== 0) warn.push(`void: ${label} has ${runoff} m of run-off over the void`);
+  for (const f of [...def.features, ...def.branches.flatMap((b) => b.features)]) {
+    if (f.kind === 'runoff' && f.amount > 0) warn.push(`void: run-off ${f.from}..${f.to} over the void`);
+  }
+  for (const [label, r] of ribbons) {
+    for (const smp of r.samples) {
+      if (smp.magnet && (smp.dropL || smp.dropR)) {
+        warn.push(`void: ${label} has an open edge in a loop or corkscrew at s=${fmt(smp.s)}`);
+        break;
+      }
+    }
+    for (const j of r.jumps) {
+      for (let s = j.lip - VOID_GAP_EDGE; s <= j.gapEnd + VOID_GAP_EDGE; s += r.step) {
+        const smp = r.sampleAt(s);
+        if (!smp.dropL || !smp.dropR) {
+          warn.push(`void: ${label} gap at s=${fmt(j.lip)} has a rail at s=${fmt(s)}: a gap in the void is open both sides`);
+          break;
+        }
+      }
+    }
+  }
+  // The cage round a stunt reaches out past its rails: nothing else of the course may pass close.
+  const step = 5;
+  for (let a = 0; a < t.samples.length; a += step) {
+    const sa = t.samples[a];
+    if (!sa.magnet) continue;
+    for (let b = 0; b < t.samples.length; b += step) {
+      const sb = t.samples[b];
+      if (Math.abs(t.delta(sa.s, sb.s)) < ADJACENT_S) continue;
+      const c = clearance(sa, sb);
+      if (c < MIN_CLEARANCE) {
+        warn.push(`void: the stunt at s=${fmt(sa.s)} passes s=${fmt(sb.s)} only ${fmt(c)}m away`);
+        return;
+      }
+    }
+  }
+}
 
 function checkCrossings(t: Track, warn: string[]) {
   for (const c of t.crossings) {
@@ -731,6 +791,7 @@ function check(def: TrackDef): string[] {
   if (def.course === 'sprint' && (t.raceLength < SPRINT_LENGTH[0] || t.raceLength > SPRINT_LENGTH[1])) warn.push(`sprint length ${fmt(t.raceLength)} outside ${SPRINT_LENGTH.join('..')}`);
   if (lineR < RUNOUT_MIN_RADIUS) warn.push(`${def.course === 'circuit' ? 'start line' : 'start or finish line'} not on a straight (radius ${fmt(lineR)}m)`);
   checkWorld(t, def, warn);
+  checkVoid(t, def, warn);
 
   const J = BRANCH_JUNCTION_LENGTH;
   for (const b of t.branches) {
