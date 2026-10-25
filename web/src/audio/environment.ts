@@ -167,6 +167,8 @@ export class AudioEnvironment {
       case 'ice':
         return 'snow';
       case 'city':
+      case 'space':
+        // Station decks and the city's run-off are both hard plating under the cushion.
         return 'concrete';
       case 'beach': {
         const w = track.wrap(s);

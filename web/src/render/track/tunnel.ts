@@ -15,6 +15,8 @@ const TUNNEL_FOOT = 8;
 /** Lift of tunnel light strips off their rock face, metres. */
 const LIGHT_INSET = 0.08;
 const WARM = new THREE.Color(0xfff1c8);
+/** A hanging hull's underside faces away from the star and the fill: darker than its sides. */
+const UNDERSIDE_SHADE = 0.55;
 
 export function mean(...p: P3[]): P3 {
   const o = { x: 0, y: 0, z: 0 };
@@ -77,6 +79,11 @@ export function tunnelStrip(cor: Corridor, b: FlatBuilder, ka: number, kb: numbe
     if (i === 2) quadFacing(b, A.outer[i], A.outer[i + 1], B.outer[i + 1], B.outer[i], sub(mo, A.axis), cor.paint.strata(mo.y, 1.05, col));
     else rockQuad(b, cor.paint, A.outer[i], B.outer[i], B.outer[i + 1], A.outer[i + 1], sub(mo, A.axis), 0.95);
   }
+  // With no ground to stand in, the mass is a hull hanging in the void: close its underside.
+  if (cor.hanging) {
+    const bottom = mean(A.outer[0], A.outer[5], B.outer[0], B.outer[5]);
+    quadFacing(b, A.outer[0], A.outer[5], B.outer[5], B.outer[0], sub(bottom, A.axis), cor.paint.strata(bottom.y, UNDERSIDE_SHADE, col));
+  }
   tunnelLights(cor, ka, kb);
 }
 
@@ -125,6 +132,8 @@ export function portal(cor: Corridor, b: FlatBuilder, k: number, dir: number): v
   const t = cor.ribbon.samples[cor.idx(k)].tangent;
   const facing = { x: t.x * dir, y: t.y * dir, z: t.z * dir };
   for (let i = 0; i < 5; i++) rockQuad(b, cor.paint, R.inner[i], R.inner[i + 1], R.outer[i + 1], R.outer[i], facing, 0.85);
+  // Hanging in the void, the face also closes under the road, down to the hull's underside.
+  if (cor.hanging) rockQuad(b, cor.paint, R.outer[0], R.outer[5], R.inner[5], R.inner[0], facing, 0.85);
   // Hazard-lit frame around the mouth so the hole reads from far away.
   for (let i = 0; i < 5; i++) {
     const a = R.inner[i];

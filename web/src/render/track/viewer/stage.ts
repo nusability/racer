@@ -70,8 +70,8 @@ export class Stage {
     const r = this.renderer;
     const quality = GRAPHICS_PROFILE[settings.level].detail;
     r.setPixelRatio(pixelRatioFor(settings.level, window.devicePixelRatio));
-    const air = atmosphere(quality);
-    this.camera.far = air.fog.far + FAR_MARGIN;
+    const air = atmosphere(quality, worldOfTrack(def.id).biome);
+    this.camera.far = air.far ?? air.cull + FAR_MARGIN;
     const track = new Track(def);
     const env = applyEnvironment(this.scene, def.palette, air);
     const look = resolveLook(worldOfTrack(def.id).biome, settings.level, settings.look, PostFx.supported(r), def.palette);

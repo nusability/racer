@@ -219,7 +219,8 @@ export class RaceSession {
     this.gliderEnv = look?.gliders ? worldEnvironment(renderer, look.look.env, look.look.sunDir) : null;
     const finish = this.gliderEnv && look ? { envMap: this.gliderEnv.texture, look: look.look.gliders } : null;
 
-    this.env = applyEnvironment(this.scene, def.palette, atmosphere(detail));
+    const air = atmosphere(detail, worldOfTrack(def.id).biome);
+    this.env = applyEnvironment(this.scene, def.palette, air);
     this.trackScene = buildTrackScene(this.track, detail, look);
     this.scene.add(this.trackScene.group);
     this.glowPools = look?.wetSheen
@@ -251,6 +252,10 @@ export class RaceSession {
 
     const size = ctx.renderer.getSize(new THREE.Vector2());
     this.cam = new ChaseCamera(size.x / size.y);
+    if (air.far !== null) {
+      this.cam.camera.far = air.far;
+      this.cam.camera.updateProjectionMatrix();
+    }
     this.scene.add(this.cam.camera);
     this.effects = new Effects(this.scene, detail);
     this.speedLines = new SpeedLines(this.cam.camera);

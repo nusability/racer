@@ -252,6 +252,57 @@ const iceLook: WorldLookFor = (p) => ({
   sunDir: sunDir(p),
 });
 
+/** The gas giant under the ring station, as the gliders see it below them (render/track/spaceSky.ts). */
+const SPACE_PLANET = 0x4a78a8;
+
+const spaceLook: WorldLookFor = (p) => ({
+  // Space is black and lit by points: the star, the station's lights, the gantry and rib bands,
+  // the boost pads. The glow starts under them and over the lit planet and hull (~0.6 linear),
+  // so depth comes from light without the frame going milky.
+  bloom: { threshold: 0.8, knee: 0.25, strength: 1.05, clamp: 6, levels: 3 },
+  grade: {
+    // A notch over the city's exposure: the star's hard key leaves deep shadows, and the deck
+    // in them must still read; ACES keeps the star and the lamps from clipping flat.
+    exposure: 1.2,
+    materialExposure: 1.2,
+    // Shadows stay black (no lift): space has no air to scatter light into them. A faint cool
+    // gain matches the planet's bounce.
+    lift: [0, 0, 0],
+    gamma: [1, 1, 0.98],
+    gain: [0.99, 1, 1.03],
+    saturation: 1.08,
+  },
+  boostBlur: BOOST_BLUR,
+  wetRoad: {
+    // Polished steel plating: the lamps and pads mirror in it, softer than wet asphalt, and the
+    // star glares off it where the deck runs toward it.
+    reflection: 0.55, smear: 0.07, nearShare: 0.3, horizonFade: 0.08, curlLookAhead: 160, curlResponse: 4,
+    sheen: 0.05, sheenPower: 5, sheenColor: 0x8fb4e8,
+    baseWet: 0.65, slickSheen: 1,
+    sunGlint: 0.2, sunGlintPower: 40,
+  },
+  glowPool: { length: 11, width: 7, behind: 2, lift: 0.08, intensity: 0.6, boostIntensity: 1.1, fadeHeight: 6 },
+  gliders: { metalness: 0.55, roughness: 0.28, envIntensity: 1, canopyMetalness: 0.7, canopyRoughness: 0.06 },
+  // What a hull mirrors: black above, the planet's blue below, the star as a hard point.
+  env: {
+    zenith: 0x020308,
+    haze: 0x0c1424,
+    ground: SPACE_PLANET,
+    hazeGain: 1,
+    hazeHeight: 0.12,
+    groundHaze: 0.2,
+    groundHazeFalloff: 6,
+    sun: { color: p.sun, gain: 8, radius: 0.02, glow: 0.15, glowPower: 30 },
+    ridge: null,
+    towers: null,
+    width: ENV_WIDTH,
+  },
+  ao: AO,
+  heatHaze: null,
+  sea: null,
+  sunDir: sunDir(p),
+});
+
 /** The look each world opts into; null draws the world as it was before the look pass. */
 export const WORLD_LOOK: Record<BiomeId, WorldLookFor | null> = {
   desert: desertLook,
@@ -259,5 +310,5 @@ export const WORLD_LOOK: Record<BiomeId, WorldLookFor | null> = {
   ice: iceLook,
   jungle: null,
   city: cityLook,
-  space: null,
+  space: spaceLook,
 };

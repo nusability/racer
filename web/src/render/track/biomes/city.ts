@@ -105,6 +105,7 @@ export function cityKit(scenery: CityScenery, palette: TrackPalette, ao: AoLook 
   const plaza = PLAZA.clone().lerp(new THREE.Color(palette.sand), 0.25);
   const berm = BERM.clone().lerp(new THREE.Color(palette.rock), 0.3);
   return {
+    terrain: true,
     ground: {
       base: (minRoadY) => minRoadY - FLOOR_BELOW_ROAD,
       natural: (g, x, z) => g.base + SWELL_HEIGHT * fbm(g.noise, x / SWELL_SCALE + 20, z / SWELL_SCALE + 20, 2),

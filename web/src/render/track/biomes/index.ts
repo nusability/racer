@@ -4,6 +4,7 @@ import { beachKit } from './beach.ts';
 import { cityKit } from './city.ts';
 import { desertKit } from './desert.ts';
 import { iceKit } from './ice.ts';
+import { spaceKit } from './space.ts';
 import type { BiomeKit } from './kit.ts';
 import type { AoLook, SeaLook } from '../../look/lookTuning.ts';
 
@@ -26,6 +27,8 @@ export function biomeKit(scenery: TrackScenery, palette: TrackPalette, look: Kit
       return iceKit(scenery, palette);
     case 'city':
       return cityKit(scenery, palette, look.ao);
+    case 'space':
+      return spaceKit(scenery, palette);
   }
 }
 

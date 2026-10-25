@@ -41,6 +41,12 @@ export interface DressContext {
 
 export interface BiomeKit {
   ground: GroundStyle;
+  /**
+   * Whether there is open ground under the course. Without it (space) no terrain is drawn and
+   * every road outside a tunnel hangs in the void on a deck: rails where it is walled, a lit
+   * open edge where it drops, a finished underside.
+   */
+  terrain: boolean;
   road: RoadStyle;
   /**
    * Street lighting on the road: how much of its own texture it shows with no sun on it

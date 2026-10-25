@@ -174,7 +174,7 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   const palette = def.palette;
   const detail = GRAPHICS_PROFILE.ultra.detail;
   const scene = new THREE.Scene();
-  const air = atmosphere(detail);
+  const air = atmosphere(detail, worldOfTrack(def.id).biome);
   const env = applyEnvironment(scene, palette, air);
   disposers.push(() => env.dispose());
   // Every effect of the world's look, as the ultra level draws it; the debug switches are the
@@ -232,7 +232,7 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   }
   disposers.push(() => gliders.forEach((g) => g.dispose()));
 
-  const camera = new THREE.PerspectiveCamera(BENCH_FOV, window.innerWidth / window.innerHeight, 0.5, air.fog.far + CULL_MARGIN);
+  const camera = new THREE.PerspectiveCamera(BENCH_FOV, window.innerWidth / window.innerHeight, 0.5, air.cull + CULL_MARGIN);
   const roadUp = new THREE.Vector3(0, 1, 0);
   const run = BENCH_STREET_LENGTH - 2 * BENCH_START_S;
   const draw = (k: number) => {

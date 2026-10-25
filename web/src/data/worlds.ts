@@ -72,8 +72,13 @@ export function worldById(id: string): WorldDef {
 /** Dev builds only: the world each synthetic track (data/tracks/index.ts registerDevTrack) races in. */
 const DEV_TRACK_WORLDS = new Map<string, WorldDef>();
 
-export function registerDevTrackWorld(trackId: string, worldId: string): void {
-  DEV_TRACK_WORLDS.set(trackId, worldById(worldId));
+/**
+ * A synthetic track races in `worldId`'s cups and pay but is drawn as `biome`: a look-dev track
+ * judges a new world's look on one course before that world (its cups, its place in the
+ * unlock chain) exists. Never in WORLDS, so no world screen, cup or quick-race list shows it.
+ */
+export function registerDevTrackWorld(trackId: string, worldId: string, biome: BiomeId): void {
+  DEV_TRACK_WORLDS.set(trackId, { ...worldById(worldId), biome });
 }
 
 export function worldOfTrack(trackId: string): WorldDef {

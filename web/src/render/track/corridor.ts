@@ -109,6 +109,8 @@ export class Corridor {
     readonly glow: FlatBuilder,
     readonly scatter: Scatter,
     readonly ao: CorridorAo | null,
+    /** No ground under the course (BiomeKit.terrain false): structure that would stand on it is closed underneath instead. */
+    readonly hanging: boolean,
   ) {
     this.ribbon = view.ribbon;
     this.n = this.ribbon.samples.length;
