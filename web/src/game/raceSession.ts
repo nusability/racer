@@ -631,6 +631,7 @@ export class RaceSession {
     // A wrecked player has no wake to ride; its draft only decays in the sim.
     this.draftLines.update(dt, this.playerWreck ? 0 : p.draft);
     this.effects.update(dt, this.cam.camera);
+    this.trackScene.pressField(this.race.racers, this.race.time);
     // Hazards run on race time: the scene must show exactly what the simulation collides with.
     this.trackScene.update(this.race.time, this.cam.camera.position);
 

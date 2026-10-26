@@ -7,6 +7,7 @@ import { BOOST_SCROLL, CULL_MARGIN, ROCK_TILE, SAND_TILE, SEA_LEVEL, atmosphere,
 import { Corridor, type Scatter } from './track/corridor.ts';
 import { buildCells, type CellItem } from './track/cells.ts';
 import { buildDressing } from './track/dressing.ts';
+import { buildForceField, type FieldRacer } from './track/forceField.ts';
 import { buildRockFeatures } from './track/features.ts';
 import { buildGameplayBoulders } from './track/instanced.ts';
 import { buildRoughGround } from './track/rough.ts';
@@ -33,6 +34,8 @@ export interface TrackScene {
   group: THREE.Group;
   /** `time` is race time: the hazard schedules' clock, shared with the simulation. */
   update(time: number, cameraPos: THREE.Vector3): void;
+  /** The racers as the race has them now (a sprint's force field gives where they press it); `time` is race time. */
+  pressField(racers: readonly FieldRacer[], time: number): void;
   /** The player flew through a boost or repair cell: pop it and hide it (branch -1 = main loop). */
   collectCell(item: CellItem, branch: number, cell: number): void;
   /** A new lap for the player: every cell, boost and repair, shows again. */
@@ -185,6 +188,12 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   for (const f of Object.values(cells)) for (const m of f.meshes) group.add(m);
   for (const l of landmarks) group.add(l.landmark.group);
   checkLandmarkClearance(landmarks, ground);
+  // A sprint's run-out ends in the force field that holds its finishers (core/race.ts).
+  const field = buildForceField(track, new THREE.Color(def.palette.accent));
+  if (field) {
+    group.add(field.mesh);
+    cullable.push(field.mesh);
+  }
 
   let last: number | null = null;
   return {
@@ -203,6 +212,9 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
         if (bs) o.visible = bs.center.distanceTo(cameraPos) - bs.radius < viewFar + CULL_MARGIN;
       }
       updateLandmarks(landmarks, quality, viewFar + CULL_MARGIN, time, dt, cameraPos);
+    },
+    pressField(racers, time) {
+      field?.press(racers, time);
     },
     collectCell(item, branch, cell) {
       cells[item].collect(branch, cell);
@@ -243,6 +255,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
     },
     dispose() {
       beacons.dispose();
+      field?.dispose();
       dressing.dispose();
       scheduled.dispose();
       cells.boost.dispose();

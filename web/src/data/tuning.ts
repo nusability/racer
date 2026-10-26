@@ -459,10 +459,23 @@ export const AI_ROUTE_OBSTACLE_METRES = 40;
 export const SPRINT_GRID_APRON = 120;
 /**
  * Straight run-out the builder lays beyond a sprint's finish line, metres. A finisher is held
- * on the air brake with no boost, so BRAKE_DECEL stops even an upgraded glider crossing the
- * line at full boost (about 340 m/s: 680 m) before the barrier at its end.
+ * on the air brake with no boost: BRAKE_DECEL stops a stock glider well inside it (250 m/s:
+ * 370 m); the force field at its end (SPRINT_FIELD_*) takes over for anything faster.
  */
 export const SPRINT_RUNOUT = 750;
+/**
+ * The force field closing a sprint's run-out: its membrane stands SPRINT_FIELD_BACK metres
+ * before the road's end. Each racer past the finish is given a stop SPRINT_FIELD_SINK metres
+ * past the membrane (its centre: its nose sinks a half length deeper, and the chase camera
+ * stays clear of the sheet), each later one SPRINT_FIELD_QUEUE further back (a car length and
+ * room to spare, so none rests on another). It is held on the brake, or, when the brake alone
+ * would carry it past its stop, on the steady decel that brings it to rest exactly there: a
+ * maxed Orbis Gyre crossing on boost in a draft (~406 m/s) eases in at ~116 m/s² where it
+ * used to strike the end wall at ~190 m/s.
+ */
+export const SPRINT_FIELD_BACK = 40;
+export const SPRINT_FIELD_SINK = 0.5;
+export const SPRINT_FIELD_QUEUE = 14;
 
 // --- Branches: shortcuts and the routes of forks (src/core/track.ts) ---
 /** Length of the side-by-side run where a branch leaves or rejoins the main road. */

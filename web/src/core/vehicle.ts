@@ -105,6 +105,11 @@ export class Vehicle {
   pace = 1;
   /** Top-speed bonus (fraction) the race sets from the slipstream (src/core/slipstream.ts). */
   slip = 0;
+  /**
+   * Set by the race once this racer crosses a sprint's finish line: the s its run-out's force
+   * field brings it to rest at. From then on the field alone sets its speed (see updateSpeed).
+   */
+  stopAt: number | null = null;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
   /** Seconds since the tank was last spent from: the trickle refill waits a moment. */
@@ -246,6 +251,10 @@ export class Vehicle {
   /** Auto-throttle toward the current top speed; sand caps it lower and drags. */
   private updateSpeed(ribbon: Ribbon, brake: boolean) {
     const st = this.state;
+    if (this.stopAt !== null) {
+      this.holdForStop(this.stopAt);
+      return;
+    }
     let top = currentTopSpeed(this.stats, st, st.boosting) * this.pace * (1 + this.slip);
     if (this.offroad) top *= SAND_TOP_SPEED;
     let dv: number;
@@ -260,6 +269,23 @@ export class Vehicle {
     if (this.grounded) dv -= GRAVITY * ribbon.slopeAt(st.s) * SLOPE_SPEED_FACTOR;
     if (this.offroad) dv -= SAND_DRAG;
     st.speed = Math.max(0, st.speed + dv * SIM_DT);
+  }
+
+  /**
+   * A sprint's force field holding a finisher: the air brake's decel, or, when that would carry
+   * it past its stop, the steady decel that brings it to rest exactly there (v² / 2d, constant
+   * along the way, so it eases in with no jolt). Speed only ever falls, and never below zero:
+   * no hard wall, no spring back. Thrust, slope and sand play no part; the field holds it.
+   */
+  private holdForStop(stopAt: number) {
+    const st = this.state;
+    const room = stopAt - st.s;
+    if (room <= 0) {
+      st.speed = 0;
+      return;
+    }
+    const decel = Math.max(BRAKE_DECEL, (st.speed * st.speed) / (2 * room));
+    st.speed = Math.max(0, st.speed - decel * SIM_DT);
   }
 
   /**

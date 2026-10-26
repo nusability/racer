@@ -37,6 +37,9 @@ import {
   RACER_SHOVE_MIN,
   RACER_SHOVE_TARGET_TIME,
   SIM_DT,
+  SPRINT_FIELD_BACK,
+  SPRINT_FIELD_QUEUE,
+  SPRINT_FIELD_SINK,
   START_BOOST_DURATION,
   PERFECT_START_WINDOW,
   FALSE_START_STALL,
@@ -100,6 +103,8 @@ export class Race {
   private readonly hazardNow = new Map<number, Obstacle[]>();
   /** Every racer's draft in the wake of the racers ahead of it. */
   private readonly slipstream: Slipstream;
+  /** Racers past a sprint's finish line so far: each is held to rest SPRINT_FIELD_QUEUE behind the one before. */
+  private held = 0;
 
   constructor(track: Track, config: RaceConfig) {
     if (config.entrants.length === 0) throw new Error('Race: no entrants');
@@ -155,8 +160,9 @@ export class Race {
     const inputs = this.vehicles.map((v, i) => {
       const ai = this.drivers[i].drive(v, this.track, this.racers, this.time);
       const human = i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
-      // Past a sprint's finish there is only the run-out: everyone glides to a stop on the brake.
-      if (this.track.course === 'sprint' && v.state.finishTime !== null) return { ...ai, brake: true, boost: false };
+      // Past a sprint's finish there is only the run-out: everyone glides to a stop on the brake,
+      // steering clear of the others while moving; at rest the field holds it, hands off.
+      if (v.stopAt !== null) return v.state.speed > 0 ? { ...ai, brake: true, boost: false } : AT_REST;
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
@@ -174,7 +180,7 @@ export class Race {
       if (v.state.crashed > 0) this.wrecks.push(i);
       else {
         this.junction(v);
-        this.endBarrier(v);
+        this.forceField(v);
       }
       // Standings distance runs along the main road, whichever ribbon the racer is on.
       v.state.distance += this.track.delta(from, this.mainS(v.state));
@@ -447,6 +453,9 @@ export class Race {
     const sa = a.state;
     const sb = b.state;
     if (sa.crashed > 0 || sb.crashed > 0 || sa.branch !== sb.branch) return false;
+    // Two racers the run-out's force field holds have nothing left to race for: they pass
+    // through each other, so a queue easing to rest never shoves itself apart.
+    if (a.stopAt !== null && b.stopAt !== null) return false;
     return (
       Math.abs(this.track.ribbon(sa.branch).delta(sa.s, sb.s)) < RACER_LENGTH &&
       Math.abs(sb.x - sa.x) < 2 * RACER_HALF_WIDTH &&
@@ -471,15 +480,21 @@ export class Race {
   }
 
   /**
-   * A sprint's run-out ends in a barrier: a racer that reaches the end of the main road stops
-   * there. Finishers are on the brake long before it (SPRINT_RUNOUT); the sim check asserts
-   * that nobody ever arrives.
+   * A sprint's run-out ends in a force field (SPRINT_FIELD_*): a racer crossing the finish line
+   * (in the race or after it) is handed a stop SPRINT_FIELD_SINK past the field's membrane,
+   * each later one SPRINT_FIELD_QUEUE further back, and the field brings it to rest there
+   * (Vehicle.holdForStop): never at the road's end, never in a hard stop.
    */
-  private endBarrier(v: Vehicle) {
+  private forceField(v: Vehicle) {
     const st = v.state;
-    if (this.track.course !== 'sprint' || st.branch >= 0 || st.s < this.track.length) return;
-    st.speed = 0;
-    st.vx = 0;
+    if (this.track.course !== 'sprint' || st.branch >= 0) return;
+    if (st.s >= this.track.length) throw new Error(`Race: ${st.id} ran through the force field to the end of ${this.track.def.id}`);
+    const finish = this.track.startS + this.track.raceLength;
+    if (v.stopAt !== null || st.s < finish) return;
+    const stop = this.track.length - SPRINT_FIELD_BACK + SPRINT_FIELD_SINK - this.held * SPRINT_FIELD_QUEUE;
+    if (stop <= st.s) throw new Error(`Race: ${this.track.def.id}'s run-out has no room to hold racer ${this.held + 1}`);
+    v.stopAt = stop;
+    this.held++;
   }
 
   /** Where on the main road a racer counts as being: a branch maps linearly onto the stretch it skips. */
@@ -533,3 +548,5 @@ const posB = { x: 0, y: 0, z: 0 };
 const frameA = makeFrame();
 const frameB = makeFrame();
 const NO_OBSTACLES: readonly Obstacle[] = [];
+/** A racer the force field holds at rest: no steer, no throttle, nothing to wobble it. */
+const AT_REST: PlayerInput = { steer: 0, nudge: 0, brake: true, boost: false };

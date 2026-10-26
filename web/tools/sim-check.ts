@@ -1,7 +1,8 @@
 // Runs full headless races on every track (plus synthetic test courses) and prints how they
 // went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, or a
 // racer pinned against a wall; on the synthetic sprint also on a DNF, wrong placings, a racer
-// reaching the run-out's end barrier, or a fork whose field all took one way.
+// reaching the run-out's end, a fork whose field all took one way, or a finisher the run-out's
+// force field does not ease to a still rest.
 //   npm run sim                 all tracks
 //   npm run sim -- sunpan       one track (simtest is the synthetic loop, simsprint the sprint)
 //   npm run sim -- --ladder     also race six equal racers at different skills
@@ -9,14 +10,14 @@
 
 import { TRACKS } from '../src/data/tracks/index.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
-import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
+import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Race } from '../src/core/race.ts';
 import { Slipstream } from '../src/core/slipstream.ts';
 import { Vehicle } from '../src/core/vehicle.ts';
 import { minJumpSpeed } from '../src/core/jumps.ts';
 import { currentTopSpeed } from '../src/core/handling.ts';
-import { DRAFT_FULL, DRAFT_TOP_SPEED, RACER_LENGTH, SIM_DT } from '../src/data/tuning.ts';
+import { BRAKE_DECEL, DRAFT_FULL, DRAFT_TOP_SPEED, RACER_LENGTH, SIM_DT } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
 import { simDraftOval, simFigure8, simSprint, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
@@ -207,7 +208,7 @@ const SPRINT_STOPPED = 0.5;
 
 /**
  * The sprint's own rules: everyone finishes (the synthetic sprint has nothing that must wreck),
- * places follow finishing times, every finisher stops on the run-out short of its end barrier,
+ * places follow finishing times, every finisher stops on the run-out short of the road's end,
  * and each fork's field spreads over at least two of its ways.
  */
 function sprintCheck(track: Track, res: RunResult) {
@@ -226,7 +227,7 @@ function sprintCheck(track: Track, res: RunResult) {
   console.log(`  run-out (${(track.length - finishS).toFixed(0)} m): stopped past the line at ${reach.join(', ')}`);
   race.racers.forEach((r, i) => {
     if (r.finishTime === null) fail(`${id}: ${r.id} did not finish the sprint${r.crashed > 0 ? ' (wrecked)' : ''}`);
-    if (res.maxMainS[i] >= track.length - RACER_LENGTH) fail(`${id}: ${r.id} ran the whole run-out into its end barrier`);
+    if (res.maxMainS[i] >= track.length - RACER_LENGTH) fail(`${id}: ${r.id} ran the whole run-out to the road's end`);
     if (stoppedAt[i] < 0) fail(`${id}: ${r.id} still moving ${SPRINT_SETTLE} s after the race ended`);
   });
   const byTime = race.racers.filter((r) => r.finishTime !== null).sort((a, b) => (a.finishTime as number) - (b.finishTime as number));
@@ -412,6 +413,68 @@ rough ground (400 m, stock starter): flat out ${pct(fast)} hull, ${fast.jolts} j
 }
 
 if (only.length === 0 || only.includes('simrough')) roughCheck();
+
+// --- The sprint's force field: a field of fully upgraded Orbis Gyres races the synthetic
+// sprint, every one fast enough at the line that the brake alone would carry it far down the
+// run-out. Past the finish each must slow every step, never harder than the field's steady
+// decel allows (no wall), come to rest short of the road's end and then stay put (no wobble).
+
+/** The hardest the field may ever slow a finisher, m/s²: twice the air brake (a wall stops in one step). */
+const FIELD_MAX_DECEL = 2 * BRAKE_DECEL;
+/** A racer come to rest finishes its sideways glide within this long, seconds; after it, it may drift at most this far, metres. */
+const FIELD_REST_SETTLE = 1;
+const FIELD_REST_DRIFT = 0.01;
+/** Speed may never rise by more than this between steps (float noise), m/s. */
+const FIELD_SPEED_NOISE = 1e-9;
+
+function forceFieldCheck() {
+  const track = new Track(simSprint);
+  const gyre = racerById('gyre');
+  const maxed = { engine: MAX_UPGRADE_LEVEL, thrusters: MAX_UPGRADE_LEVEL, steering: MAX_UPGRADE_LEVEL, tank: MAX_UPGRADE_LEVEL, armor: MAX_UPGRADE_LEVEL };
+  const field: RaceEntrant[] = Array.from({ length: FIELD }, (_, i) => ({ ...entrant(i, gyre, spread(i, FIELD, SKILL_LO, SKILL_HI), false), stats: effectiveStats(gyre, maxed) }));
+  const race = new Race(track, { laps: 1, seed: SEED, entrants: field });
+  const finishS = track.startS + track.raceLength;
+  const brakeRoom = race.racers.map(() => 0);
+  const trace = race.racers.map(() => [] as { speed: number; s: number; x: number; landed: boolean }[]);
+  const maxSteps = Math.ceil((TIMEOUT_PER_LAP + SPRINT_SETTLE) / SIM_DT);
+  for (let n = 0; n < maxSteps && !(race.phase === 'finished' && trace.every((t) => t.length * SIM_DT > SPRINT_SETTLE)); n++) {
+    const events = race.step(IDLE);
+    race.racers.forEach((r, i) => {
+      if (r.branch >= 0 || r.s < finishS) return;
+      // How far the air brake alone would carry it past the line.
+      if (trace[i].length === 0) brakeRoom[i] = finishS + (r.speed * r.speed) / (2 * BRAKE_DECEL);
+      // A landing off the run-out's crest costs speed in one step: physics, not the field.
+      const landed = events.some((e) => e.type === 'land' && e.id === r.id);
+      trace[i].push({ speed: r.speed, s: r.s, x: r.x, landed });
+    });
+  }
+  const runOut = track.length - finishS;
+  const overrun = brakeRoom.filter((b) => b > track.length).length;
+  console.log(`\nforce field (simsprint, ${FIELD} maxed Orbis Gyres): ${overrun} would brake past the road's end; rest at ${trace.map((t) => (t.length ? (t[t.length - 1].s - finishS).toFixed(0) : '-')).join(', ')} m of ${runOut.toFixed(0)}`);
+  if (overrun === 0) fail('force field: no finisher was fast enough for the field to act');
+  trace.forEach((t, i) => {
+    const id = race.racers[i].id;
+    if (t.length === 0) return fail(`force field: ${id} never crossed the finish`);
+    let worst = 0;
+    let rise = 0;
+    for (let k = 1; k < t.length; k++) {
+      if (!t[k].landed) worst = Math.max(worst, (t[k - 1].speed - t[k].speed) / SIM_DT);
+      rise = Math.max(rise, t[k].speed - t[k - 1].speed);
+    }
+    const rest = t.findIndex((p) => p.speed === 0);
+    if (rise > FIELD_SPEED_NOISE) fail(`force field: ${id} sped up by ${rise.toFixed(3)} m/s past the finish`);
+    if (worst > FIELD_MAX_DECEL) fail(`force field: ${id} was stopped at ${worst.toFixed(0)} m/s² (a wall), over ${FIELD_MAX_DECEL}`);
+    if (rest < 0) return fail(`force field: ${id} still moving ${SPRINT_SETTLE} s after the race ended`);
+    if (t[t.length - 1].s >= track.length - RACER_LENGTH) fail(`force field: ${id} reached the road's end`);
+    // Its last sideways glide settles first; from then on it must hold still.
+    const settled = rest + Math.round(FIELD_REST_SETTLE / SIM_DT);
+    if (settled >= t.length) return fail(`force field: ${id} came to rest too late to watch it settle`);
+    const drift = Math.max(...t.slice(settled).map((p) => Math.abs(p.x - t[settled].x)));
+    if (drift > FIELD_REST_DRIFT || t.slice(rest).some((p) => p.speed !== 0)) fail(`force field: ${id} did not stay at rest (drifted ${drift.toFixed(3)} m)`);
+  });
+}
+
+if (only.length === 0 || only.includes(simSprint.id)) forceFieldCheck();
 
 // Cup balance: the real rival fields against stand-in players (skipped for single-track runs).
 if (only.length === 0 || args.includes('--cups')) allCupStudies();

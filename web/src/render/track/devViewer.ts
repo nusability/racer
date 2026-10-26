@@ -13,6 +13,7 @@ import { MiniMap } from './viewer/miniMap.ts';
 import { buildUi, type DisplaySettings, type RaceClock, type ViewerApi, type ViewerState } from './viewer/panel.ts';
 import { trackHazards, trackSpots, triggerTime, type ViewerHazard } from './viewer/spots.ts';
 import { Stage } from './viewer/stage.ts';
+import type { FieldRacer } from './forceField.ts';
 
 // The level viewer (track-viewer.html): every level, one at a time, to fly round, jump to its
 // points of interest and fire its hazards. Opened from the hidden debug menu; works on a phone
@@ -353,6 +354,12 @@ const viewer = {
       e.tris += o instanceof THREE.InstancedMesh ? t * o.count : t;
     });
     return out;
+  },
+  /** Presses the sprint's force field (if the level has one) with stand-in racers, at race time `time`. */
+  pressField: (racers: FieldRacer[], time: number) => {
+    stage.trackScene.pressField(racers, time);
+    stage.trackScene.update(time, stage.camera.position);
+    stage.draw(0, ribbon(), state.s);
   },
   stats: () => ({ calls: stage.renderer.info.render.calls, triangles: stage.renderer.info.render.triangles, buildMs: stage.buildMs, length: stage.track.length, memory: { ...stage.renderer.info.memory }, ...totals() }),
   /** The level being shown: changes when another is loaded. */
