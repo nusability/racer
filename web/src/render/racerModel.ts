@@ -15,7 +15,7 @@ import { CushionSheet, VortexTrails, createFanDiscGeometry, createJetGeometry } 
 import { SoftPointBuffer } from './softPoints.ts';
 import { ParticlePool } from './particlePool.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
-import { WreckSim, type WreckKind } from './racerWreck.ts';
+import { WreckSim, type DebrisView, type WreckKind } from './racerWreck.ts';
 import type { GliderFinishLook } from './look/lookTuning.ts';
 
 /**
@@ -56,6 +56,8 @@ export interface RacerModel {
   /** Breaks the craft apart. `impulse`: its world velocity at the crash (m/s). Leave `root` where
    * it is afterwards (keep it visible, stop posing it) and keep calling update(). */
   shatter(impulse: THREE.Vector3, opts: ShatterOptions): void;
+  /** Where the flying debris is, in world space; only while wrecked. */
+  debris(out: DebrisView): DebrisView;
   /** Reassembles the craft, intact and clean. */
   reset(): void;
   dispose(): void;
@@ -458,6 +460,16 @@ class SkimmerModel implements RacerModel {
     this.wreck.start(opts.kind, impulse, tmpPose, groundY);
     this.steer = 0;
     for (const m of [this.jets, this.cushion.mesh, this.vortices.mesh, this.halos.points]) m.visible = false;
+  }
+
+  debris(out: DebrisView): DebrisView {
+    if (!this.wreck.active) throw new Error('RacerModel.debris: the craft is not wrecked');
+    this.wreck.debris(out);
+    // The wreck frame is world-aligned but keeps the root's position: a translation, so the
+    // velocity needs no turning.
+    this.craft.updateWorldMatrix(true, false);
+    out.centre.applyMatrix4(this.craft.matrixWorld);
+    return out;
   }
 
   reset(): void {

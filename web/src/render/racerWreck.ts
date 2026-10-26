@@ -12,11 +12,29 @@ import { ParticlePool } from './particlePool.ts';
 
 export type WreckKind = 'impact' | 'fall' | 'explode';
 
+/** Where the debris is as a whole, for a camera that rides with it. */
+export interface DebrisView {
+  /** Mass-weighted centre of the parts (big pieces dominate, a lone fin does not). */
+  readonly centre: THREE.Vector3;
+  /** Mass-weighted velocity (m/s): the momentum the debris still carries. */
+  readonly velocity: THREE.Vector3;
+  /** Area-weighted RMS distance of the parts from `centre` (m): how far the break-up has spread. */
+  spread: number;
+  /** Every part has come to rest on the ground. */
+  resting: boolean;
+  /** Falling into the void: there is no ground to come to rest on. */
+  falling: boolean;
+}
+
+export function emptyDebris(): DebrisView {
+  return { centre: new THREE.Vector3(), velocity: new THREE.Vector3(), spread: 0, resting: false, falling: false };
+}
+
 // --- Tunables -------------------------------------------------------------------------------
 const GRAVITY = 16;
 /** Share of the racer's velocity the debris keeps: all of it would scatter parts hundreds of
- * metres down the track, out of the wreck camera's shot. */
-const IMPULSE_CARRY = 0.38;
+ * metres down the track, too far apart for the wreck camera to frame in one shot. */
+export const WRECK_DEBRIS_CARRY = 0.38;
 /** Outward burst speed (m/s) per kind, and the upward kick. */
 const BURST = { impact: [5, 12], fall: [2, 6], explode: [12, 26] } as const;
 const LIFT = { impact: [3, 9], fall: [0, 2], explode: [6, 15] } as const;
@@ -153,7 +171,7 @@ export class WreckSim {
     for (let i = 0; i < this.parts.length; i++) {
       const part = this.parts[i];
       this.quat[i].copy(tmpQuatCraft);
-      this.vel[i].copy(impulse).multiplyScalar(IMPULSE_CARRY);
+      this.vel[i].copy(impulse).multiplyScalar(WRECK_DEBRIS_CARRY);
       this.spin[i].set(0, 0, 0);
       // Outward from the craft centre, roughened so mirrored parts don't fly symmetrically.
       tmpV.subVectors(this.pos[i], tmpCentre);
@@ -191,7 +209,7 @@ export class WreckSim {
       const c = FIRE_COLORS[i % FIRE_COLORS.length];
       this.fire.spawn(
         centre.x + tmpV.x * 1.5, centre.y + tmpV.y * 0.8, centre.z + tmpV.z * 1.5,
-        impulse.x * IMPULSE_CARRY * 0.6 + tmpV.x * 9 * big, tmpV.y * 5 * big + 3, impulse.z * IMPULSE_CARRY * 0.6 + tmpV.z * 9 * big,
+        impulse.x * WRECK_DEBRIS_CARRY * 0.6 + tmpV.x * 9 * big, tmpV.y * 5 * big + 3, impulse.z * WRECK_DEBRIS_CARRY * 0.6 + tmpV.z * 9 * big,
         rand(0.5, 1.1), rand(1.2, 2.2) * big, rand(3, 6) * big, c, 0.85, 2.6, -3,
       );
     }
@@ -324,6 +342,35 @@ export class WreckSim {
       this.bones[i].quaternion.copy(this.quat[i]);
       this.partMatrix[i].compose(this.pos[i], this.quat[i], this.bones[i].scale).multiply(this.restInverse[i]);
     }
+  }
+
+  /** The debris as a whole, in the wreck frame. Part volume (size³) is its mass. */
+  debris(out: DebrisView): DebrisView {
+    out.centre.set(0, 0, 0);
+    out.velocity.set(0, 0, 0);
+    let mass = 0;
+    let area = 0;
+    let resting = true;
+    for (let i = 0; i < this.parts.length; i++) {
+      const size = this.parts[i].size;
+      const m = size * size * size;
+      out.centre.addScaledVector(this.pos[i], m);
+      out.velocity.addScaledVector(this.vel[i], m);
+      mass += m;
+      if (!this.settled[i]) resting = false;
+    }
+    out.centre.divideScalar(mass);
+    out.velocity.divideScalar(mass);
+    let spread = 0;
+    for (let i = 0; i < this.parts.length; i++) {
+      const a = this.parts[i].size * this.parts[i].size;
+      spread += this.pos[i].distanceToSquared(out.centre) * a;
+      area += a;
+    }
+    out.spread = Math.sqrt(spread / area);
+    out.resting = this.hasGround && resting;
+    out.falling = !this.hasGround;
+    return out;
   }
 
   /** Fan disc spin angle while wrecked (they wind down). */

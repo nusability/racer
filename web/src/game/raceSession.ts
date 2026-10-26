@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Race } from '../core/race.ts';
 import { makeFrame, Track } from '../core/track.ts';
 import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
-import type { WreckKind } from '../render/racerWreck.ts';
+import { emptyDebris, type WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
 import { sceneryById, trackById } from '../data/tracks/index.ts';
 import { worldOfTrack } from '../data/worlds.ts';
@@ -14,6 +14,7 @@ import { SIM_DT } from '../data/tuning.ts';
 import type { AudioRival, GameAudio } from '../audio/audio.ts';
 import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
 import { ChaseCamera } from '../render/chaseCamera.ts';
+import { WreckCamera } from '../render/wreckCamera.ts';
 import { Effects } from '../render/effects.ts';
 import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
 import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } from '../render/racerPose.ts';
@@ -44,13 +45,7 @@ import {
   SESSION_BOOST_NOZZLE_HEAT,
   SESSION_IDLE_NOZZLE_HEAT,
   SESSION_WRECK_BANNER_DELAY,
-  SESSION_WRECK_DEBRIS_SETTLE,
   SESSION_WRECK_LINGER,
-  SESSION_WRECK_LOOK_AHEAD,
-  SESSION_WRECK_ORBIT_HEIGHT,
-  SESSION_WRECK_ORBIT_RADIUS,
-  SESSION_WRECK_ORBIT_RATE,
-  SESSION_WRECK_ORBIT_START,
   SESSION_WRECK_SLOWMO,
   SESSION_WRECK_SLOWMO_EASE,
   SESSION_WRECK_SLOWMO_HOLD,
@@ -128,6 +123,9 @@ export class RaceSession {
   private readonly trackScene: TrackScene;
   private readonly views: RacerView[] = [];
   private readonly cam: ChaseCamera;
+  /** Takes the chase camera's lens over while the player's debris flies. */
+  private readonly wreckCam: WreckCamera;
+  private readonly debris = emptyDebris();
   private readonly effects: Effects;
   private readonly speedLines: SpeedLines;
   /** The wake streaming round the player's craft while it drafts. */
@@ -169,11 +167,7 @@ export class RaceSession {
   /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
   private playerWreck: WreckInfo | null = null;
   private wreckFor = 0;
-  /** Simulated seconds since the wreck (slowed), which the debris flight follows. */
-  private wreckSim = 0;
   private wreckBannerShown = false;
-  private readonly wreckAt = new THREE.Vector3();
-  private readonly wreckDir = new THREE.Vector3();
   /** The world's live look (null: drawn as before the look pass), its post pipeline and glider reflections. */
   private readonly look: ActiveLook | null;
   private readonly post: PostFx | null;
@@ -256,6 +250,7 @@ export class RaceSession {
       this.cam.camera.far = air.far;
       this.cam.camera.updateProjectionMatrix();
     }
+    this.wreckCam = new WreckCamera(this.cam.camera);
     this.scene.add(this.cam.camera);
     this.effects = new Effects(this.scene, detail);
     this.speedLines = new SpeedLines(this.cam.camera);
@@ -332,7 +327,6 @@ export class RaceSession {
     this.trackScene.resetCells();
     this.playerWreck = null;
     this.wreckFor = 0;
-    this.wreckSim = 0;
     this.wreckBannerShown = false;
     this.ctx.audio.setTimeScale(1);
     this.syncSnapshots(true);
@@ -362,7 +356,6 @@ export class RaceSession {
     if (!this.paused) {
       if (this.playerWreck) {
         this.wreckFor += real;
-        this.wreckSim += dt;
         // Let the first moments of the break-up play clean before the banner lands.
         if (!this.wreckBannerShown && this.wreckFor >= SESSION_WRECK_BANNER_DELAY) {
           this.wreckBannerShown = true;
@@ -396,7 +389,7 @@ export class RaceSession {
         }
       }
     }
-    this.draw(dt);
+    this.draw(dt, real);
   }
 
   private handleEvent(ev: RaceEvent) {
@@ -458,10 +451,8 @@ export class RaceSession {
           // A hull worn out by many knocks still names the last one: it is what the player saw.
           const cause = ev.reason === 'obstacle' || ev.reason === 'hazard' || ev.reason === 'destroyed' ? v.lastHit : null;
           this.playerWreck = { reason: ev.reason, cause };
-          this.wreckAt.copy(root.position);
-          this.wreckDir.copy(this.tmpVel).setY(0);
-          if (this.wreckDir.lengthSq() === 0) this.wreckDir.set(0, 0, -1);
-          this.wreckDir.normalize();
+          // From where the player last saw the craft: the interpolated pose, not the raw step.
+          this.wreckCam.begin(this.track.ribbon(v.draw.branch), v.draw.s, v.model.debris(this.debris));
           audio.oneShot('wreck');
         }
         return;
@@ -574,7 +565,8 @@ export class RaceSession {
     this.effects.boostBurst(root.position, this.tmpDir, racerById(this.request.entrants[i].racerId).visual.glow);
   }
 
-  private draw(dt: number) {
+  /** `dt`: race seconds (slowed during the wreck); `real`: display seconds. */
+  private draw(dt: number, real: number) {
     if (this.countdown === 0 && this.clock >= this.countdownClearAt) this.countdown = null;
     const alpha = this.paused ? 1 : this.acc / SIM_DT;
     const pi = this.playerIndex();
@@ -617,7 +609,7 @@ export class RaceSession {
     const top = this.request.entrants[pi].stats.topSpeed;
     const speedFrac = p.speed / top;
     const pv = this.views[pi].draw;
-    if (this.playerWreck) this.wreckCamera();
+    if (this.playerWreck) this.wreckCam.update(dt, real, this.views[pi].model.debris(this.debris));
     // The camera follows the interpolated pose, not the raw step, or it judders.
     else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
     // Entering a shortcut or a fork's route (the main road's own route included) names it.
@@ -703,26 +695,6 @@ export class RaceSession {
     if (t < SESSION_WRECK_SLOWMO_HOLD) return SESSION_WRECK_SLOWMO;
     const u = Math.min(1, (t - SESSION_WRECK_SLOWMO_HOLD) / SESSION_WRECK_SLOWMO_EASE);
     return SESSION_WRECK_SLOWMO + (1 - SESSION_WRECK_SLOWMO) * u * u;
-  }
-
-  /**
-   * A slow orbit that follows where the debris is skidding to: the parts keep part of the
-   * craft's momentum and come to rest a few dozen metres ahead of the impact.
-   */
-  private wreckCamera() {
-    const cam = this.cam.camera;
-    const angle = SESSION_WRECK_ORBIT_START + this.wreckFor * SESSION_WRECK_ORBIT_RATE;
-    const run = SESSION_WRECK_LOOK_AHEAD * (1 - Math.exp(-this.wreckSim * SESSION_WRECK_DEBRIS_SETTLE));
-    this.tmpPos.copy(this.wreckAt).addScaledVector(this.wreckDir, run);
-    const cx = this.wreckDir.x * Math.cos(angle) - this.wreckDir.z * Math.sin(angle);
-    const cz = this.wreckDir.x * Math.sin(angle) + this.wreckDir.z * Math.cos(angle);
-    cam.position.set(
-      this.tmpPos.x - cx * SESSION_WRECK_ORBIT_RADIUS,
-      this.tmpPos.y + SESSION_WRECK_ORBIT_HEIGHT,
-      this.tmpPos.z - cz * SESSION_WRECK_ORBIT_RADIUS,
-    );
-    cam.up.set(0, 1, 0);
-    cam.lookAt(this.tmpPos);
   }
 
   dispose() {

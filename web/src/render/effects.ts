@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { ParticlePool } from './particlePool.ts';
 import { ScorchDecals } from './scorchDecals.ts';
 import { SKIMMER_RIDE_HEIGHT } from './skimmerTuning.ts';
+import { WRECK_DEBRIS_CARRY } from './racerWreck.ts';
 
 const POOL_SOFT = { high: 1600, low: 650 } as const;
 const POOL_GLOW = { high: 700, low: 320 } as const;
@@ -59,8 +60,9 @@ const WRECK_FLASH = 3;
 const WRECK_CHUNKS = 28;
 const WRECK_SMOKE = 40;
 const WRECK_SCORCH_RADIUS = 7.5;
-/** Share of the racer's velocity the fireball keeps: it rolls on a little past the crash. */
-const WRECK_CARRY = 0.25;
+/** The fireball keeps the debris' share of the racer's velocity: it rolls on with the burning
+ * parts, so the wreck camera riding behind them doesn't fly through a fireball left behind. */
+const WRECK_CARRY = WRECK_DEBRIS_CARRY;
 const FLASH_COLOR = new THREE.Color(0xfff6e0);
 
 const tmpColor = new THREE.Color();
@@ -225,7 +227,9 @@ export class Effects {
     const q = this.quality === 'high' ? 1 : 0.5;
     const racerGlow = tmpGlow.setHex(color);
     this.addRing(pos, UPWARD, tmpColor.copy(FIRE_COLORS[1]).multiplyScalar(WRECK_RING_GAIN), 0, WRECK_RING.size, WRECK_RING.life);
-    if (vel.lengthSq() > 1) this.addRing(pos, tmpPos.copy(vel).normalize(), racerGlow, 0, WRECK_SIDE_RING.size, WRECK_SIDE_RING.life);
+    // The ring across the line of flight rolls on with the fireball, or the wreck camera following
+    // the debris would fly through its plane.
+    if (vel.lengthSq() > 1) this.addRing(pos, tmpPos.copy(vel).normalize(), racerGlow, vel.length() * WRECK_CARRY, WRECK_SIDE_RING.size, WRECK_SIDE_RING.life);
     const cx = vel.x * WRECK_CARRY;
     const cy = vel.y * WRECK_CARRY;
     const cz = vel.z * WRECK_CARRY;

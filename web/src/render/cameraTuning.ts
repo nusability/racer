@@ -34,3 +34,46 @@ export const POSE_MAX_PITCH = 0.45;
 export const CAM_HIDE_NEAR = 9;
 /** Rate the horizon blends to and from following the road fully (loops, corkscrews). */
 export const CAM_UP_BLEND = 4;
+
+// --- Wreck camera: rides with the player's debris (wreckCamera.ts) ---
+// Follow rates are per second of simulated (slowed) time, so the camera keeps pace with the
+// debris through the slow motion; swing, orbit, horizon and lens rates are per real second, so
+// the shot keeps moving while the debris barely does.
+/** Critically damped follow of the camera position: low enough to carry the craft's momentum
+ * through the impact, high enough not to fall far behind the debris skidding down the road. */
+export const WRECK_CAM_FOLLOW = 4;
+/** Follow of the aim point: quicker than the position, so the tumble stays centred. */
+export const WRECK_CAM_AIM_FOLLOW = 9;
+/** Distance from the debris centre at the moment of impact: a little wider than the chase. */
+export const WRECK_CAM_DISTANCE = 16;
+/** Extra distance per metre the debris has spread, so the whole break-up stays in frame. */
+export const WRECK_CAM_SPREAD_PULLBACK = 1.6;
+/** Never further than this: past it the parts shrink to specks. */
+export const WRECK_CAM_MAX_DISTANCE = 34;
+export const WRECK_CAM_HEIGHT = 5.5;
+/** Extra height per metre of spread: pulling back also lifts, to see over the scatter. */
+export const WRECK_CAM_SPREAD_LIFT = 0.4;
+/** Angle (rad) off the line of flight the camera swings to while the debris flies: a
+ * three-quarter rear view shows the parts separating instead of stacking up behind each other. */
+export const WRECK_CAM_FLIGHT_ANGLE = 0.55;
+export const WRECK_CAM_SWING_RATE = 1.2;
+/** Orbit rate (rad/s) once the debris has come to rest. */
+export const WRECK_CAM_ORBIT_RATE = 0.35;
+/** Debris slower than this (m/s) counts as coming to rest: the orbit fades in as it slows. */
+export const WRECK_CAM_REST_SPEED = 6;
+/** Falling into the void: follow it down this long (simulated s), then hold and watch it go. */
+export const WRECK_CAM_VOID_FOLLOW = 0.8;
+/** Rate the horizon rights itself to world up: the debris falls along world gravity, even
+ * where the road had turned the horizon over (loops, corkscrews). */
+export const WRECK_CAM_UP_BLEND = 1.5;
+/** Steepest the camera looks down or up (rad); steeper, the horizon would spin about the lens. */
+export const WRECK_CAM_MAX_PITCH = 1.15;
+/** Lowest the camera goes above a road it is over. */
+export const WRECK_CAM_CLEARANCE = 1.5;
+/** A road whose up has at least this much world up is a floor the camera stays above; steeper
+ * (a loop's wall or crown) it is a thin ribbon the camera may pass on either side. */
+export const WRECK_CAM_FLOOR_UP = 0.5;
+export const WRECK_CAM_FOV = 64;
+export const WRECK_CAM_FOV_BLEND = 1.5;
+/** Steps of the walk along the road that finds the camera's place in track space. */
+export const WRECK_CAM_PROJECT_STEPS = 4;

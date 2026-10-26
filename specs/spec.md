@@ -90,7 +90,9 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    is style and risk, not a free gain; the route's name flashes on entering it, and rivals
    spread over the routes by their own call, aces favouring the harder way. A WRECK ENDS THE RACE: hull
    gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
-   a loop. The craft disintegrates in slow motion, then the results show a DNF.
+   a loop. The craft disintegrates in slow motion, the camera riding with the tumbling debris
+   until it comes to rest (or, off an open edge, watching it fall away), then the results show
+   a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades. Some gliders
    are sold only once their world opens (Neon Meridian brings two above the Halo Comet); the

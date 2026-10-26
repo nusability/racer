@@ -33,17 +33,8 @@ export const SESSION_WRECK_SLOWMO_HOLD = 2.4;
 export const SESSION_WRECK_SLOWMO_EASE = 1.2;
 /** Real seconds from the wreck until the results appear. */
 export const SESSION_WRECK_LINGER = 5;
-/** Cinematic orbit around the wreck: metres ahead of the impact it frames, radius, height, rad/s. */
-export const SESSION_WRECK_LOOK_AHEAD = 40;
-export const SESSION_WRECK_ORBIT_RADIUS = 20;
-export const SESSION_WRECK_ORBIT_HEIGHT = 6;
-/** Rate (1/s of simulated time) at which the framing follows the debris to where it settles. */
-export const SESSION_WRECK_DEBRIS_SETTLE = 1.4;
 /** Real seconds before the WRECKED banner covers the top of the screen. */
 export const SESSION_WRECK_BANNER_DELAY = 1.6;
-export const SESSION_WRECK_ORBIT_RATE = 0.35;
-/** Start the orbit off to the side, so the first frame shows the craft breaking up side-on. */
-export const SESSION_WRECK_ORBIT_START = 1.1;
 
 /** Exponential smoothing of the debug fps readout per frame. */
 export const SESSION_FPS_SMOOTHING = 0.1;
