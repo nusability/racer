@@ -187,8 +187,8 @@ export class Vehicle {
     this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge;
     // Past a wall the target overreaches a little (pushing grinds); past an open edge, far
     // enough that holding the steer drives you off it.
-    const reachL = ribbon.dropAt(sOld, -1) ? DROP_OVERREACH + RACER_HALF_WIDTH : RACER_HALF_WIDTH - TARGET_OVERREACH;
-    const reachR = ribbon.dropAt(sOld, 1) ? DROP_OVERREACH + RACER_HALF_WIDTH : RACER_HALF_WIDTH - TARGET_OVERREACH;
+    const reachL = ribbon.dropAt(sOld, -1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
+    const reachR = ribbon.dropAt(sOld, 1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
     this.targetX = clamp(this.targetX, ribbon.minXAt(sOld) + reachL, ribbon.maxXAt(sOld) - reachR);
 
     // x chases the target with a cap on sideways speed: critically damped on a normal

@@ -117,7 +117,7 @@ export const stormfront: TrackDef = {
       features: [
         // Storm-wrecked ground past the drop, with boulders.
         { kind: 'drop', from: 3.0, to: 6.5 },
-        { kind: 'rough', from: 6.8, to: 8.6, amount: 1 },
+        { kind: 'rough', from: 6.8, to: 9.0, amount: 1 },
         { kind: 'boulders', from: 7.2, to: 8.2, count: 3, radius: 1.3 },
       ],
     },
