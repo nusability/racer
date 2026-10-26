@@ -184,6 +184,13 @@ export const skywayScenery: TrackScenery = {
   towers: 90,
   towerHeight: 180,
   billboardsPerKm: 6,
+  // Above the city: towers linked by sky bridges, terraced flats round the ring road, and the
+  // interchange works under it.
+  districts: [
+    { share: 3, mix: { skybridge: 5, spire: 2, arcology: 2, twist: 1 }, grime: 0.15, neon: 0.4 },
+    { share: 2, mix: { residential: 3, ziggurat: 2, capsule: 1, skybridge: 1 }, grime: 0.3, neon: 0.35 },
+    { share: 1, mix: { industrial: 2, shell: 2, slab: 1 }, grime: 0.55, neon: 0.25 },
+  ],
   landmarks: [
     { kind: 'neonBillboards', at: 1.08, side: 1, distance: 20 },
     { kind: 'crane', at: 17.54, side: 1, distance: 15, hazard: 'crane' },

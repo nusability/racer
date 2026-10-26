@@ -182,6 +182,13 @@ export const neonspiralScenery: TrackScenery = {
   towers: 70,
   towerHeight: 160,
   billboardsPerKm: 8,
+  // The entertainment strip: holo-ad monoliths and capsule hotels drowned in neon, arcade streets
+  // gone to seed, and the casino towers.
+  districts: [
+    { share: 3, mix: { capsule: 3, monolith: 3, shanty: 1, twist: 1, residential: 1 }, grime: 0.3, neon: 0.95 },
+    { share: 2, mix: { monolith: 2, capsule: 2, slab: 2, dome: 1 }, grime: 0.45, neon: 0.85 },
+    { share: 1, mix: { twist: 3, spire: 2, skybridge: 2 }, grime: 0.1, neon: 0.9 },
+  ],
   landmarks: [
     { kind: 'neonBillboards', at: 1.07, side: -1, distance: 20 },
     { kind: 'hologramDragon', at: 20, side: 1, distance: 80 },

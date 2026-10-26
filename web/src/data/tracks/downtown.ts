@@ -174,6 +174,13 @@ export const downtownScenery: TrackScenery = {
   towers: 60,
   towerHeight: 140,
   billboardsPerKm: 6,
+  // Corporate downtown: glass spires, monoliths and linked towers, a civic quarter of domes and
+  // terraces, a few streets of flats.
+  districts: [
+    { share: 3, mix: { spire: 3, monolith: 3, twist: 2, skybridge: 2, dome: 1 }, grime: 0.1, neon: 0.45 },
+    { share: 1.5, mix: { dome: 3, ziggurat: 2, residential: 2, spire: 1 }, grime: 0.15, neon: 0.3 },
+    { share: 1, mix: { residential: 3, capsule: 1, monolith: 1, slab: 1 }, grime: 0.3, neon: 0.5 },
+  ],
   landmarks: [
     { kind: 'stadium', at: 0.6, side: -1, distance: 40 },
     { kind: 'maglev', at: 19.29, side: -1, distance: 20, hazard: 'maglev' },

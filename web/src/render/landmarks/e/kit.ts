@@ -7,7 +7,8 @@
 import * as THREE from 'three';
 import type { LandmarkOptions } from '../types.ts';
 import type { Kit } from '../b/kit.ts';
-import { CITY_NEON, facadeBox, facadeMaterial } from '../../facade.ts';
+import { CITY_NEON, facadeMaterial } from '../../facade.ts';
+import { facadeBox } from '../../facadeGeometry.ts';
 
 export { IceKit as RigKit, RoadFrame, bindHazard, hide, smooth01 } from '../d/kit.ts';
 

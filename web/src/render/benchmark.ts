@@ -40,7 +40,9 @@ import { PostFx } from './look/postFx.ts';
 import { createRacerModel, type RacerModel } from './racerModel.ts';
 import { CULL_MARGIN, atmosphere } from './track/config.ts';
 import { applyEnvironment } from './trackScene.ts';
-import { CITY_NEON, facadeBox, facadeMaterial } from './facade.ts';
+import { CITY_NEON, facadeMaterial } from './facade.ts';
+import { facadeBox } from './facadeGeometry.ts';
+import { packStyle, SURFACE } from './facadeStyle.ts';
 
 // Measures what this device's GPU can draw, without the player doing anything: a city street
 // built from the race's own parts (graphicsTuning.ts says why not a whole track), at the top
@@ -206,11 +208,18 @@ function buildScene(renderer: THREE.WebGLRenderer, disposers: (() => void)[]): B
   scene.add(new THREE.Mesh(roadGeo, roadMat));
   const towerGeo = facadeBox();
   const ao = look?.ao ? look.look.ao : null;
-  const towerMat = facadeMaterial({ palette, neon: CITY_NEON, baseShade: ao ? { amount: ao.buildingBase, height: ao.buildingHeight } : null });
+  const towerMat = facadeMaterial({ palette, neon: CITY_NEON, baseShade: ao ? { amount: ao.buildingBase, height: ao.buildingHeight } : null, styled: true });
   const towers = new THREE.InstancedMesh(towerGeo, towerMat, BENCH_TOWERS);
   const rng = mulberry32(BENCH_SEED);
   const m = new THREE.Matrix4();
   const tint = new THREE.Color();
+  // The race's styled facades, each tower one of the city's lit surfaces, so the shader timed is the race's.
+  const styles = new Float32Array(BENCH_TOWERS * 4);
+  const surfaces = [SURFACE.office, SURFACE.curtain, SURFACE.ribbon, SURFACE.slab, SURFACE.balcony, SURFACE.capsule, SURFACE.industrial, SURFACE.holo];
+  for (let i = 0; i < BENCH_TOWERS; i++) {
+    packStyle({ surface: surfaces[i % surfaces.length], grime: rng(), light: 1, hue: (i % 3) as 0 | 1 | 2, mode: 'steady', trim: 'both', elevated: false }, styles, i);
+  }
+  towerGeo.setAttribute('facadeStyle', new THREE.InstancedBufferAttribute(styles, 4));
   for (let i = 0; i < BENCH_TOWERS; i++) {
     const w = range(rng, ...BENCH_TOWER_SIZE);
     const d = range(rng, ...BENCH_TOWER_SIZE);

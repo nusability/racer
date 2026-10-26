@@ -193,6 +193,13 @@ export const zenithtowerScenery: TrackScenery = {
   towers: 110,
   towerHeight: 200,
   billboardsPerKm: 9,
+  // The heights: supertall spires, twisting towers and arcologies, terraces under domes, and a
+  // patch of under-levels clinging on between them.
+  districts: [
+    { share: 4, mix: { spire: 5, twist: 3, arcology: 3, skybridge: 1, monolith: 1 }, grime: 0.05, neon: 0.5 },
+    { share: 1.5, mix: { ziggurat: 3, dome: 2, arcology: 1 }, grime: 0.1, neon: 0.4 },
+    { share: 0.8, mix: { shanty: 2, slab: 2, capsule: 1 }, grime: 0.7, neon: 0.6 },
+  ],
   landmarks: [
     { kind: 'stadium', at: 1.27, side: -1, distance: 40 },
     { kind: 'skyscrapers', at: 74.45, side: -1, distance: 60, scale: 1.6 },

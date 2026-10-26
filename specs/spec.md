@@ -57,7 +57,10 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    themselves on bridges or at flat X junctions with live cross-traffic. Neon Meridian
    is the stunt world: walled city roads where every track has at least two loops or
    corkscrews and the pro and elite tracks four or more (double loops, a loop straight into a
-   corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover).
+   corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover). Its city
+   changes district by district, so every track has its own skyline: glass spires and holo-ad
+   monoliths, domed civic towers and terraced megablocks, flats and capsule hotels, docks and
+   works, slums of grimy slabs and shanty-crusted towers under failing neon.
    Orbital Reach, opened by the Neon Cup, is the space world: steel decks hung in the void over a
    gas giant, railed or with lit open edges (falling off one is a wreck), station modules and
    asteroids to fly through, gaps in the void to jump, and loops and corkscrews held in floating

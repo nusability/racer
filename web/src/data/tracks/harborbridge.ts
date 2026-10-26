@@ -183,6 +183,13 @@ export const harborbridgeScenery: TrackScenery = {
   towers: 40,
   towerHeight: 110,
   billboardsPerKm: 5,
+  // The docks: clad plant, half-built shells and tired slabs, harbour flats beyond, and the port
+  // authority's towers.
+  districts: [
+    { share: 3, mix: { industrial: 5, shell: 2, slab: 2, shanty: 1 }, grime: 0.6, neon: 0.25 },
+    { share: 2, mix: { residential: 4, slab: 2, capsule: 1, ziggurat: 1 }, grime: 0.35, neon: 0.35 },
+    { share: 0.8, mix: { arcology: 2, monolith: 1, dome: 1, spire: 1 }, grime: 0.15, neon: 0.4 },
+  ],
   landmarks: [
     { kind: 'stadium', at: 0.61, side: 1, distance: 40 },
     { kind: 'suspensionBridge', at: 55.5, side: -1, distance: 0, straddle: true },

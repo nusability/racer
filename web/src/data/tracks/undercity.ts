@@ -183,6 +183,13 @@ export const undercityScenery: TrackScenery = {
   towers: 80,
   towerHeight: 120,
   billboardsPerKm: 7,
+  // The old city: towers crusted with add-ons and grimy slabs, the works with their stacks, and
+  // old towers left half-built.
+  districts: [
+    { share: 3, mix: { shanty: 5, slab: 4, shell: 1, capsule: 1 }, grime: 0.85, neon: 0.55 },
+    { share: 2, mix: { industrial: 5, shell: 2, slab: 1 }, grime: 0.75, neon: 0.2 },
+    { share: 1, mix: { residential: 2, slab: 2, shell: 2, monolith: 1 }, grime: 0.65, neon: 0.4 },
+  ],
   landmarks: [
     { kind: 'skyscrapers', at: 1.08, side: -1, distance: 30 },
     { kind: 'maglev', at: 59.26, side: 1, distance: 20, hazard: 'maglev' },

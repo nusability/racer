@@ -78,6 +78,49 @@ export interface CityScenery extends SceneryBase {
   towerHeight: number;
   /** Neon billboards beside the course per kilometre of lap. */
   billboardsPerKm: number;
+  /**
+   * The quarters of the city the course runs through. Each patch of the city belongs to one,
+   * so the character shifts along the lap: glass spires downtown, slums and plant by the docks.
+   */
+  districts: CityDistrict[];
+}
+
+/**
+ * The kinds of building a city district is built from.
+ * Glorious: `spire` (mirrored supertall with setbacks and a crown), `twist` (a tapering tower
+ * turning a quarter turn), `monolith` (a dark corporate slab with a giant holo-ad face),
+ * `ziggurat` (a stepped megablock with sky gardens), `arcology` (a city in a tower: podium,
+ * round core, landing pad, antenna crown), `dome` (a civic tower under a glass dome),
+ * `skybridge` (towers linked by bridges in the air).
+ * Middling: `residential` (balconied flats), `capsule` (stacked capsule-hotel modules),
+ * `industrial` (clad plant with stacks, tanks and pipes).
+ * Run-down: `slab` (grimy concrete flats hung with AC units), `shanty` (a tower crusted with
+ * cantilevered add-on boxes and cables), `shell` (a half-built frame in scaffold under a crane).
+ */
+export type CityArchetype =
+  | 'spire'
+  | 'twist'
+  | 'monolith'
+  | 'ziggurat'
+  | 'arcology'
+  | 'dome'
+  | 'skybridge'
+  | 'residential'
+  | 'capsule'
+  | 'industrial'
+  | 'slab'
+  | 'shanty'
+  | 'shell';
+
+export interface CityDistrict {
+  /** How much of the city this district covers, relative to the track's other districts. */
+  share: number;
+  /** Relative weights of the archetypes it builds; one left out never appears there. */
+  mix: Partial<Record<CityArchetype, number>>;
+  /** 0 spotless … 1 decayed: streaked walls, boarded windows, failing and dead neon. */
+  grime: number;
+  /** 0 … 1: how much neon dresses its buildings (crowns, corner strips, blade signs). */
+  neon: number;
 }
 
 /** A station megastructure standing off the course: where it looms, and how big it is. */
