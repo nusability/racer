@@ -15,6 +15,7 @@ export const auroracrown: TrackDef = {
   seed: 2606,
   width: 42,
   runoff: 35,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 6.0 },
     { x: 165, z: -165, y: 6.0 },

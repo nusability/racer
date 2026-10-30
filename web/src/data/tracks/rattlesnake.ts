@@ -14,6 +14,7 @@ export const rattlesnake: TrackDef = {
   seed: 202,
   width: 48,
   runoff: 55,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0.0 },
     { x: 233, z: -0, y: 0.0 },

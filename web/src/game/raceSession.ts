@@ -101,14 +101,20 @@ const HAZARD_CAUSE: Record<HazardDef['type'], string> = {
   gust: 'a gust',
 };
 
+/** How each wreck breaks the craft up: a fall ends in a blast where it hits, the void in a tumble away. */
 const WRECK_KIND: Record<CrashReason, WreckKind> = {
   destroyed: 'explode',
   obstacle: 'impact',
   hazard: 'impact',
-  fell: 'fall',
-  offEdge: 'fall',
+  fell: 'explode',
+  offEdge: 'explode',
+  splash: 'impact',
+  lost: 'fall',
   loopStall: 'fall',
 };
+
+/** Wrecks that end a fall off the course: the debris lands on the floor the craft hit. */
+const FALL_ENDS = new Set<CrashReason>(['fell', 'offEdge', 'splash']);
 
 export class RaceSession {
   private readonly ctx: SessionContext;
@@ -440,12 +446,22 @@ export class RaceSession {
         const i = this.indexOf(ev.id);
         const v = this.views[i];
         const root = v.model.root;
-        // The craft keeps most of its momentum: it was flying forward at its last speed.
-        this.tmpVel.set(0, 0, -1).applyQuaternion(root.quaternion).multiplyScalar(Math.max(v.prev.speed, v.curr.speed));
+        // The craft keeps most of its momentum: it was flying forward at its last speed, or,
+        // falling off the course, along its flight.
+        const r = this.race.racers[i];
+        if (r.fall !== null) this.tmpVel.set(r.fall.vel.x, r.fall.vel.y, r.fall.vel.z);
+        else this.tmpVel.set(0, 0, -1).applyQuaternion(root.quaternion).multiplyScalar(Math.max(v.prev.speed, v.curr.speed));
         const kind = WRECK_KIND[ev.reason];
         root.visible = true;
-        v.model.shatter(this.tmpVel, { kind });
-        if (kind !== 'fall') this.effects.wreck(root.position, this.tmpVel, racerById(this.request.entrants[i].racerId).visual.glow);
+        // A fall ends where the craft is now: pose it at its impact, and lay the debris on that floor.
+        if (r.fall !== null) {
+          snapshot(r, v.draw);
+          poseObject(this.track, v.draw, root);
+        }
+        const groundY = FALL_ENDS.has(ev.reason) ? this.track.ribbon(r.branch).floorAt(r.s) : undefined;
+        v.model.shatter(this.tmpVel, { kind, groundY });
+        if (ev.reason === 'splash') this.effects.splash(root.position, this.tmpVel);
+        else if (kind !== 'fall') this.effects.wreck(root.position, this.tmpVel, racerById(this.request.entrants[i].racerId).visual.glow);
         v.wrecked = true;
         if (ev.id === pid) {
           // A hull worn out by many knocks still names the last one: it is what the player saw.
@@ -611,7 +627,7 @@ export class RaceSession {
     const pv = this.views[pi].draw;
     if (this.playerWreck) this.wreckCam.update(dt, real, this.views[pi].model.debris(this.debris));
     // The camera follows the interpolated pose, not the raw step, or it judders.
-    else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y }, speedFrac, this.clock);
+    else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y, fall: pv.falling ? pv.fall : null }, speedFrac, this.clock);
     // Entering a shortcut or a fork's route (the main road's own route included) names it.
     const path = this.track.pathNameAt(pv.branch, pv.s);
     if (path !== this.shownPath) {

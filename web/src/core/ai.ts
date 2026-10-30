@@ -197,7 +197,7 @@ export class AiDriver {
   drive(veh: Vehicle, track: Track, field: readonly RacerState[], time: number): PlayerInput {
     this.evolveNoise();
     const st = veh.state;
-    if (st.crashed > 0) return { steer: 0, nudge: 0, brake: false, boost: false };
+    if (st.crashed > 0 || st.fall !== null) return { steer: 0, nudge: 0, brake: false, boost: false };
     const ribbon = track.ribbon(st.branch);
     const v = Math.max(st.speed, 1);
     const stats = veh.stats;

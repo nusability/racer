@@ -17,6 +17,7 @@ export const craterline: TrackDef = {
   seed: 4104,
   width: 30,
   runoff: 10,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 4 },
     { x: 60, z: -164, y: 4 },

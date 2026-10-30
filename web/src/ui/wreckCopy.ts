@@ -13,7 +13,11 @@ export function wreckCopy(w: WreckInfo): WreckCopy {
     case 'fell':
       return { title: 'FELL', sub: 'Missed the landing' };
     case 'offEdge':
-      return { title: 'OFF THE EDGE', sub: 'Flew off the track' };
+      return { title: 'OFF THE EDGE', sub: 'Fell off the track' };
+    case 'splash':
+      return { title: 'SPLASHDOWN', sub: 'Fell off the track into the sea' };
+    case 'lost':
+      return { title: 'LOST IN THE VOID', sub: 'Fell off the deck' };
     case 'loopStall':
       return { title: 'STALLED IN THE LOOP', sub: 'Not enough speed to hold the loop' };
     case 'obstacle':

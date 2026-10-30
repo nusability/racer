@@ -14,6 +14,7 @@ export const mirageh: TrackDef = {
   seed: 707,
   width: 40,
   runoff: 40,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 2.0 },
     { x: 0, z: -212, y: 2.0 },

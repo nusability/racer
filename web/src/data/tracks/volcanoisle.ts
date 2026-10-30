@@ -14,6 +14,7 @@ export const volcanoisle: TrackDef = {
   seed: 1606,
   width: 42,
   runoff: 35,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 2.5 },
     { x: 0, z: -706, y: 4 },

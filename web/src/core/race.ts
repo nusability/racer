@@ -178,7 +178,7 @@ export class Race {
       const ribbon = this.track.ribbon(v.state.branch);
       v.step(inputs[i], ribbon, this.hazardsOn(v.state.branch), this.time, events);
       if (v.state.crashed > 0) this.wrecks.push(i);
-      else {
+      else if (v.state.fall === null) {
         this.junction(v);
         this.forceField(v);
       }
@@ -265,7 +265,8 @@ export class Race {
 
   private laps(v: Vehicle, before: number, events: RaceEvent[]) {
     const st = v.state;
-    if (st.finishTime !== null) return;
+    // Falling off the course is no way to cross a line.
+    if (st.finishTime !== null || st.fall !== null) return;
     // A circuit's lap, or the whole of a sprint (one 'lap' that ends at its finish line).
     const L = this.track.raceLength;
     const completed = Math.floor(st.distance / L);
@@ -379,7 +380,7 @@ export class Race {
         const a = this.vehicles[i];
         const b = this.vehicles[j];
         const key = i * n + j;
-        if (a.state.crashed > 0 || b.state.crashed > 0 || a.state.branch !== b.state.branch || !this.atFlatCrossing(a, b)) continue;
+        if (a.state.crashed > 0 || b.state.crashed > 0 || a.state.fall !== null || b.state.fall !== null || a.state.branch !== b.state.branch || !this.atFlatCrossing(a, b)) continue;
         const ribbon = this.track.ribbon(a.state.branch);
         const fa = ribbon.frameAt(a.state.s, frameA);
         const fb = ribbon.frameAt(b.state.s, frameB);
@@ -452,7 +453,8 @@ export class Race {
   private inContact(a: Vehicle, b: Vehicle): boolean {
     const sa = a.state;
     const sb = b.state;
-    if (sa.crashed > 0 || sb.crashed > 0 || sa.branch !== sb.branch) return false;
+    // A racer falling off the course is beyond touching: it is below or beside the road.
+    if (sa.crashed > 0 || sb.crashed > 0 || sa.fall !== null || sb.fall !== null || sa.branch !== sb.branch) return false;
     // Two racers the run-out's force field holds have nothing left to race for: they pass
     // through each other, so a queue easing to rest never shoves itself apart.
     if (a.stopAt !== null && b.stopAt !== null) return false;

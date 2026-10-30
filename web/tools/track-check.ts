@@ -15,7 +15,7 @@ import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, DRAFT_TOP_SPEED, GRAVITY, SIM_DT } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, DRAFT_TOP_SPEED, GRAVITY, SIM_DT, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
@@ -108,7 +108,7 @@ function fly(t: Ribbon, launch: number, speed: number, vy: number): Flight {
     const over = y - road;
     if (t.isGap(s)) {
       overGap = true;
-      if (y < t.chasmFloorAt(s)) return { landed: false, distance: d, apex, hit: null };
+      if (y < Math.max(t.floorAt(s), road - VOID_LOST_DEPTH)) return { landed: false, distance: d, apex, hit: null };
       continue;
     }
     // Coming out of a chasm below the far edge means hitting its face, not landing.
@@ -362,6 +362,10 @@ function checkWorld(t: Track, def: TrackDef, warn: string[]) {
   }
   const scenery = sceneryById(def.id);
   if (scenery.biome !== biome) warn.push(`world: scenery is ${scenery.biome} but the track's world is ${biome}`);
+  // What a fall off the course meets must be what is drawn under it: the sea round the coast,
+  // nothing round a station's decks, ground everywhere else (a moon's included).
+  const floor = scenery.biome === 'beach' ? 'water' : scenery.biome === 'space' && scenery.moon === null ? 'void' : 'ground';
+  if (def.floor !== floor) warn.push(`world: floor is '${def.floor}' but a ${scenery.biome} track${scenery.biome === 'space' ? (scenery.moon ? ' over a moon' : ' in the void') : ''} has '${floor}' under it`);
   if (scenery.biome !== 'beach') return;
   const ribbons: Ribbon[] = [t, ...t.branches.map((b) => b.ribbon)];
   for (const r of ribbons) {

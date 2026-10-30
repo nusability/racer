@@ -16,6 +16,7 @@ export const ringdeck: TrackDef = {
   seed: 4101,
   width: 36,
   runoff: 0,
+  floor: 'void',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -186, y: 0 },

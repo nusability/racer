@@ -15,6 +15,7 @@ export const avalanche: TrackDef = {
   seed: 2505,
   width: 40,
   runoff: 40,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 10.0 },
     { x: -0, z: -233, y: 10.0 },

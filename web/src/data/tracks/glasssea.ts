@@ -14,6 +14,7 @@ export const glasssea: TrackDef = {
   seed: 505,
   width: 56,
   runoff: 60,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0.0 },
     { x: 0, z: -222, y: 0.0 },

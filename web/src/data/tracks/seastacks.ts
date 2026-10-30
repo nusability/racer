@@ -13,6 +13,7 @@ export const seastacks: TrackDef = {
   seed: 1404,
   width: 46,
   runoff: 50,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 1.5 },
     { x: 760, z: 0, y: 1.5 },

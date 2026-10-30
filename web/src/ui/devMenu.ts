@@ -17,6 +17,8 @@ const FAKE_WRECKS: WreckInfo[] = [
   { reason: 'offEdge', cause: null },
   { reason: 'loopStall', cause: null },
   { reason: 'fell', cause: null },
+  { reason: 'splash', cause: null },
+  { reason: 'lost', cause: null },
 ];
 let nextWreck = 0;
 

@@ -13,6 +13,7 @@ export const devilsteeth: TrackDef = {
   seed: 606,
   width: 46,
   runoff: 45,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -768, y: 0 },

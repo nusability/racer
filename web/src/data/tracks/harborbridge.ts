@@ -15,6 +15,7 @@ export const harborbridge: TrackDef = {
   seed: 3202,
   width: 48,
   runoff: 15,
+  floor: 'ground',
   points: [
     { x: 540, z: 1800, y: 6.0 },
     { x: 737, z: 1800, y: 6.0 },

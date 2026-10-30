@@ -17,6 +17,7 @@ export const hollowrock: TrackDef = {
   seed: 1717,
   width: 28,
   runoff: 0,
+  floor: 'void',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: -108, z: -144, y: 0 },

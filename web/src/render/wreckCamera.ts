@@ -99,7 +99,10 @@ export class WreckCamera {
     this.orbit = 0;
     this.settle = 0;
     this.age = 0;
-    this.holding = false;
+    // A craft that fell a long way before it was lost is already far off: following it down
+    // would fly the camera through the course. It stays where the chase camera watched from.
+    this.holding = debris.falling && this.pos.distanceTo(debris.centre) > WRECK_CAM_MAX_DISTANCE;
+    this.held.copy(this.pos);
   }
 
   /** `dt`: simulated (slowed) seconds, the debris' clock; `real`: display seconds. */
@@ -114,7 +117,7 @@ export class WreckCamera {
     this.swing += (WRECK_CAM_FLIGHT_ANGLE - this.swing) * (1 - Math.exp(-WRECK_CAM_SWING_RATE * real));
     this.orbit += WRECK_CAM_ORBIT_RATE * this.settle * real;
 
-    if (debris.falling && this.age >= WRECK_CAM_VOID_FOLLOW) {
+    if (debris.falling && (this.holding || this.age >= WRECK_CAM_VOID_FOLLOW)) {
       // Let it fall away: the camera eases to a stop where it is and watches.
       if (!this.holding) this.held.copy(this.desired);
       this.holding = true;

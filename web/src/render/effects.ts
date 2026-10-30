@@ -64,6 +64,19 @@ const WRECK_SCORCH_RADIUS = 7.5;
  * parts, so the wreck camera riding behind them doesn't fly through a fireball left behind. */
 const WRECK_CARRY = WRECK_DEBRIS_CARRY;
 const FLASH_COLOR = new THREE.Color(0xfff6e0);
+/** A craft falling into the sea: a column of spray thrown up and out, and a ring on the water. */
+const SPLASH_SPRAY = 70;
+/** Spray speeds, m/s: up the column, and out across the water. */
+const SPLASH_UP = [18, 42] as const;
+const SPLASH_OUT = 16;
+/** Share of the craft's own horizontal speed the spray is thrown on with. */
+const SPLASH_CARRY = 0.15;
+const SPLASH_LIFE = [1.2, 2.2] as const;
+const SPLASH_SIZE = [1.5, 7] as const;
+/** Spray falls back like water, faster than dust settles. */
+const SPLASH_GRAVITY = 24;
+const SPLASH_RING = { size: 18, life: 1.1 } as const;
+const SPLASH_COLOR = new THREE.Color(0xeaf6ff);
 
 const tmpColor = new THREE.Color();
 const tmpGlow = new THREE.Color();
@@ -268,6 +281,21 @@ export class Effects {
     this.sparks(pos, UPWARD, 1);
     tmpPos.set(pos.x, pos.y - SKIMMER_RIDE_HEIGHT, pos.z);
     this.scorch.add(tmpPos, WRECK_SCORCH_RADIUS);
+  }
+
+  /** A racer falling into the sea: spray and a ring on the water, no fire. `vel`: its world velocity. */
+  splash(pos: THREE.Vector3, vel: THREE.Vector3): void {
+    if (!this.inRange(pos)) return;
+    const q = this.quality === 'high' ? 1 : 0.5;
+    this.addRing(pos, UPWARD, SPLASH_COLOR, 0, SPLASH_RING.size, SPLASH_RING.life);
+    for (let i = 0; i < SPLASH_SPRAY * q; i++) {
+      randomInSphere(tmpPos);
+      this.soft.spawn(
+        pos.x + tmpPos.x * 2, pos.y, pos.z + tmpPos.z * 2,
+        vel.x * SPLASH_CARRY + tmpPos.x * SPLASH_OUT, rand(SPLASH_UP[0], SPLASH_UP[1]), vel.z * SPLASH_CARRY + tmpPos.z * SPLASH_OUT,
+        rand(SPLASH_LIFE[0], SPLASH_LIFE[1]), SPLASH_SIZE[0], SPLASH_SIZE[1], SPLASH_COLOR, 0.55, 0.6, SPLASH_GRAVITY,
+      );
+    }
   }
 
   /** Dust ring blown out when a racer lands. `intensity` 0..1. */

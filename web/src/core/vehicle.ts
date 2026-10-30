@@ -3,13 +3,14 @@
 // is (a lateral target the craft chases), not its heading. The player and the AI drive the
 // same model, so the AI can never be faster than physics allows.
 
-import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats } from './types.ts';
+import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
 import { gustAt } from './hazards.ts';
 import { cornerPull, currentTopSpeed, roughOverspeed, roughWear, steerRate } from './handling.ts';
 import { mulberry32, type Rng } from './rng.ts';
-import type { Ribbon } from './track.ts';
+import { makeFrame, type Ribbon } from './track.ts';
 import {
   ACCEL_TAPER_EXP,
+  AIR_RESPONSE_FACTOR,
   AIR_STEER_FACTOR,
   ARCH_HALF_DEPTH,
   BOOST_ACCEL_MULT,
@@ -33,7 +34,9 @@ import {
   CELL_MAX_HEIGHT,
   CELL_RADIUS,
   CELL_VALUE,
+  DROP_FLOOR_REACH,
   DROP_OVERREACH,
+  FALL_PROJECT_WINDOW,
   FRENET_MIN_DENOM,
   GRAVITY,
   GUST_DRIFT,
@@ -71,6 +74,7 @@ import {
   SLICK_DAMPING_FLOOR,
   SLOPE_SPEED_FACTOR,
   TARGET_OVERREACH,
+  VOID_LOST_DEPTH,
 } from '../data/tuning.ts';
 
 export type CrashReason = Extract<RaceEvent, { type: 'crash' }>['reason'];
@@ -118,6 +122,11 @@ export class Vehicle {
   private stalled = 0;
   /** The wall the racer was against last step (-1 left, 1 right, 0 none): pressing is not a new hit. */
   private wallSide: -1 | 0 | 1 = 0;
+  /**
+   * The side (-1 left, 1 right) the racer is past the course's edge on, over an open drop, or 0:
+   * in the air beside the road, with nothing under it until it falls below the road (see vertical).
+   */
+  private outside: -1 | 0 | 1 = 0;
   /** Per ribbon (branch index, -1 = main): the boost and repair cells taken this lap. */
   private readonly collected = new Map<number, Uint8Array>();
   private readonly repaired = new Map<number, Uint8Array>();
@@ -155,8 +164,9 @@ export class Vehicle {
       bestLap: null,
       steer: 0,
       draft: 0,
+      fall: null,
     };
-    this.drive = { crashes: { destroyed: 0, fell: 0, offEdge: 0, loopStall: 0, obstacle: 0, hazard: 0 }, scrapeTime: 0, offroadTime: 0 };
+    this.drive = { crashes: { destroyed: 0, fell: 0, offEdge: 0, splash: 0, lost: 0, loopStall: 0, obstacle: 0, hazard: 0 }, scrapeTime: 0, offroadTime: 0 };
     this.targetX = x;
     this.alt = ribbon.elevationAt(s);
     this.grounded = true;
@@ -176,6 +186,11 @@ export class Vehicle {
       st.crashed += dt;
       return;
     }
+    if (st.fall !== null) {
+      // Off the course there is nothing to steer with or push against: it only falls.
+      this.falling(ribbon, events);
+      return;
+    }
     st.steer = clamp(input.steer, -1, 1);
     const brake = input.brake;
     const airborne = !this.grounded;
@@ -187,9 +202,10 @@ export class Vehicle {
     const sOld = st.s;
     const curvature = ribbon.curvatureAt(sOld);
     const surfaceGrip = ribbon.gripAt(sOld);
+    // In the air the pilot moves its target only a little, by key or by drag alike.
     const air = airborne ? AIR_STEER_FACTOR : 1;
     const drift = cornerPull(this.stats, curvature, st.speed, brake, surfaceGrip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
-    this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge;
+    this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge * air;
     // Past a wall the target overreaches a little (pushing grinds); past an open edge, far
     // enough that holding the steer drives you off it.
     const reachL = ribbon.dropAt(sOld, -1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
@@ -199,7 +215,7 @@ export class Vehicle {
     // x chases the target with a cap on sideways speed: critically damped on a normal
     // surface, looser and overshooting on a slick one.
     const k = this.stats.handling / HANDLING_REF;
-    const w = LATERAL_RESPONSE * k * air * Math.sqrt(surfaceGrip);
+    const w = LATERAL_RESPONSE * k * (airborne ? AIR_RESPONSE_FACTOR : 1) * Math.sqrt(surfaceGrip);
     const zeta = surfaceGrip < 1 ? Math.max(SLICK_DAMPING_FLOOR, surfaceGrip) : 1;
     const maxLat = LATERAL_SPEED_MAX * k;
     st.vx = clamp(st.vx + (w * w * (this.targetX - st.x) - 2 * zeta * w * st.vx) * dt, -maxLat, maxLat);
@@ -213,7 +229,7 @@ export class Vehicle {
 
     if (this.boundaries(ribbon, events)) return;
     this.vertical(ribbon, sOld, sdot, events);
-    if (st.crashed > 0) return;
+    if (st.crashed > 0 || st.fall !== null) return;
     if (this.obstacles(ribbon, hazards, events)) return;
     this.boostPads(ribbon, sOld, events);
     this.cells(ribbon, sOld, events);
@@ -289,8 +305,9 @@ export class Vehicle {
   }
 
   /**
-   * Walls scrape speed and wear the hull (more at a hard angle); an open edge is a fall.
-   * Returns true when the racer went over an edge (a wreck).
+   * Walls scrape speed and wear the hull (more at a hard angle). Past an open edge there is
+   * nothing to push back: the racer is beside the road in the air (see vertical). Coming up to
+   * a wall from out there, it meets the wall's end: a wreck. Returns true on a wreck.
    */
   private boundaries(ribbon: Ribbon, events: RaceEvent[]): boolean {
     const st = this.state;
@@ -300,16 +317,18 @@ export class Vehicle {
     const hi = maxX - RACER_HALF_WIDTH;
     if (st.x >= lo && st.x <= hi) {
       this.wallSide = 0;
+      this.outside = 0;
       return false;
     }
     const side: -1 | 1 = st.x > hi ? 1 : -1;
     if (ribbon.dropAt(st.s, side)) {
-      // Over an open edge there is nothing to push back: once the centre is past it, it falls.
-      if (st.x > maxX || st.x < minX) {
-        this.crash('offEdge', events);
-        return true;
-      }
+      // Once its centre is past the edge, the road is no longer under it.
+      this.outside = st.x > maxX || st.x < minX ? side : 0;
       return false;
+    }
+    if (this.outside === side) {
+      this.crash('offEdge', events);
+      return true;
     }
     st.x = side === 1 ? hi : lo;
     const vn = Math.max(0, side * st.vx);
@@ -382,9 +401,10 @@ export class Vehicle {
     }
     if (this.grounded) {
       // The road's vertical velocity under us; launch when it falls away faster than
-      // gravity plus hover suction can follow (crests, kickers, jump lips).
+      // gravity plus hover suction can follow (crests, kickers, jump lips), or when the road
+      // is no longer under us at all (driven off an open edge).
       const vSurf = (surface - ribbon.elevationAt(sOld)) / dt;
-      if (gap || vSurf < st.vy - (GRAVITY + HOVER_SUCTION) * dt) {
+      if (gap || this.outside !== 0 || vSurf < st.vy - (GRAVITY + HOVER_SUCTION) * dt) {
         this.grounded = false;
         events.push({ type: 'launch', id: st.id });
       } else {
@@ -396,12 +416,22 @@ export class Vehicle {
       const wasOverGap = ribbon.isGap(sOld);
       st.vy -= GRAVITY * dt;
       this.alt += st.vy * dt;
+      if (this.outside !== 0) {
+        // Beside the road with nothing under it: once below the road it is falling free.
+        if (this.alt <= surface) this.beginFall(ribbon);
+        return;
+      }
       if (gap) {
-        if (this.alt < ribbon.chasmFloorAt(s)) {
-          this.crash('fell', events);
+        if (this.alt <= ribbon.floorAt(s)) {
+          this.crash(ribbon.isWaterAt(s) ? 'splash' : 'fell', events);
+          return;
+        }
+        if (ribbon.below === 'void' && this.alt < surface - VOID_LOST_DEPTH) {
+          this.crash('lost', events);
           return;
         }
       } else if (this.alt <= surface) {
+        // Arriving below a chasm's far edge is hitting its face, not landing.
         if (wasOverGap && this.alt < surface - LANDING_STEP_TOLERANCE) {
           this.crash('fell', events);
           return;
@@ -418,6 +448,73 @@ export class Vehicle {
       }
     }
     this.ceiling(ribbon, surface, sdot, events);
+  }
+
+  /**
+   * Below the road beside it: from here the racer is a free body in world space, keeping its
+   * momentum (the road may curve away; it flies straight on), until it hits something.
+   */
+  private beginFall(ribbon: Ribbon) {
+    const st = this.state;
+    const fr = ribbon.frameAt(st.s, fallFrame);
+    const pos = ribbon.toWorld(st.s, st.x, this.alt - ribbon.elevationAt(st.s), { x: 0, y: 0, z: 0 }, fr);
+    // Horizontal axes of the road here: the climb is already in vy, and the bank is no slope.
+    const th = Math.hypot(fr.tangent.x, fr.tangent.z);
+    const rh = Math.hypot(fr.right.x, fr.right.z);
+    const forward = st.speed * Math.cos(st.yaw);
+    const vel: Vec3 = {
+      x: (fr.tangent.x / th) * forward + (fr.right.x / rh) * st.vx,
+      y: st.vy,
+      z: (fr.tangent.z / th) * forward + (fr.right.z / rh) * st.vx,
+    };
+    st.fall = { pos, vel, time: 0 };
+    st.y = this.alt - ribbon.elevationAt(st.s);
+    st.airborne = true;
+    st.boosting = false;
+    this.freeBoost = 0;
+  }
+
+  /**
+   * One step of a free fall (see beginFall), placed back on the course for standings and for
+   * the floor below. It ends in a wreck on the first thing it meets: the floor (the ground, a
+   * chasm's bottom, the sea), the course itself (drifting back under the road; over ground,
+   * the terrain beside a stretch that is no open edge), or, over the void, nothing: lost once
+   * VOID_LOST_DEPTH below the road.
+   */
+  private falling(ribbon: Ribbon, events: RaceEvent[]) {
+    const st = this.state;
+    const f = st.fall as NonNullable<RacerState['fall']>;
+    const dt = SIM_DT;
+    f.vel.y -= GRAVITY * dt;
+    f.pos.x += f.vel.x * dt;
+    f.pos.y += f.vel.y * dt;
+    f.pos.z += f.vel.z * dt;
+    f.time += dt;
+    const p = ribbon.project(f.pos, st.s, FALL_PROJECT_WINDOW);
+    st.s = p.s;
+    st.x = p.x;
+    st.vy = f.vel.y;
+    st.speed = Math.hypot(f.vel.x, f.vel.z);
+    this.alt = f.pos.y;
+    const surface = ribbon.elevationAt(st.s);
+    st.y = this.alt - surface;
+    const floor = ribbon.floorAt(st.s);
+    if (this.alt <= floor) {
+      this.crash(ribbon.isWaterAt(st.s) ? 'splash' : ribbon.isGap(st.s) ? 'fell' : 'offEdge', events);
+      return;
+    }
+    const within = st.x >= ribbon.minXAt(st.s) && st.x <= ribbon.maxXAt(st.s);
+    const side: -1 | 1 = st.x < 0 ? -1 : 1;
+    // Over ground the course stands on solid earth: under the road, beside a stretch with a wall
+    // or run-off, or past the drop's floor where the land rises again, the faller is inside it.
+    // A deck in the void is only as thick as a craft.
+    const beyond = Math.abs(st.x) - ribbon.widthAt(st.s) / 2 > DROP_FLOOR_REACH;
+    const solid = ribbon.below === 'void' ? within && this.alt > surface - RACER_HEIGHT : !ribbon.isGap(st.s) && (within || beyond || !ribbon.dropAt(st.s, side));
+    if (solid && this.alt < surface) {
+      this.crash('offEdge', events);
+      return;
+    }
+    if (!Number.isFinite(floor) && this.alt < surface - VOID_LOST_DEPTH) this.crash('lost', events);
   }
 
   private ceiling(ribbon: Ribbon, surface: number, sdot: number, events: RaceEvent[]) {
@@ -587,6 +684,7 @@ export class Vehicle {
     this.freeBoost = 0;
     this.touching = null;
     this.wallSide = 0;
+    this.outside = 0;
     if (this.offroad) {
       this.offroad = false;
       events.push({ type: 'offroad', id: st.id, on: false });
@@ -597,3 +695,4 @@ export class Vehicle {
 }
 
 const nearBuf: Obstacle[] = [];
+const fallFrame = makeFrame();

@@ -13,6 +13,7 @@ export const coralcove: TrackDef = {
   seed: 1101,
   width: 54,
   runoff: 75,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 1.5 },
     { x: 900, z: 0, y: 1.5 },

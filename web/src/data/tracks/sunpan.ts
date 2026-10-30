@@ -13,6 +13,7 @@ export const sunpan: TrackDef = {
   seed: 101,
   width: 54,
   runoff: 75,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -792, y: 0 },

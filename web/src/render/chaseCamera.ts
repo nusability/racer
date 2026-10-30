@@ -66,9 +66,11 @@ export class ChaseCamera {
     const ribbon = track.ribbon(p.branch);
     const sCam = p.s - this.back;
     const half = Math.min(-ribbon.minXAt(sCam), ribbon.maxXAt(sCam)) - CAM_WALL_MARGIN;
-    const xTarget = Math.max(-half, Math.min(half, p.x * CAM_LATERAL_FOLLOW));
+    // Off the course it leans out over the open edge after the craft, so the road doesn't hide it.
+    const xTarget = p.fall !== null ? p.x * CAM_LATERAL_FOLLOW : Math.max(-half, Math.min(half, p.x * CAM_LATERAL_FOLLOW));
     this.x += (xTarget - this.x) * k;
-    let yTarget = p.y + CAM_HEIGHT;
+    // ...but it stays up at the road's height and watches the craft fall away.
+    let yTarget = (p.fall !== null ? Math.max(p.y, 0) : p.y) + CAM_HEIGHT;
     const ceiling = Math.min(ribbon.ceilingAt(sCam), ribbon.ceilingAt(p.s));
     if (Number.isFinite(ceiling)) yTarget = Math.min(yTarget, ceiling - CAM_CEILING_MARGIN);
     // Over a chasm keep following the racer's height rather than the missing surface.
@@ -78,8 +80,11 @@ export class ChaseCamera {
     this.camera.position.set(this.tmp.x, this.tmp.y, this.tmp.z);
     this.trackUp.set(this.frame.up.x, this.frame.up.y, this.frame.up.z);
 
-    placeOnCourse(track, p.branch, p.s + CAM_LOOK_AHEAD, p.x, p.y + CAM_LOOK_HEIGHT, this.tmp, this.frame);
-    this.target.set(this.tmp.x, this.tmp.y, this.tmp.z);
+    if (p.fall !== null) this.target.set(p.fall.pos.x, p.fall.pos.y, p.fall.pos.z);
+    else {
+      placeOnCourse(track, p.branch, p.s + CAM_LOOK_AHEAD, p.x, p.y + CAM_LOOK_HEIGHT, this.tmp, this.frame);
+      this.target.set(this.tmp.x, this.tmp.y, this.tmp.z);
+    }
 
     // Follow the road's bank partly so turns lean, but never fully (nausea on phones) — except
     // where the road leaves the ground plane (loops, corkscrews): there only the road is "up".

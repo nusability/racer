@@ -15,6 +15,7 @@ export const skyway: TrackDef = {
   seed: 3505,
   width: 42,
   runoff: 10,
+  floor: 'ground',
   points: [
     { x: 0, z: 321, y: 22.3 },
     { x: 0, z: 217, y: 23.2 },

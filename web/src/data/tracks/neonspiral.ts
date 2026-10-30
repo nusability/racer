@@ -15,6 +15,7 @@ export const neonspiral: TrackDef = {
   seed: 3303,
   width: 46,
   runoff: 14,
+  floor: 'ground',
   points: [
     { x: 0, z: -350, y: 6.5 },
     { x: 0, z: -455, y: 6.6 },

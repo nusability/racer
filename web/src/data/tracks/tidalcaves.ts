@@ -15,6 +15,7 @@ export const tidalcaves: TrackDef = {
   seed: 1505,
   width: 44,
   runoff: 45,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 6.0 },
     { x: 165, z: -165, y: 6.0 },

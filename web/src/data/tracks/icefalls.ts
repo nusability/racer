@@ -15,6 +15,7 @@ export const icefalls: TrackDef = {
   seed: 2404,
   width: 40,
   runoff: 40,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 20.0 },
     { x: 0, z: -233, y: 26.7 },

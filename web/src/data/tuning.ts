@@ -12,8 +12,36 @@ export const TRACK_SMOOTH_RADIUS = 6;
 export const BANK_PER_CURVATURE = 18;
 /** Maximum bank angle, radians. */
 export const MAX_BANK = 0.35;
-/** Depth of a jump's chasm below the lip; falling past it means a crash. */
-export const CHASM_DEPTH = 60;
+/**
+ * Depth of a jump's chasm floor below the lower of its two edges: where a racer that falls in
+ * hits bottom and wrecks (the renderer draws the floor there too).
+ */
+export const CHASM_DEPTH = 72;
+/**
+ * How far below the road the ground lies past an open edge (cliff roads, bridges, decks over
+ * ground): a racer driving or flying off one falls this far before it hits (the renderer drops
+ * the terrain there by the same amount).
+ */
+export const DROP_DEPTH = 70;
+/**
+ * The ground lies DROP_DEPTH down for this far past an open edge, then rises back to the land
+ * around: a falling racer below the road beyond it has hit that rise. A craft goes over at no
+ * more than LATERAL_SPEED_MAX sideways, so it lands well inside this.
+ */
+export const DROP_FLOOR_REACH = 160;
+/** The sea surface height, metres (worlds with a sea): where a fall over water ends. */
+export const SEA_LEVEL = 0;
+/**
+ * Over the void (no floor) a falling racer is lost once it is this far below the road beside
+ * it: about 2.8 s of fall from the edge, long enough to watch it tumble away.
+ */
+export const VOID_LOST_DEPTH = 150;
+/**
+ * A falling racer is placed back on the course (s, lateral x) each step by the nearest
+ * centreline sample within this many metres of s of where it last was: it never moves more
+ * than a few metres a step, so this only bounds the search.
+ */
+export const FALL_PROJECT_WINDOW = 40;
 /** How far the kicker's back face drops, as a fraction of its length. */
 export const KICKER_BACK_FRACTION = 0.25;
 export const PILLAR_HEIGHT = 40;
@@ -139,8 +167,13 @@ export const CORNER_PULL = 0.11;
 export const GRIP_REF = 0.6;
 /** Fraction of the corner drift left while the air brake is held. */
 export const CORNER_PULL_BRAKE = 0.35;
-/** Lateral response (target rate and chase) kept in the air: pods correct mid-air, just less. */
-export const AIR_STEER_FACTOR = 0.45;
+/**
+ * Share of the steer rate and of a drag's nudge that still moves the lateral target in the air:
+ * with no ground to push against a pod can only line up its landing a little, it can't swerve.
+ */
+export const AIR_STEER_FACTOR = 0.2;
+/** Share of the lateral chase's response kept in the air: sideways motion carries on, slowly corrected. */
+export const AIR_RESPONSE_FACTOR = 0.35;
 /** Frenet denominator floor: keeps ds/dt finite far on the inside of very tight turns. */
 export const FRENET_MIN_DENOM = 0.3;
 

@@ -14,6 +14,7 @@ export const lagoonloop: TrackDef = {
   seed: 1202,
   width: 54,
   runoff: 75,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 3.0 },
     { x: -0, z: -210, y: 3.0 },

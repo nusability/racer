@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import type { Ribbon } from '../../core/track.ts';
 import type { Jump, TrackFeature } from '../../core/types.ts';
-import { CHASM_DEPTH } from '../../data/tuning.ts';
 import type { FlatBuilder, P3 } from './builder.ts';
-import { CHASM_FLOOR_EXTRA } from './config.ts';
 import type { Corridor } from './corridor.ts';
 import { basisAt, box } from './dressing.ts';
 import { quadFacing } from './paint.ts';
@@ -66,7 +64,8 @@ function chasm(cor: Corridor, j: Jump) {
   const r = cor.ribbon;
   const kL = lastSurface(cor, j.lip, -1);
   const kG = lastSurface(cor, j.gapEnd, 1);
-  const floorY = Math.min(r.samples[kL].pos.y, r.samples[kG].pos.y) - CHASM_DEPTH - CHASM_FLOOR_EXTRA;
+  // The pit's floor is where the simulation wrecks a racer that falls in (unused over the void).
+  const floorY = r.samples[cor.idx(kL + 1)].floor;
   const env = cor.chunkAt(j.lip).rock;
   const paint = cor.paint;
   const top = new THREE.Color();

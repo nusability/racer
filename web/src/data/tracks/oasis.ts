@@ -14,6 +14,7 @@ export const oasis: TrackDef = {
   seed: 303,
   width: 50,
   runoff: 60,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 18.0 },
     { x: 177, z: -177, y: 16.0 },

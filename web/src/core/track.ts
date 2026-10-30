@@ -8,6 +8,7 @@ import type {
   BoostPad,
   BranchDef,
   CourseKind,
+  FloorKind,
   Jump,
   Obstacle,
   TrackControlPoint,
@@ -30,10 +31,12 @@ import {
   BRANCH_JUNCTION_LENGTH,
   CHASM_DEPTH,
   DEFAULT_NARROW_BLEND,
+  DROP_DEPTH,
   KICKER_BACK_FRACTION,
   MAX_BANK,
   OBSTACLE_BUCKET,
   PILLAR_HEIGHT,
+  SEA_LEVEL,
   SPRINT_GRID_APRON,
   SPRINT_RUNOUT,
   TRACK_SAMPLE_STEP,
@@ -55,6 +58,8 @@ export interface RibbonSpec {
   seed: number;
   width: number;
   runoff: number;
+  /** What lies below it (see FloorKind): a branch has its main road's. */
+  floor: FloorKind;
   points: TrackControlPoint[];
   features: TrackFeature[];
 }
@@ -76,6 +81,8 @@ interface EdgeOverride {
 export class Ribbon {
   readonly id: string;
   readonly closed: boolean;
+  /** What lies below the course (see FloorKind); each sample carries its floor's height. */
+  readonly below: FloorKind;
   readonly length: number;
   readonly step: number;
   readonly samples: TrackSample[];
@@ -105,6 +112,7 @@ export class Ribbon {
   constructor(spec: RibbonSpec, edgeOverrides: EdgeOverride[] = []) {
     this.id = spec.id;
     this.closed = spec.closed;
+    this.below = spec.floor;
     this.paramOffset = spec.paramOffset;
     const n = spec.points.length;
     if (n < 4) throw new Error(`Ribbon ${spec.id}: needs at least 4 control points, has ${n}`);
@@ -249,6 +257,7 @@ export class Ribbon {
       slope.push(span === 0 ? 0 : (elev[b] - elev[a]) / (span * this.step));
     }
     const bank = this.smooth(curvature.map((c) => Math.max(-MAX_BANK, Math.min(MAX_BANK, c * BANK_PER_CURVATURE))));
+    const floor = this.floors(elev, gap);
     const worldUp = vec3(0, 1, 0);
     this.samples = [];
     for (let k = 0; k < ns; k++) {
@@ -292,6 +301,8 @@ export class Ribbon {
         magnet: shape.magnet[k],
         grip: shape.grip[k],
         rough: shape.rough[k],
+        floor: floor.y[k],
+        water: floor.water[k],
       });
     }
 
@@ -311,6 +322,39 @@ export class Ribbon {
         if (!this.closed && (b < 0 || b >= this.buckets.length)) continue;
         this.buckets[((b % this.buckets.length) + this.buckets.length) % this.buckets.length].push(o);
       }
+    }
+  }
+
+  /**
+   * The floor under every sample (see FloorKind): in a chasm, CHASM_DEPTH below the lower of its
+   * two edges (one flat floor per chasm); elsewhere DROP_DEPTH below the road, which is what lies
+   * past an open edge. Over water the sea's surface when that is higher; over the void none.
+   */
+  private floors(elev: readonly number[], gap: readonly boolean[]): { y: number[]; water: boolean[] } {
+    const n = elev.length;
+    const ground = elev.map((e) => e - DROP_DEPTH);
+    const done = new Uint8Array(n);
+    for (let k = 0; k < n; k++) {
+      if (!gap[k] || done[k]) continue;
+      // The whole run of gap samples k belongs to (on a circuit it may wrap the start line).
+      let a = k;
+      while (gap[this.nb(a, -1)] && this.nb(a, -1) !== a && this.nb(a, -1) !== k) a = this.nb(a, -1);
+      let b = k;
+      while (gap[this.nb(b, 1)] && this.nb(b, 1) !== b && this.nb(b, 1) !== a) b = this.nb(b, 1);
+      const bottom = Math.min(elev[this.nb(a, -1)], elev[this.nb(b, 1)]) - CHASM_DEPTH;
+      for (let q = a; ; q = this.nb(q, 1)) {
+        ground[q] = bottom;
+        done[q] = 1;
+        if (q === b) break;
+      }
+    }
+    switch (this.below) {
+      case 'ground':
+        return { y: ground, water: ground.map(() => false) };
+      case 'water':
+        return { y: ground.map((g) => Math.max(g, SEA_LEVEL)), water: ground.map((g) => g <= SEA_LEVEL) };
+      case 'void':
+        return { y: ground.map(() => -Infinity), water: ground.map(() => false) };
     }
   }
 
@@ -444,9 +488,13 @@ export class Ribbon {
     const smp = this.sampleAt(s);
     return side < 0 ? smp.dropL : smp.dropR;
   }
-  /** Lowest a racer can fall inside a chasm before it counts as a crash. */
-  chasmFloorAt(s: number): number {
-    return this.elevationAt(s) - CHASM_DEPTH;
+  /** Height of what a racer falling here meets (see TrackSample.floor); -Infinity over the void. */
+  floorAt(s: number): number {
+    return this.sampleAt(s).floor;
+  }
+  /** The floor here is the sea. */
+  isWaterAt(s: number): boolean {
+    return this.sampleAt(s).water;
   }
 
   /** Interpolated, re-normalised frame at s. */
@@ -823,7 +871,7 @@ function validateCourse(def: TrackDef) {
 }
 
 function mainSpec(def: TrackDef): RibbonSpec {
-  const base = { id: def.id, seed: def.seed, width: def.width, runoff: def.runoff, features: def.features };
+  const base = { id: def.id, seed: def.seed, width: def.width, runoff: def.runoff, floor: def.floor, features: def.features };
   if (def.course === 'circuit') return { ...base, closed: true, paramOffset: 0, points: def.points };
   const p = def.points;
   const n = p.length;
@@ -894,6 +942,7 @@ function buildBranch(main: Track, b: BranchDef, index: number): Branch {
     seed: main.def.seed + index + 1,
     width: b.width,
     runoff: b.runoff,
+    floor: main.def.floor,
     points,
     features: b.features,
   };

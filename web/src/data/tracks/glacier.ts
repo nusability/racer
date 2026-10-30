@@ -14,6 +14,7 @@ export const glacier: TrackDef = {
   seed: 2303,
   width: 54,
   runoff: 60,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 4.0 },
     { x: -0, z: -220, y: 6.6 },

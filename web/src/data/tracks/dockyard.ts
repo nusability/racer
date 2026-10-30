@@ -15,6 +15,7 @@ export const dockyard: TrackDef = {
   seed: 4102,
   width: 34,
   runoff: 0,
+  floor: 'void',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -185, y: 0 },

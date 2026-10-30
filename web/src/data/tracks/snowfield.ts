@@ -14,6 +14,7 @@ export const snowfield: TrackDef = {
   seed: 2101,
   width: 52,
   runoff: 70,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 4.0 },
     { x: 0, z: -212, y: 4.0 },

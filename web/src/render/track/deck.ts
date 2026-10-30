@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { FlatBuilder, P3 } from './builder.ts';
 import { KERB_BLOCK, LIT_EDGE_BLOCKS } from './config.ts';
 import type { Chunk, Corridor } from './corridor.ts';
-import { DROP_FALL } from './ground.ts';
+import { DROP_DEPTH } from '../../data/tuning.ts';
 import { quadFacing, rockQuad } from './paint.ts';
 import { beatIndex } from './rhythm.ts';
 
@@ -98,7 +98,7 @@ export function dropFace(cor: Corridor, c: Chunk, a: number, b: number, side: nu
   const top = (k: number) => cor.banked(k, side * cor.edge(k, side), 0);
   const foot = (k: number): P3 => {
     const p = top(k);
-    return { x: p.x, y: cor.shape.gy[cor.idx(k)] - DROP_FALL - 4, z: p.z };
+    return { x: p.x, y: cor.shape.gy[cor.idx(k)] - DROP_DEPTH - 4, z: p.z };
   };
   rockQuad(c.rock, cor.paint, foot(a), foot(b), top(b), top(a), out, 0.7);
   // Chevron band on the road surface along the edge: yellow and black, unlit.

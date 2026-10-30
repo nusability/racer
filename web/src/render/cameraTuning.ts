@@ -30,6 +30,10 @@ export const CAM_SHAKE_DECAY = 2.5;
 export const POSE_VISUAL_HOVER = SKIMMER_RIDE_HEIGHT;
 /** Nose up/down limit when flying, radians. */
 export const POSE_MAX_PITCH = 0.45;
+/** A craft falling off the course rolls over toward the side it went off at this rate, rad/s: a tumble, not a spin. */
+export const POSE_FALL_TUMBLE = 2.2;
+/** ...and its nose drops this much faster than its flight path does, rad/s, until it points straight down. */
+export const POSE_FALL_PITCH_RATE = 0.5;
 /** Opponents closer than this to the camera are hidden instead of filling the lens. */
 export const CAM_HIDE_NEAR = 9;
 /** Rate the horizon blends to and from following the road fully (loops, corkscrews). */

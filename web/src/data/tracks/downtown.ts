@@ -14,6 +14,7 @@ export const downtown: TrackDef = {
   seed: 3101,
   width: 52,
   runoff: 18,
+  floor: 'ground',
   points: [
     { x: 0, z: -60, y: 6.0 },
     { x: 0, z: -259, y: 6.0 },

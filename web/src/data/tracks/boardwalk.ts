@@ -15,6 +15,7 @@ export const boardwalk: TrackDef = {
   seed: 1303,
   width: 40,
   runoff: 35,
+  floor: 'water',
   points: [
     { x: 0, z: 0, y: 20.0 },
     { x: 141, z: -141, y: 20.0 },

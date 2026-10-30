@@ -15,6 +15,7 @@ export const undercity: TrackDef = {
   seed: 3404,
   width: 44,
   runoff: 12,
+  floor: 'ground',
   points: [
     { x: -1600, z: 300, y: 6.0 },
     { x: -1600, z: 195, y: 6.0 },

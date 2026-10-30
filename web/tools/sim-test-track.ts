@@ -16,6 +16,7 @@ export const simTestTrack: TrackDef = {
   seed: 4242,
   width: 40,
   runoff: 50,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -1500, y: 0 },
@@ -100,6 +101,7 @@ export const simFigure8: TrackDef = {
   seed: 808,
   width: 30,
   runoff: 20,
+  floor: 'ground',
   points: figure8Points,
   // The lemniscate passes the origin at t = π/2 and 3π/2: control points 3 and 9.
   features: [{ kind: 'crossing', at: 3, other: 9, style: 'flat' }],
@@ -122,6 +124,7 @@ export const simDraftOval: TrackDef = {
   seed: 77,
   width: 30,
   runoff: 20,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -1000, y: 0 },
@@ -136,6 +139,35 @@ export const simDraftOval: TrackDef = {
   features: [],
   branches: [],
   palette: simTestTrack.palette,
+};
+
+/**
+ * The draft oval with a jump on its first straight whose take-off is narrower than its landing
+ * and open both sides: a racer flying out past the lip's edge comes down on the wide landing
+ * road (tools/sim-physics.ts checks it lands; the debug menu races it to watch). The straight
+ * runs 1000 m per control-point param, so the features are laid out in metres from there.
+ */
+export const WIDE_JUMP_AT = 1.5;
+export const WIDE_JUMP_RAMP = 60;
+/** Take-off and landing widths: the landing is the oval's own 30 m. */
+export const WIDE_JUMP_TAKEOFF = 18;
+const METRES_PER_PARAM = 1000;
+const WIDE_JUMP_GAP = 60;
+/** The take-off narrows this far before the ramp, and stays narrow this far past the lip, widening over the last WIDE_JUMP_BLEND. */
+const WIDE_JUMP_LEAD = 150;
+const WIDE_JUMP_TAIL = 45;
+const WIDE_JUMP_BLEND = 15;
+const wideLip = WIDE_JUMP_AT + WIDE_JUMP_RAMP / METRES_PER_PARAM;
+export const simWideJump: TrackDef = {
+  ...simDraftOval,
+  id: 'simjump',
+  name: 'Sim Wide Jump',
+  blurb: 'Synthetic oval with a jump from a narrow lip onto a wide landing.',
+  features: [
+    { kind: 'jump', at: WIDE_JUMP_AT, rampLength: WIDE_JUMP_RAMP, rampHeight: 5, gapLength: WIDE_JUMP_GAP },
+    { kind: 'narrow', from: WIDE_JUMP_AT - WIDE_JUMP_LEAD / METRES_PER_PARAM, to: wideLip + WIDE_JUMP_TAIL / METRES_PER_PARAM, width: WIDE_JUMP_TAKEOFF, blend: WIDE_JUMP_BLEND },
+    { kind: 'drop', from: WIDE_JUMP_AT - WIDE_JUMP_LEAD / METRES_PER_PARAM, to: wideLip + (WIDE_JUMP_GAP + WIDE_JUMP_LEAD) / METRES_PER_PARAM },
+  ],
 };
 
 /**
@@ -154,6 +186,7 @@ export const simSprint: TrackDef = {
   seed: 5150,
   width: 40,
   runoff: 40,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -1200, y: 0 },

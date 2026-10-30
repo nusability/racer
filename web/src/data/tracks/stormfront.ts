@@ -15,6 +15,7 @@ export const stormfront: TrackDef = {
   seed: 808,
   width: 42,
   runoff: 35,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 0.0 },
     { x: -0, z: -217, y: 6.0 },

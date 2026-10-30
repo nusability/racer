@@ -15,6 +15,7 @@ export const frozenharbor: TrackDef = {
   seed: 2202,
   width: 48,
   runoff: 50,
+  floor: 'ground',
   points: [
     { x: 0, z: 0, y: 20.0 },
     { x: -177, z: -177, y: 17.5 },

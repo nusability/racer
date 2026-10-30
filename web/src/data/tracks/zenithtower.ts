@@ -17,6 +17,7 @@ export const zenithtower: TrackDef = {
   seed: 3606,
   width: 42,
   runoff: 10,
+  floor: 'ground',
   points: [
     { x: -1800, z: 0, y: 7.0 },
     { x: -1800, z: -91, y: 7.2 },

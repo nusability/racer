@@ -79,9 +79,8 @@ export const TUNNEL_ROCK_ABOVE = 34;
 export const TUNNEL_RIBS: Rhythm = { gap: [11, 27], salt: 0x71b5 };
 /** Orbital Reach's gantries over the open deck: 44–84 m apart (64 m on average), so their light bands never strobe either. */
 export const GANTRY_RHYTHM: Rhythm = { gap: [44, 84], salt: 0x6a7e };
-/** How far a chasm's crack runs past the hard boundary, and how deep its glowing floor sits. */
+/** How far a chasm's crack runs past the hard boundary. */
 export const CHASM_SIDE = 45;
-export const CHASM_FLOOR_EXTRA = 12;
 /** Painted kerb block length along the road edge, metres. */
 export const KERB_BLOCK = 8;
 /**
@@ -101,8 +100,8 @@ export const ANISOTROPY = 8;
 export const TEXTURE_SIZE = { low: 512, high: 1024 } as const;
 
 // --- Water (biomes with a sea) ---
-/** The sea surface height, metres; roads beside water stay well above it. */
-export const SEA_LEVEL = 0;
+/** The sea surface height (the simulation's, where a fall over water ends); roads beside water stay well above it. */
+export { SEA_LEVEL } from '../../data/tuning.ts';
 /** Depth of the sea bed under a lagoon's water run-off, metres. */
 export const LAGOON_DEPTH = 1.4;
 

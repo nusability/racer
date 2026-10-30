@@ -17,6 +17,7 @@ export const sunfield: TrackDef = {
   seed: 4105,
   width: 34,
   runoff: 0,
+  floor: 'void',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: 0, z: -200, y: 0 },

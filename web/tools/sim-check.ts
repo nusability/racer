@@ -4,7 +4,8 @@
 // reaching the run-out's end, a fork whose field all took one way, or a finisher the run-out's
 // force field does not ease to a still rest.
 //   npm run sim                 all tracks
-//   npm run sim -- sunpan       one track (simtest is the synthetic loop, simsprint the sprint)
+//   npm run sim -- sunpan       one track (simtest is the synthetic loop, simsprint the sprint,
+//                               simphysics the physics checks of tools/sim-physics.ts)
 //   npm run sim -- --ladder     also race six equal racers at different skills
 //   npm run sim -- --cups x     cup balance study even when filtering to track x
 
@@ -21,6 +22,7 @@ import { BRAKE_DECEL, DRAFT_FULL, DRAFT_TOP_SPEED, RACER_LENGTH, SIM_DT } from '
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
 import { simDraftOval, simFigure8, simSprint, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
+import { physicsChecks } from './sim-physics.ts';
 
 // The project has no Node typings (the web build must not see them); this is all we use.
 declare const process: { argv: string[]; exit(code: number): never };
@@ -450,11 +452,13 @@ function forceFieldCheck() {
   }
   const runOut = track.length - finishS;
   const overrun = brakeRoom.filter((b) => b > track.length).length;
-  console.log(`\nforce field (simsprint, ${FIELD} maxed Orbis Gyres): ${overrun} would brake past the road's end; rest at ${trace.map((t) => (t.length ? (t[t.length - 1].s - finishS).toFixed(0) : '-')).join(', ')} m of ${runOut.toFixed(0)}`);
+  const wrecked = race.racers.filter((r) => r.crashed > 0).length;
+  console.log(`\nforce field (simsprint, ${FIELD} maxed Orbis Gyres, ${wrecked} wrecked on the way): ${overrun} would brake past the road's end; rest at ${trace.map((t) => (t.length ? (t[t.length - 1].s - finishS).toFixed(0) : '-')).join(', ')} m of ${runOut.toFixed(0)}`);
   if (overrun === 0) fail('force field: no finisher was fast enough for the field to act');
   trace.forEach((t, i) => {
     const id = race.racers[i].id;
-    if (t.length === 0) return fail(`force field: ${id} never crossed the finish`);
+    // A maxed Gyre can wreck on the pillar field at ~400 m/s: that is no fault of the run-out's.
+    if (t.length === 0) return race.racers[i].crashed > 0 ? undefined : fail(`force field: ${id} never crossed the finish`);
     let worst = 0;
     let rise = 0;
     for (let k = 1; k < t.length; k++) {
@@ -475,6 +479,8 @@ function forceFieldCheck() {
 }
 
 if (only.length === 0 || only.includes(simSprint.id)) forceFieldCheck();
+
+if (only.length === 0 || only.includes('simphysics')) physicsChecks(fail);
 
 // Cup balance: the real rival fields against stand-in players (skipped for single-track runs).
 if (only.length === 0 || args.includes('--cups')) allCupStudies();

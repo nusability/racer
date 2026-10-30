@@ -62,7 +62,7 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    monoliths, domed civic towers and terraced megablocks, flats and capsule hotels, docks and
    works, slums of grimy slabs and shanty-crusted towers under failing neon.
    Orbital Reach, opened by the Neon Cup, is the space world: steel decks hung in the void over a
-   gas giant, railed or with lit open edges (falling off one is a wreck), station modules and
+   gas giant, railed or with lit open edges (go over one and you tumble away into the void), station modules and
    asteroids to fly through, gaps in the void to jump, and loops and corkscrews held in floating
    cages rather than standing on anything. Its six tracks are three circuits (the habitat ring,
    the refinery's dock yard, a solar farm whose array masts stand in the road) and three
@@ -93,10 +93,14 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    that rejoin later. They race within ±0.6 s of each other for a skilled driver, so the pick
    is style and risk, not a free gain; the route's name flashes on entering it, and rivals
    spread over the routes by their own call, aces favouring the harder way. A WRECK ENDS THE RACE: hull
-   gone, a dead-centre hit at speed, falling into a chasm or off an open edge, or stalling in
-   a loop. The craft disintegrates in slow motion, the camera riding with the tumbling debris
-   until it comes to rest (or, off an open edge, watching it fall away), then the results show
-   a DNF.
+   gone, a dead-centre hit at speed, a fall that ends in something, or stalling in a loop. Being
+   out beyond the road in the air is never a wreck in itself: a craft that comes down over road
+   lands (a wide jump onto a wider landing is fine), and one that comes down where there is no
+   road keeps falling, intact and tumbling, until it hits the ground, a chasm's floor or the
+   sea (a splash), or the course's own structure; over the void it tumbles away and is lost.
+   The craft disintegrates in slow motion where it hits, the camera riding with the tumbling
+   debris until it comes to rest (or, lost in the void, watching it fall away), then the
+   results show a DNF.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades. Some gliders
    are sold only once their world opens (Neon Meridian brings two above the Halo Comet); the
@@ -133,6 +137,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | Launch boost only for a press within 0.3 s after GO |
 | False start | Any boost during the countdown: 1.0 s stall at GO, no launch boost | AIs false-start 0.25·(1−skill)², perfect-start 0.8·skill |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
+| Air steering | 20% of the steer rate and of a drag, 35% of the lateral response | In the air a pod lines up its landing, it can't swerve: full input moves it ~10% as far as on the road |
+| Falls | Ground 70 m below an open edge (~1.9 s of fall), a chasm's floor 72 m below its lower edge, the sea at sea level; over the void lost 150 m down (~2.8 s) | What lies below is set per track (ground, water or void) and must match its world; a fall that drifts back under the road or into a stretch with a wall or run-off hits the course |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
 | Laps | 2–3 per circuit, 8.9–11 km (each loop adds ~390 m of road to the ground plan) | Lap times 54–70 s on the starter racer |

@@ -161,6 +161,16 @@ export interface TrackPalette {
  */
 export type CourseKind = 'circuit' | 'sprint';
 
+/**
+ * What lies below the course, for a racer that falls off it (past an open edge, or into a
+ * chasm). 'ground': solid ground (sand, rock, snow, streets, regolith) DROP_DEPTH below an open
+ * edge and CHASM_DEPTH below a chasm's lower lip: the fall ends there in a wreck. 'water': the
+ * sea at SEA_LEVEL (ground instead where that lies higher): a splash. 'void': nothing at all
+ * (Orbital Reach's decks): the craft tumbles away and is lost after VOID_LOST_DEPTH of fall. It
+ * must match what the world draws there (track-check holds it to the track's biome).
+ */
+export type FloorKind = 'ground' | 'water' | 'void';
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -179,6 +189,8 @@ export interface TrackDef {
    * slower than the road, so cutting across it is a choice, not a free shortcut.
    */
   runoff: number;
+  /** What a racer falling off the course meets (see FloorKind). */
+  floor: FloorKind;
   /**
    * Circuit: a closed loop, the last point connects back to the first; the start line is at
    * point 0. Sprint: an open line from the start (point 0) to the finish (the last point).
@@ -264,6 +276,13 @@ export interface TrackSample {
   grip: number;
   /** Rough ground 0..1 (0 = smooth): hull damage and jolts at speed (see the 'rough' feature). */
   rough: number;
+  /**
+   * Height (world y) of what a racer falling off the course here meets: the chasm floor in a
+   * gap, else the ground or sea beside the open edges; -Infinity over the void (see FloorKind).
+   */
+  floor: number;
+  /** The floor here is the sea's surface: a fall ends in a splash. */
+  water: boolean;
 }
 
 /** A solid obstacle in track space: a vertical cylinder standing on the road. */
@@ -440,6 +459,20 @@ export interface RacerState {
   steer: number;
   /** Slipstream built up riding a racer's wake, 0..1 (see src/core/slipstream.ts). */
   draft: number;
+  /**
+   * Off the course and falling (Vehicle: below the road past an open edge): a free body in
+   * world space until it hits the floor, the course, or is lost in the void. Null while on the
+   * course; kept as it was at the impact once the fall ends in a wreck.
+   */
+  fall: FallState | null;
+}
+
+/** A racer falling free of the course, in world space (metres, m/s; +Y up). */
+export interface FallState {
+  pos: Vec3;
+  vel: Vec3;
+  /** Seconds since it went over. */
+  time: number;
 }
 
 export type RaceEvent =
@@ -462,10 +495,11 @@ export type RaceEvent =
   | { type: 'hit'; id: string; kind: Obstacle['kind'] | 'ceiling' | 'racer'; intensity: number; hazard?: string }
   /**
    * A wreck: the racer is out of this race (no respawn). destroyed = hull gone, fell = into a
-   * chasm, offEdge = off an open edge, loopStall = too slow at the top of a loop, obstacle /
-   * hazard = a dead-centre hit at speed.
+   * chasm (its floor or its far face), offEdge = fell off an open edge onto the ground below or
+   * into the course's own structure, splash = fell into the sea, lost = fell into the void,
+   * loopStall = too slow at the top of a loop, obstacle / hazard = a dead-centre hit at speed.
    */
-  | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'offEdge' | 'loopStall' | 'obstacle' | 'hazard' }
+  | { type: 'crash'; id: string; reason: 'destroyed' | 'fell' | 'offEdge' | 'splash' | 'lost' | 'loopStall' | 'obstacle' | 'hazard' }
   | { type: 'respawn'; id: string }
   | { type: 'launch'; id: string }
   /** At GO: boost was touched during the countdown, so the engines flooded and launch late. */

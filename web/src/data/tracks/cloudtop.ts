@@ -17,6 +17,7 @@ export const cloudtop: TrackDef = {
   seed: 4106,
   width: 28,
   runoff: 0,
+  floor: 'void',
   points: [
     { x: 0, z: 0, y: 0 },
     { x: -170, z: -106, y: 0 },

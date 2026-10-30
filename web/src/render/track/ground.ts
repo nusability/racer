@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { CHASM_DEPTH } from '../../data/tuning.ts';
+import { DROP_DEPTH, DROP_FLOOR_REACH } from '../../data/tuning.ts';
 import type { GroundStyle } from './biomes/kit.ts';
 import {
-  CHASM_FLOOR_EXTRA,
   FIELD_CELL,
   FIELD_REACH,
   GROUND_BLEND_MIN,
@@ -21,8 +20,6 @@ const SHOULDER_DROP = 0.35;
 /** Small dunes fade out between these distances from the course, metres. */
 const DUNE_FADE_START = 260;
 const DUNE_FADE_LENGTH = 260;
-/** Past an open drop the ground lies this far below the road: a fall, not a step. */
-export const DROP_FALL = 70;
 /** Stamp every n-th sample into the nearest-sample field (refined exactly per query). */
 const FIELD_STRIDE = 3;
 /** A levelled landmark pad eases back into the dunes over this distance. */
@@ -248,11 +245,12 @@ export class Ground {
       const roadSide = sh.water[near.k]
         ? SEA_LEVEL - LAGOON_DEPTH
         : falls
-          ? sh.gy[near.k] - DROP_FALL
+          ? sh.gy[near.k] - DROP_DEPTH
           : sh.loop[near.k]
             ? sh.gy[near.k] - SHOULDER_DROP
             : this.surfaceY(near) - SHOULDER_DROP;
-      const flat = falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
+      // Past an open edge the floor a falling craft hits (the simulation's) holds out to its reach.
+      const flat = sh.drop[side][near.k] ? DROP_FLOOR_REACH : falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
       h = roadSide + (h - roadSide) * smoothstep((out - flat) / blend);
     }
@@ -268,7 +266,7 @@ export class Ground {
     const smp = view.ribbon.samples[near.k];
     const covered = Math.abs(near.d) < view.shape.outer[sideIndex(near.d)][near.k] - 2;
     if (!covered) return h;
-    if (smp.gap) return smp.pos.y - CHASM_DEPTH - CHASM_FLOOR_EXTRA - 4;
+    if (smp.gap) return smp.floor - 4;
     // Inside a landmark's footprint the boundary dressing is hidden, so the ground shows.
     const edge = near.d > 0 ? smp.edgeR : smp.edgeL;
     if (Math.abs(near.d) > edge + 1 && this.inFootprint(x, z)) return h;
