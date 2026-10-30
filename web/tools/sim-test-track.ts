@@ -5,6 +5,7 @@
 // shortcut branch with its own boulders and cells. The figure-8 has a flat crossing.
 
 import type { TrackDef } from '../src/core/types.ts';
+import { chicane, withProfile } from '../src/data/tracks/authoring.ts';
 
 export const simTestTrack: TrackDef = {
   id: 'simtest',
@@ -251,4 +252,29 @@ export const simSprint: TrackDef = {
     },
   ],
   palette: simTestTrack.palette,
+};
+
+/**
+ * The draft oval authored with the layout helpers (src/data/tracks/authoring.ts): a chicane on
+ * the first straight, and an elevation profile rising to the far turn with rollers over the top. The layout
+ * character check (tools/sim-physics.ts) must find both.
+ */
+const CHICANE_AT = 300;
+const CHICANE_LENGTH = 240;
+const CHICANE_OFFSET = 25;
+const ovalPoints = simDraftOval.points;
+const chicaned = [ovalPoints[0], ovalPoints[1], ...chicane(ovalPoints[1], ovalPoints[2], CHICANE_AT, CHICANE_LENGTH, CHICANE_OFFSET), ...ovalPoints.slice(2)];
+/** After the chicane's four points the far turn starts at point 8 (was 4): a crest just before it. */
+export const simLayout: TrackDef = {
+  ...simDraftOval,
+  id: 'simlayout',
+  name: 'Sim Layout',
+  blurb: 'Synthetic oval with a chicane and a crest before a turn.',
+  points: withProfile(chicaned, [
+    [7, 0],
+    [8, 14],
+    [9, 0],
+  ]),
+  // Rollers over the top, the last of them right where the turn begins.
+  features: [{ kind: 'dunes', from: 7.6, to: 8.05, amplitude: 2.5, wavelength: 160 }],
 };

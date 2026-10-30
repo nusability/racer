@@ -126,6 +126,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings; none (nor pads) in shortcuts |
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
+| Crests and dips | Grip × (1 + v²·vertical curvature ÷ 83 m/s²), between 0.25 and 1.5; 0.25 in the air | Over a crest a craft goes light and slides wide in a bend (past lift-off it flies, straight on); a dip presses it on. AIs reckon a bend's limit by the lightest crest in the 60 m before it. A stock starter holds a ~55 m bend flat out (~86 m on boost): hairpins (40–70 m, inside walled or narrow) are the brake corners |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 70% top speed and extra drag, no damage |
 | Obstacle hit | Within 25% of dead centre above 60% top speed = wreck; else 0.7 × centrality × pace ÷ armour hull | Solid hits cost 35–55% hull, glancing 10–20% |
 | Walls | Impact hull 0.35 × ((v⊥ − 3)/27)^1.5 ÷ armour: 5 m/s ~1%, 10 m/s ~5%, 20 m/s ~18%, 30 m/s ~35%, 45 m/s ~70%; scraping 8% hull/s at top speed (less slower) | Never slows a racer below 65% top speed; a brush is cheap, a swerve into the wall at speed is serious |

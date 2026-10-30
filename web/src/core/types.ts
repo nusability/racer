@@ -253,6 +253,12 @@ export interface TrackSample {
   curvature: number;
   /** dElevation/ds of the road surface. */
   slope: number;
+  /**
+   * Vertical curvature of the road (1/m): d(slope)/ds, smoothed. Negative over a crest (the road
+   * falls away, the craft goes light), positive in a dip (it is pressed on); 0 in loops and
+   * corkscrews, which hold the craft to the road, and at a chasm's edges.
+   */
+  vcurve: number;
   /** Bank angle in radians (positive = right side low, i.e. leaning into a right turn). */
   bank: number;
   /** No surface here (chasm of a jump). */

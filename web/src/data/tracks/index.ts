@@ -1,3 +1,18 @@
+// Every track and its scenery.
+//
+// Authoring a layout with character (track-check prints each track's "layout character" against
+// the targets in tools/layout-character.ts; they are info for now, rules later):
+// - Corners: a bend's radius is what it costs. A stock starter flat out holds ~55 m unboosted and
+//   ~86 m on boost; a 300 m bend is flat out for everyone. Under 70 m is a hairpin: allowed down
+//   to 40 m where the inside is walled or narrow (track-check says how much).
+// - Chicanes: chicane(from, to, at, length, offset) in tracks/authoring.ts gives the control
+//   points for a flick off a straight and back; splice them between the two points.
+// - Elevation: give heights as a profile over the control points, withProfile(points,
+//   [[param, y], ...]) in tracks/authoring.ts, instead of point by point. Vertical curve is grip:
+//   over a crest the craft goes light (speed²·curvature against 83 m/s² of gravity and suction)
+//   and slides wide in a bend, a dip presses it on. 'dunes' make rollers; a crest a little before
+//   a bend is the brake-or-slide moment; past a crest's lift-off speed the craft flies.
+// - Below the course: `floor` (ground, water or void) is what a fall off an open edge meets.
 import type { TrackDef } from '../../core/types.ts';
 import type { TrackScenery } from './scenery.ts';
 import { registerDevTrackWorld } from '../worlds.ts';

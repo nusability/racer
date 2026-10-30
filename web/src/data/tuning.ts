@@ -169,6 +169,19 @@ export const TARGET_OVERREACH = 1;
 export const CORNER_PULL = 0.11;
 /** Grip (racer stat) at which CORNER_PULL applies as written; more grip, less drift. */
 export const GRIP_REF = 0.6;
+/**
+ * Road load: over a crest the road falls away under the craft and presses it on less (in a dip,
+ * more), by speed²·vertical curvature against gravity plus the hover's suction; grip goes with
+ * it (see roadLoad). A light craft keeps at least CREST_GRIP_MIN of its grip (its cushion still
+ * bites the air), which is also all it has in the air; a compression adds up to DIP_GRIP_MAX.
+ */
+export const CREST_GRIP_MIN = 0.25;
+export const DIP_GRIP_MAX = 1.5;
+/**
+ * The AI reckons a corner's grip by the lightest crest in the last AI_CREST_LOOKBACK metres
+ * before it: a craft gone light or airborne there is still settling, or still flying straight.
+ */
+export const AI_CREST_LOOKBACK = 60;
 /** Fraction of the corner drift left while the air brake is held. */
 export const CORNER_PULL_BRAKE = 0.35;
 /**

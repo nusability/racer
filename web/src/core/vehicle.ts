@@ -5,7 +5,7 @@
 
 import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
 import { gustAt } from './hazards.ts';
-import { cornerPull, currentTopSpeed, impactWear, roughOverspeed, roughWear, steerRate } from './handling.ts';
+import { cornerPull, currentTopSpeed, impactWear, roadLoad, roughOverspeed, roughWear, steerRate } from './handling.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { makeFrame, type Ribbon } from './track.ts';
 import {
@@ -35,6 +35,7 @@ import {
   CELL_MAX_HEIGHT,
   CELL_RADIUS,
   CELL_VALUE,
+  CREST_GRIP_MIN,
   DROP_FLOOR_REACH,
   DROP_OVERREACH,
   FALL_PROJECT_WINDOW,
@@ -202,10 +203,13 @@ export class Vehicle {
     // Lateral target: steer moves it, a drag nudges it, corners and gusts drift it.
     const sOld = st.s;
     const curvature = ribbon.curvatureAt(sOld);
+    // Grip goes with how hard the road presses the craft on: light over a crest, heavy in a dip,
+    // next to nothing in the air.
     const surfaceGrip = ribbon.gripAt(sOld);
+    const grip = surfaceGrip * (airborne ? CREST_GRIP_MIN : roadLoad(st.speed, ribbon.vcurveAt(sOld)));
     // In the air the pilot moves its target only a little, by key or by drag alike.
     const air = airborne ? AIR_STEER_FACTOR : 1;
-    const drift = cornerPull(this.stats, curvature, st.speed, brake, surfaceGrip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
+    const drift = cornerPull(this.stats, curvature, st.speed, brake, grip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
     this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge * air;
     // Past a wall the target overreaches a little (pushing grinds); past an open edge, far
     // enough that holding the steer drives you off it.
@@ -213,11 +217,11 @@ export class Vehicle {
     const reachR = ribbon.dropAt(sOld, 1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
     this.targetX = clamp(this.targetX, ribbon.minXAt(sOld) + reachL, ribbon.maxXAt(sOld) - reachR);
 
-    // x chases the target with a cap on sideways speed: critically damped on a normal
-    // surface, looser and overshooting on a slick one.
+    // x chases the target with a cap on sideways speed: critically damped with full grip,
+    // looser and overshooting on a slick surface or a crest.
     const k = this.stats.handling / HANDLING_REF;
-    const w = LATERAL_RESPONSE * k * (airborne ? AIR_RESPONSE_FACTOR : 1) * Math.sqrt(surfaceGrip);
-    const zeta = surfaceGrip < 1 ? Math.max(SLICK_DAMPING_FLOOR, surfaceGrip) : 1;
+    const w = airborne ? LATERAL_RESPONSE * k * AIR_RESPONSE_FACTOR * Math.sqrt(surfaceGrip) : LATERAL_RESPONSE * k * Math.sqrt(Math.min(1, grip));
+    const zeta = !airborne && grip < 1 ? Math.max(SLICK_DAMPING_FLOOR, grip) : 1;
     const maxLat = LATERAL_SPEED_MAX * k;
     st.vx = clamp(st.vx + (w * w * (this.targetX - st.x) - 2 * zeta * w * st.vx) * dt, -maxLat, maxLat);
 

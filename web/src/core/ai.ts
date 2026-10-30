@@ -8,7 +8,7 @@ import { PathPlanner, type Blocker } from './aiPlanner.ts';
 import { junctionBounds } from './junction.ts';
 import { hazardObstacles } from './hazards.ts';
 import type { Vehicle } from './vehicle.ts';
-import { cornerPull, currentTopSpeed, steerRate } from './handling.ts';
+import { cornerLimit, cornerPull, crestGripAt, currentTopSpeed, roadLoad, steerRate } from './handling.ts';
 import { minJumpSpeed } from './jumps.ts';
 import { draftGap } from './slipstream.ts';
 import {
@@ -304,7 +304,8 @@ export class AiDriver {
     if (v < jumpSpeed || st.airborne || loopAhead) brake = false;
 
     // 4. Steer the target onto where it should be, cancelling the corner drift.
-    const pull = cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, brake, ribbon.gripAt(st.s));
+    const grip = ribbon.gripAt(st.s) * roadLoad(st.speed, ribbon.vcurveAt(st.s));
+    const pull = cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, brake, grip);
     const rate = steerRate(stats);
     const steer = this.lapse > 0 ? 0 : clamp(((target - veh.targetX) / AI_TARGET_TIME - pull) / rate, -1, 1);
 
@@ -570,9 +571,10 @@ export class AiDriver {
   private profilesFor(ribbon: Ribbon, stats: RacerStats): SpeedProfiles {
     const known = this.profiles.get(ribbon);
     if (known) return known;
-    // Drift = |κ|·v²·CORNER_PULL·GRIP_REF/grip must stay within a share of the steer rate.
+    // Drift = |κ|·v²·CORNER_PULL·GRIP_REF/grip must stay within a share of the steer rate, with
+    // the grip a crest just before (or the bend's own dip) leaves at that speed.
     const budget = (this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
-    const corner = ribbon.samples.map((p) => Math.sqrt((budget * p.grip) / Math.max(Math.abs(p.curvature), Number.MIN_VALUE)));
+    const corner = ribbon.samples.map((p, k) => cornerLimit(Math.abs(p.curvature), budget * p.grip, crestGripAt(ribbon, k)));
     const envelope = (decel: number, limits: readonly number[] = corner) => {
       const n = limits.length;
       const out = Float64Array.from(limits);

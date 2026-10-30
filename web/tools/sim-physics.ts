@@ -7,9 +7,11 @@ import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Vehicle, type CrashReason } from '../src/core/vehicle.ts';
 import { Race } from '../src/core/race.ts';
-import { BOUNDARY_RESTITUTION, DROP_DEPTH, GRAVITY, HANDLING_REF, LATERAL_RESPONSE, RACER_HALF_WIDTH, SIM_DT, TARGET_OVERREACH, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
+import { cornerLimit, steerRate } from '../src/core/handling.ts';
+import { BOUNDARY_RESTITUTION, CORNER_PULL, DROP_DEPTH, GRIP_REF, GRAVITY, HANDLING_REF, LATERAL_RESPONSE, RACER_HALF_WIDTH, SIM_DT, TARGET_OVERREACH, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
 import type { FloorKind, PlayerInput, RaceEntrant, RaceEvent, TrackDef } from '../src/core/types.ts';
-import { WIDE_JUMP_AT, WIDE_JUMP_RAMP, WIDE_JUMP_TAKEOFF, simDraftOval, simWideJump } from './sim-test-track.ts';
+import { layoutCharacter } from './layout-character.ts';
+import { WIDE_JUMP_AT, WIDE_JUMP_RAMP, WIDE_JUMP_TAKEOFF, simDraftOval, simLayout, simWideJump } from './sim-test-track.ts';
 
 type Fail = (msg: string) => void;
 
@@ -267,7 +269,66 @@ fragility (stock starter, hull per hit): walls ${walls.map((w) => `${w.vn} m/s $
   }
 }
 
+// --- Crests and dips: the road's vertical curve sets how hard it presses the craft on ----------
+
+/** Rolling ground laid over the oval's far turn (params 4..6, a ~600 m radius). */
+const ROLL_FROM = 4.1;
+const ROLL_TO = 5.9;
+const ROLL_AMPLITUDE = 2;
+const ROLL_WAVELENGTH = 200;
+/** Seconds the craft is let drift with no input. */
+const ROLL_DRIFT_TIME = 0.1;
+/** Over the crest the turn must carry it at least this many times as far wide as on the flat... */
+const CREST_DRIFT_MIN = 1.6;
+/** ...and in the dip at most this share of it. */
+const DIP_DRIFT_MAX = 0.8;
+/** A bend this tight, metres, for the cornering-limit comparison. */
+const LIMIT_RADIUS = 100;
+
+/** How far wide a stock starter at top speed drifts (its lateral target) in ROLL_DRIFT_TIME from sample k, hands off. */
+function driftFrom(track: Track, s: number): number {
+  const stats = starter();
+  const v = new Vehicle('roll', stats, track, s, 0, 0, SEED);
+  v.state.speed = stats.topSpeed;
+  v.state.vy = track.slopeAt(s) * stats.topSpeed;
+  for (let t = 0; t < ROLL_DRIFT_TIME; t += SIM_DT) v.step(IDLE, track, [], t, []);
+  if (v.state.airborne) throw new Error('crest check: the craft took off');
+  return Math.abs(v.targetX);
+}
+
+function crestCheck(fail: Fail) {
+  const flat = new Track(simDraftOval);
+  const rolling = new Track({ ...simDraftOval, id: 'simroll', features: [{ kind: 'dunes', from: ROLL_FROM, to: ROLL_TO, amplitude: ROLL_AMPLITUDE, wavelength: ROLL_WAVELENGTH }] });
+  // The sharpest crest and the deepest dip in the middle of the rolling turn.
+  const mid = rolling.samples.filter((p) => p.s > rolling.paramToS(4.6) && p.s < rolling.paramToS(5.4));
+  const crest = mid.reduce((a, b) => (b.vcurve < a.vcurve ? b : a));
+  const dip = mid.reduce((a, b) => (b.vcurve > a.vcurve ? b : a));
+  const base = driftFrom(flat, crest.s);
+  const overCrest = driftFrom(rolling, crest.s) / base;
+  const inDip = driftFrom(rolling, dip.s) / driftFrom(flat, dip.s);
+  console.log(`\ncrests (stock starter at top speed in a 600 m turn, ${ROLL_AMPLITUDE} m rollers): drifts wide ${overCrest.toFixed(2)}x as far over a crest, ${inDip.toFixed(2)}x in a dip`);
+  if (overCrest < CREST_DRIFT_MIN) fail(`crests: over a crest the turn carries the craft only ${overCrest.toFixed(2)}x as far wide (< ${CREST_DRIFT_MIN}x)`);
+  if (inDip > DIP_DRIFT_MAX) fail(`crests: in a dip the turn carries the craft ${inDip.toFixed(2)}x as far wide (> ${DIP_DRIFT_MAX}x)`);
+  // The AI plans its corners with the same grip: a 100 m bend's limit over that crest and dip.
+  const stats = starter();
+  const budget = (steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
+  const [onCrest, onFlat, onDip] = [crest.vcurve, 0, dip.vcurve].map((c) => cornerLimit(1 / LIMIT_RADIUS, budget, c));
+  console.log(`  cornering limit of a ${LIMIT_RADIUS} m bend at its limit of drift: ${onCrest.toFixed(0)} m/s over the crest, ${onFlat.toFixed(0)} flat, ${onDip.toFixed(0)} in the dip`);
+  if (!(onCrest < onFlat && onFlat < onDip)) fail('crests: the cornering limit the AI plans with ignores crests and dips');
+}
+
+/** The layout character report finds what the authoring helpers laid: a chicane and a crest before a bend. */
+function layoutCheck(fail: Fail) {
+  const track = new Track(simLayout);
+  const c = layoutCharacter(track, track.raceLength, false);
+  console.log(`\nlayout character (simlayout): ${c.chicanes} chicane(s), ${c.crestsBeforeCorners} crest(s) before a bend, ${c.brakeZones} brake zone(s), elevation ${c.elevationRange.toFixed(0)} m`);
+  if (c.chicanes < 1) fail('layout: the authored chicane is not counted');
+  if (c.crestsBeforeCorners < 1) fail('layout: the authored crest before the far turn is not counted');
+}
+
 export function physicsChecks(fail: Fail) {
+  layoutCheck(fail);
+  crestCheck(fail);
   airSteerCheck(fail);
   fallCheck(fail);
   wideJumpCheck(fail);

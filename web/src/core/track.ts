@@ -257,6 +257,14 @@ export class Ribbon {
       slope.push(span === 0 ? 0 : (elev[b] - elev[a]) / (span * this.step));
     }
     const bank = this.smooth(curvature.map((c) => Math.max(-MAX_BANK, Math.min(MAX_BANK, c * BANK_PER_CURVATURE))));
+    // Vertical curvature, by the same gap-safe differences as the slope; a stunt holds the craft on.
+    const rawV = slope.map((_, k) => {
+      const a = prevOf(k);
+      const b = nextOf(k);
+      const span = (a === k ? 0 : 1) + (b === k ? 0 : 1);
+      return span === 0 || shape.magnet[k] ? 0 : (slope[b] - slope[a]) / (span * this.step);
+    });
+    const vcurve = this.smooth(rawV);
     const floor = this.floors(elev, gap);
     const worldUp = vec3(0, 1, 0);
     this.samples = [];
@@ -290,6 +298,7 @@ export class Ribbon {
         width: width[k],
         curvature: curvature[k],
         slope: slope[k],
+        vcurve: vcurve[k],
         bank: roll,
         gap: gap[k],
         ceiling: ceiling[k],
@@ -429,7 +438,7 @@ export class Ribbon {
     return this.samples[f < 0.5 ? i : i2];
   }
 
-  private lerpScalar(s: number, key: 'width' | 'curvature' | 'slope' | 'bank' | 'edgeL' | 'edgeR'): number {
+  private lerpScalar(s: number, key: 'width' | 'curvature' | 'slope' | 'vcurve' | 'bank' | 'edgeL' | 'edgeR'): number {
     const { i, f, i2 } = this.indexOf(s);
     return this.samples[i][key] + (this.samples[i2][key] - this.samples[i][key]) * f;
   }
@@ -455,6 +464,10 @@ export class Ribbon {
   }
   slopeAt(s: number): number {
     return this.lerpScalar(s, 'slope');
+  }
+  /** Vertical curvature at s (1/m; negative over a crest, see TrackSample.vcurve). */
+  vcurveAt(s: number): number {
+    return this.lerpScalar(s, 'vcurve');
   }
   bankAt(s: number): number {
     return this.lerpScalar(s, 'bank');

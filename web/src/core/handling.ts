@@ -2,12 +2,18 @@
 // rate, corner drift and top speed.
 
 import type { RacerState, RacerStats } from './types.ts';
+import type { Ribbon } from './track.ts';
 import {
   CORNER_PULL,
   CORNER_PULL_BRAKE,
   DAMAGE_TOP_SPEED_LOSS,
+  AI_CREST_LOOKBACK,
+  CREST_GRIP_MIN,
+  DIP_GRIP_MAX,
+  GRAVITY,
   GRIP_REF,
   HANDLING_REF,
+  HOVER_SUCTION,
   IMPACT_DAMAGE_EXP,
   ROUGH_DAMAGE,
   ROUGH_DAMAGE_EXP,
@@ -36,6 +42,58 @@ export function cornerPull(stats: RacerStats, curvature: number, speed: number, 
  */
 export function impactWear(speed: number, free: number, ref: number, atRef: number): number {
   return atRef * (Math.max(0, speed - free) / (ref - free)) ** IMPACT_DAMAGE_EXP;
+}
+
+/**
+ * How hard the road presses a craft on at `speed` where it curves vertically by `vcurve` (1/m,
+ * negative over a crest), as a share of level road, before clamping: at 0 the craft lifts off.
+ */
+export function roadLoadRaw(speed: number, vcurve: number): number {
+  return 1 + (speed * speed * vcurve) / (GRAVITY + HOVER_SUCTION);
+}
+
+/** The share of its grip a grounded craft has there (see CREST_GRIP_MIN, DIP_GRIP_MAX). */
+export function roadLoad(speed: number, vcurve: number): number {
+  return Math.min(DIP_GRIP_MAX, Math.max(CREST_GRIP_MIN, roadLoadRaw(speed, vcurve)));
+}
+
+/** Upper end of the cornering-limit search, m/s: past anything a glider reaches. */
+const CORNER_LIMIT_SEARCH = 1000;
+const CORNER_LIMIT_ITERATIONS = 40;
+
+/**
+ * Fastest speed at which a corner of curvature `curv` (1/m, unsigned) can be held: its drift no
+ * more than `budget` (m/s of steer, as speed²·curvature per unit of grip) times the grip the road
+ * load leaves at that speed over vertical curvature `vcurve`. Infinity on the straight.
+ */
+export function cornerLimit(curv: number, budget: number, vcurve: number): number {
+  if (curv <= 0) return Infinity;
+  const holds = (v: number) => v * v * curv <= budget * roadLoad(v, vcurve);
+  if (holds(CORNER_LIMIT_SEARCH)) return Infinity;
+  let lo = 0;
+  let hi = CORNER_LIMIT_SEARCH;
+  for (let i = 0; i < CORNER_LIMIT_ITERATIONS; i++) {
+    const mid = (lo + hi) / 2;
+    if (holds(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * The vertical curvature that sets sample k's grip for a driver planning ahead: the sharpest
+ * crest within AI_CREST_LOOKBACK before it (going light just before a corner costs the corner),
+ * else its own (a dip under a corner helps).
+ */
+export function crestGripAt(r: Ribbon, k: number): number {
+  const n = r.samples.length;
+  let worst = r.samples[k].vcurve;
+  for (let d = 1; d * r.step <= AI_CREST_LOOKBACK; d++) {
+    const j = r.closed ? (k - d + n) % n : k - d;
+    if (j < 0) break;
+    worst = Math.min(worst, r.samples[j].vcurve);
+  }
+  return worst;
 }
 
 /** Top speed right now, given damage and whether boost is active. */

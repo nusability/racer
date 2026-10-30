@@ -11,6 +11,7 @@ import { beats, type Rhythm } from '../src/render/track/rhythm.ts';
 import { Ribbon, Track, type Branch, type Fork } from '../src/core/track.ts';
 import { loopCrownRadius, type LoopSpan } from '../src/core/courseShapes.ts';
 import { Race } from '../src/core/race.ts';
+import { LAYOUT_TARGETS, layoutCharacter, missedTargets, type LayoutCharacter } from './layout-character.ts';
 import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
@@ -27,7 +28,15 @@ const TOP_SPEED = 240;
 const STARTER_SPEED = 150;
 /** Typical racing speed, used to turn a shortcut's distance saving into seconds. */
 const RACE_SPEED = 170;
+/**
+ * Corners open wider than this radius anywhere. Tighter, down to HAIRPIN_MIN_RADIUS, is a
+ * hairpin: allowed where its inside is walled or narrow enough that the inner hard boundary
+ * keeps HAIRPIN_INNER_CLEARANCE from the centre of the turn (wide run-off would fold over
+ * itself). A hairpin is a brake corner at any speed (a stock starter holds only ~55 m flat out).
+ */
 const MIN_RADIUS = 70;
+const HAIRPIN_MIN_RADIUS = 40;
+const HAIRPIN_INNER_CLEARANCE = 10;
 /** Radius under which a corner needs braking; listed so authors see them. */
 const BRAKING_RADIUS = 150;
 /** A braking corner ends once the radius opens past this multiple, so wobbles don't split it. */
@@ -180,7 +189,15 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
       `run-off ${fmt(Math.min(...runoffs))}..${fmt(Math.max(...runoffs))}  ` +
       `obstacles ${t.obstacles.length} arches ${t.arches.length} pads ${t.boostPads.length} jumps ${t.jumps.length}`,
   );
-  if (1 / maxCurv < MIN_RADIUS) w(`radius ${fmt(1 / maxCurv)}m < ${MIN_RADIUS}m at @${uAt(maxCurvS).toFixed(2)}`);
+  for (const smp of t.samples) {
+    const r = 1 / Math.abs(smp.curvature);
+    if (r >= MIN_RADIUS || smp.magnet) continue;
+    const inner = smp.curvature > 0 ? smp.edgeR : smp.edgeL;
+    if (r < HAIRPIN_MIN_RADIUS || r < inner + HAIRPIN_INNER_CLEARANCE) {
+      w(`radius ${fmt(r)}m at @${uAt(smp.s).toFixed(2)}: under ${MIN_RADIUS}m a hairpin needs ${HAIRPIN_MIN_RADIUS}m and its inner boundary (${fmt(inner)}m) ${HAIRPIN_INNER_CLEARANCE}m inside the radius`);
+      break;
+    }
+  }
 
   // Widths: walled main road stays generous except in short squeezes.
   let squeeze = 0;
@@ -883,8 +900,41 @@ function check(def: TrackDef): string[] {
       }
     }
   }
+  const character = layoutCharacter(t, t.raceLength, def.course === 'sprint');
+  layoutTable.push({ id: def.id, c: character });
+  const missed = missedTargets(character);
+  console.log(`  layout character: ${formatCharacter(character)}${missed.length ? `  (under target: ${missed.join(', ')})` : ''}`);
   for (const m of warn) console.log(`  WARN ${m}`);
   return warn;
+}
+
+// --- Layout character (tools/layout-character.ts): info, not yet rules -----------------------
+
+const layoutTable: { id: string; c: LayoutCharacter }[] = [];
+const LAYOUT_COLUMNS: [keyof LayoutCharacter, string, (x: number) => string][] = [
+  ['turnsPerKm', 'turns/km', (x) => x.toFixed(2)],
+  ['chicanes', 'chicanes', (x) => x.toFixed(1)],
+  ['longestStraight', 'straight m', (x) => x.toFixed(0)],
+  ['fullThrottle', 'throttle', (x) => `${(x * 100).toFixed(0)}%`],
+  ['brakeZones', 'brakes', (x) => x.toFixed(1)],
+  ['crestsBeforeCorners', 'crest>bend', (x) => x.toFixed(1)],
+  ['elevationRange', 'elev m', (x) => x.toFixed(0)],
+  ['climbPerKm', 'climb m/km', (x) => x.toFixed(1)],
+];
+
+function formatCharacter(c: LayoutCharacter): string {
+  return LAYOUT_COLUMNS.map(([k, label, f]) => `${label} ${f(c[k])}`).join(', ');
+}
+
+function printLayoutTable() {
+  const head = LAYOUT_COLUMNS.map(([, label]) => label.padStart(11)).join('');
+  const target = LAYOUT_COLUMNS.map(([k, , f]) => `${LAYOUT_TARGETS[k][0]}${f(LAYOUT_TARGETS[k][1])}`.padStart(11)).join('');
+  console.log(`\nLayout character (per lap; a sprint per 10 km; ideal line = stock starter flat out on boost, at its cornering limit):`);
+  console.log(`  ${'track'.padEnd(13)}${head}  missed`);
+  console.log(`  ${'target'.padEnd(13)}${target}`);
+  for (const { id, c } of layoutTable) {
+    console.log(`  ${id.padEnd(13)}${LAYOUT_COLUMNS.map(([k, , f]) => f(c[k]).padStart(11)).join('')}  ${missedTargets(c).length}`);
+  }
 }
 
 // --- Strobing: rows of lights racers fly past (render/track/rhythm.ts) ----------------------
@@ -997,5 +1047,6 @@ if (forkTable.length > 0) {
   console.log(`\nForks (stock ${MEASURE_RACER}, skill ${MEASURE_EYES}: each way's time against the main road's to ${MEASURE_TAIL} m past the rejoin, band ±${ROUTE_TIME_BAND}s):`);
   for (const line of forkTable) console.log(`  ${line}`);
 }
+printLayoutTable();
 console.log(`\n${chosen.length} tracks (${lookDev.length} look-dev), ${warnings} warnings`);
 process.exitCode = warnings > 0 ? 1 : 0;
