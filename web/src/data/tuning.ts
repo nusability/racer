@@ -547,24 +547,48 @@ export const AI_ROUTE_OBSTACLE_METRES = 40;
  */
 export const SPRINT_GRID_APRON = 120;
 /**
- * Straight run-out the builder lays beyond a sprint's finish line, metres. A finisher is held
- * on the air brake with no boost: BRAKE_DECEL stops a stock glider well inside it (250 m/s:
- * 370 m); the force field at its end (SPRINT_FIELD_*) takes over for anything faster.
+ * Straight run-out the builder lays beyond a sprint's finish line, metres: room for a finisher
+ * to glide down from race pace and fly into the force field at its end (SPRINT_FIELD_*).
  */
 export const SPRINT_RUNOUT = 750;
 /**
- * The force field closing a sprint's run-out: its membrane stands SPRINT_FIELD_BACK metres
- * before the road's end. Each racer past the finish is given a stop SPRINT_FIELD_SINK metres
- * past the membrane (its centre: its nose sinks a half length deeper, and the chase camera
- * stays clear of the sheet), each later one SPRINT_FIELD_QUEUE further back (a car length and
- * room to spare, so none rests on another). It is held on the brake, or, when the brake alone
- * would carry it past its stop, on the steady decel that brings it to rest exactly there: a
- * maxed Orbis Gyre crossing on boost in a draft (~406 m/s) eases in at ~116 m/s² where it
- * used to strike the end wall at ~190 m/s.
+ * The force field filling the end of a sprint's run-out: a block of field SPRINT_FIELD_DEPTH
+ * metres long whose far face is the road's end. It must be deep enough to be flown into, not
+ * hit: a glider entering at the field's full grip travels well over a hundred metres inside it
+ * before it rests (about 1.3 s), and three rows of finishers rest in it with room between.
  */
-export const SPRINT_FIELD_BACK = 40;
-export const SPRINT_FIELD_SINK = 0.5;
-export const SPRINT_FIELD_QUEUE = 14;
+export const SPRINT_FIELD_DEPTH = 160;
+/**
+ * The field's grip, m/s²: the hardest it slows a glider inside it. Under twice the air brake,
+ * so it reads as a magnetic brake taking hold, never as a wall (sim-check holds it to that).
+ */
+export const SPRINT_FIELD_GRIP = 150;
+/**
+ * Past the finish the engines are off and a glider coasts on drag alone, m/s², so it still
+ * carries real speed into the field (a stock glider crossing at 150 m/s enters at ~114 m/s).
+ * One too fast for the field's grip to stop in its place brakes just enough on the way to
+ * enter at the speed the grip can stop (a maxed Orbis Gyre at ~406 m/s: ~107 m/s², the brake).
+ */
+export const SPRINT_FIELD_COAST = 8;
+/**
+ * Where finishers rest, in the formation of a flight: rows of SPRINT_FIELD_LANES across the
+ * road, the first finisher at the point. The first row rests SPRINT_FIELD_FIRST_REST into the
+ * block (30 m short of the far face, so the craft and the chase camera behind it are inside
+ * the field, clear of the road's end), each later row SPRINT_FIELD_ROW shallower (two car
+ * lengths and the camera's room). Side lanes sit SPRINT_FIELD_LANE of the road's half width
+ * out from the middle (clear of each other and of the edges) and SPRINT_FIELD_STAGGER behind
+ * the point: an arrowhead, so no craft hides another from behind.
+ */
+export const SPRINT_FIELD_LANES = 3;
+export const SPRINT_FIELD_FIRST_REST = 130;
+export const SPRINT_FIELD_ROW = 28;
+export const SPRINT_FIELD_LANE = 0.5;
+export const SPRINT_FIELD_STAGGER = 10;
+/**
+ * A held glider steers to its lane at full rate until within this many metres of it, then eases
+ * in: it is in its lane long before it rests, so at rest it never slides.
+ */
+export const SPRINT_FIELD_STEER_SPAN = 2;
 
 // --- Branches: shortcuts and the routes of forks (src/core/track.ts) ---
 /** Length of the side-by-side run where a branch leaves or rejoins the main road. */

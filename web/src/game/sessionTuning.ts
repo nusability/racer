@@ -4,6 +4,8 @@
 export const SESSION_MAX_FRAME_DT = 0.1;
 /** Seconds the finished race stays on screen before the results appear. */
 export const SESSION_FINISH_LINGER = 2.5;
+/** Seconds a sprint's end vista plays before the results (the camera's ease, then a moment to take in the view). */
+export const SESSION_VISTA_LINGER = 6.5;
 /** A sprint's HUD counts it in this many equal sectors (where a circuit counts laps), flashing each one reached. */
 export const SPRINT_SECTORS = 4;
 /** Seconds "GO!" stays up. */

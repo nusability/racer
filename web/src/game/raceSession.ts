@@ -15,6 +15,8 @@ import type { AudioRival, GameAudio } from '../audio/audio.ts';
 import { CAM_HIDE_NEAR } from '../render/cameraTuning.ts';
 import { ChaseCamera } from '../render/chaseCamera.ts';
 import { WreckCamera } from '../render/wreckCamera.ts';
+import { VistaCamera } from '../render/vistaCamera.ts';
+import { planetTopDirection } from '../render/track/spaceSky.ts';
 import { Effects } from '../render/effects.ts';
 import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
 import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } from '../render/racerPose.ts';
@@ -40,6 +42,7 @@ import {
   SESSION_DUST_RANGE,
   SESSION_FPS_SMOOTHING,
   SESSION_FINISH_LINGER,
+  SESSION_VISTA_LINGER,
   SESSION_GO_SHOWN,
   SESSION_HARD_LANDING,
   SESSION_BOOST_NOZZLE_HEAT,
@@ -131,6 +134,8 @@ export class RaceSession {
   private readonly cam: ChaseCamera;
   /** Takes the chase camera's lens over while the player's debris flies. */
   private readonly wreckCam: WreckCamera;
+  /** A sprint's end: the vista once the player rests in the force field (null on a circuit). */
+  private readonly vista: VistaCamera | null;
   private readonly debris = emptyDebris();
   private readonly effects: Effects;
   private readonly speedLines: SpeedLines;
@@ -257,6 +262,11 @@ export class RaceSession {
       this.cam.camera.updateProjectionMatrix();
     }
     this.wreckCam = new WreckCamera(this.cam.camera);
+    // The best view from a sprint's end: the gas giant in space (framed on its top, which a moon's
+    // ground never hides), elsewhere the land beyond the road's end.
+    const ahead = this.track.frameAt(this.track.length).tangent;
+    const view = air.sky === 'space' ? planetTopDirection(def.palette) : new THREE.Vector3(ahead.x, 0, ahead.z);
+    this.vista = this.track.course === 'sprint' ? new VistaCamera(this.cam.camera, view) : null;
     this.scene.add(this.cam.camera);
     this.effects = new Effects(this.scene, detail);
     this.speedLines = new SpeedLines(this.cam.camera);
@@ -334,6 +344,7 @@ export class RaceSession {
     this.playerWreck = null;
     this.wreckFor = 0;
     this.wreckBannerShown = false;
+    this.vista?.reset();
     this.ctx.audio.setTimeScale(1);
     this.syncSnapshots(true);
     for (const v of this.views) {
@@ -389,7 +400,8 @@ export class RaceSession {
       }
       if (this.race.phase === 'finished' && !this.playerWreck) {
         this.finishedFor += dt;
-        if (this.finishedFor >= SESSION_FINISH_LINGER) {
+        // A sprint's results wait for the player to have taken in the view from its end.
+        if (this.finishedFor >= SESSION_FINISH_LINGER && (this.vista === null || this.vista.shown >= SESSION_VISTA_LINGER)) {
           this.finish({ request: this.request, results: this.race.results(), playerWreck: null });
           return;
         }
@@ -627,7 +639,9 @@ export class RaceSession {
     const pv = this.views[pi].draw;
     if (this.playerWreck) this.wreckCam.update(dt, real, this.views[pi].model.debris(this.debris));
     // The camera follows the interpolated pose, not the raw step, or it judders.
-    else this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y, fall: pv.falling ? pv.fall : null }, speedFrac, this.clock);
+    else if (!this.vista?.update(this.paused ? 0 : real, this.views[pi].model.root.position, p.finishTime !== null && p.speed === 0)) {
+      this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y, fall: pv.falling ? pv.fall : null }, speedFrac, this.clock);
+    }
     // Entering a shortcut or a fork's route (the main road's own route included) names it.
     const path = this.track.pathNameAt(pv.branch, pv.s);
     if (path !== this.shownPath) {

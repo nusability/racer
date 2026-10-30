@@ -3,7 +3,7 @@
 // is (a lateral target the craft chases), not its heading. The player and the AI drive the
 // same model, so the AI can never be faster than physics allows.
 
-import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
+import type { BoostCell, FieldHold, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
 import { gustAt } from './hazards.ts';
 import { cornerPull, currentTopSpeed, impactWear, roadLoad, roughOverspeed, roughWear, steerRate } from './handling.ts';
 import { mulberry32, type Rng } from './rng.ts';
@@ -75,6 +75,8 @@ import {
   SIM_DT,
   SLICK_DAMPING_FLOOR,
   SLOPE_SPEED_FACTOR,
+  SPRINT_FIELD_COAST,
+  SPRINT_FIELD_GRIP,
   TARGET_OVERREACH,
   VOID_LOST_DEPTH,
 } from '../data/tuning.ts';
@@ -112,10 +114,11 @@ export class Vehicle {
   /** Top-speed bonus (fraction) the race sets from the slipstream (src/core/slipstream.ts). */
   slip = 0;
   /**
-   * Set by the race once this racer crosses a sprint's finish line: the s its run-out's force
-   * field brings it to rest at. From then on the field alone sets its speed (see updateSpeed).
+   * Set by the race once this racer crosses a sprint's finish line: where its run-out's force
+   * field takes it and brings it to rest. From then on the field alone sets its speed (see
+   * holdForStop).
    */
-  stopAt: number | null = null;
+  hold: FieldHold | null = null;
   /** The tank ran dry and has not yet refilled to the resume level. */
   private dry = false;
   /** Seconds since the tank was last spent from: the trickle refill waits a moment. */
@@ -272,8 +275,8 @@ export class Vehicle {
   /** Auto-throttle toward the current top speed; sand caps it lower and drags. */
   private updateSpeed(ribbon: Ribbon, brake: boolean) {
     const st = this.state;
-    if (this.stopAt !== null) {
-      this.holdForStop(this.stopAt);
+    if (this.hold !== null) {
+      this.holdForStop(this.hold);
       return;
     }
     let top = currentTopSpeed(this.stats, st, st.boosting) * this.pace * (1 + this.slip);
@@ -293,19 +296,30 @@ export class Vehicle {
   }
 
   /**
-   * A sprint's force field holding a finisher: the air brake's decel, or, when that would carry
-   * it past its stop, the steady decel that brings it to rest exactly there (v² / 2d, constant
-   * along the way, so it eases in with no jolt). Speed only ever falls, and never below zero:
-   * no hard wall, no spring back. Thrust, slope and sand play no part; the field holds it.
+   * A sprint's force field holding a finisher. Inside the field, the steady decel that brings it
+   * to rest exactly at its place (v² / 2d: constant along the way, so it takes hold like a
+   * magnetic brake, with no jolt). On the way there it coasts on drag, braking only as much as
+   * it must to enter at a speed the field's grip can stop in time, and never so much that it
+   * stops short of the field. Speed only ever falls, never below zero: no wall, no spring back.
+   * Thrust, slope and sand play no part.
    */
-  private holdForStop(stopAt: number) {
+  private holdForStop(hold: FieldHold) {
     const st = this.state;
-    const room = stopAt - st.s;
+    const room = hold.s - st.s;
     if (room <= 0) {
       st.speed = 0;
       return;
     }
-    const decel = Math.max(BRAKE_DECEL, (st.speed * st.speed) / (2 * room));
+    const v2 = st.speed * st.speed;
+    const exact = v2 / (2 * room);
+    let decel: number;
+    if (st.s >= hold.entry) {
+      // Never gentler than the drag, so the last creep to its place ends (a hair short of it).
+      decel = Math.max(SPRINT_FIELD_COAST, exact);
+    } else {
+      const enter = 2 * SPRINT_FIELD_GRIP * (hold.s - hold.entry);
+      decel = v2 > enter ? Math.max(SPRINT_FIELD_COAST, (v2 - enter) / (2 * (hold.entry - st.s))) : Math.min(SPRINT_FIELD_COAST, exact);
+    }
     st.speed = Math.max(0, st.speed - decel * SIM_DT);
   }
 

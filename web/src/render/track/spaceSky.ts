@@ -238,9 +238,22 @@ void main() {
 
 /** World direction toward the planet's centre, placed from the star (see PLANET_AZIMUTH_FROM_STAR). */
 export function planetDirection(palette: TrackPalette): THREE.Vector3 {
+  return skyDirection(palette, PLANET_ELEVATION);
+}
+
+/**
+ * World direction toward the top of the planet's disc: what stands highest above a horizon (a
+ * moon's ground hides the lower disc), so a view framed on it shows the planet over the land.
+ */
+export function planetTopDirection(palette: TrackPalette): THREE.Vector3 {
+  return skyDirection(palette, PLANET_ELEVATION + PLANET_RADIUS);
+}
+
+/** A direction at the planet's azimuth and this elevation (rad). */
+function skyDirection(palette: TrackPalette, elevation: number): THREE.Vector3 {
   const sun = sunDirection(palette);
   const az = Math.atan2(sun.z, sun.x) + PLANET_AZIMUTH_FROM_STAR;
-  return new THREE.Vector3(Math.cos(PLANET_ELEVATION) * Math.cos(az), Math.sin(PLANET_ELEVATION), Math.cos(PLANET_ELEVATION) * Math.sin(az));
+  return new THREE.Vector3(Math.cos(elevation) * Math.cos(az), Math.sin(elevation), Math.cos(elevation) * Math.sin(az));
 }
 
 /** Space round the course (see the header): the sky, the stars and the light. */

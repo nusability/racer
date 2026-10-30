@@ -189,7 +189,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   for (const l of landmarks) group.add(l.landmark.group);
   checkLandmarkClearance(landmarks, ground);
   // A sprint's run-out ends in the force field that holds its finishers (core/race.ts).
-  const field = buildForceField(track, new THREE.Color(def.palette.accent));
+  const field = buildForceField(track, new THREE.Color(def.palette.accent), quality);
   if (field) {
     group.add(field.mesh);
     cullable.push(field.mesh);

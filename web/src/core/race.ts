@@ -2,7 +2,7 @@
 // circuit (laps of a loop) or a sprint (start to finish once, then a run-out to stop in).
 // Deterministic: same track, config and input tape give the same race.
 
-import type { Obstacle, PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
+import type { FieldHold, Obstacle, PlayerInput, RaceConfig, RaceEntrant, RaceEvent, RacePhase, RaceResultRow, RacerState } from './types.ts';
 import { makeFrame, type Branch, type Frame, type Ribbon, type Track } from './track.ts';
 import { AiDriver, driverSeed } from './ai.ts';
 import { Vehicle } from './vehicle.ts';
@@ -39,9 +39,13 @@ import {
   RACER_SHOVE_MIN,
   RACER_SHOVE_TARGET_TIME,
   SIM_DT,
-  SPRINT_FIELD_BACK,
-  SPRINT_FIELD_QUEUE,
-  SPRINT_FIELD_SINK,
+  SPRINT_FIELD_DEPTH,
+  SPRINT_FIELD_FIRST_REST,
+  SPRINT_FIELD_LANE,
+  SPRINT_FIELD_LANES,
+  SPRINT_FIELD_ROW,
+  SPRINT_FIELD_STAGGER,
+  SPRINT_FIELD_STEER_SPAN,
   START_BOOST_DURATION,
   PERFECT_START_WINDOW,
   FALSE_START_STALL,
@@ -105,7 +109,7 @@ export class Race {
   private readonly hazardNow = new Map<number, Obstacle[]>();
   /** Every racer's draft in the wake of the racers ahead of it. */
   private readonly slipstream: Slipstream;
-  /** Racers past a sprint's finish line so far: each is held to rest SPRINT_FIELD_QUEUE behind the one before. */
+  /** Racers past a sprint's finish line so far: the next one takes the next place in the force field's formation. */
   private held = 0;
 
   constructor(track: Track, config: RaceConfig) {
@@ -162,9 +166,9 @@ export class Race {
     const inputs = this.vehicles.map((v, i) => {
       const ai = this.drivers[i].drive(v, this.track, this.racers, this.time);
       const human = i === this.playerIndex && v.state.finishTime === null && this.phase === 'racing';
-      // Past a sprint's finish there is only the run-out: everyone glides to a stop on the brake,
-      // steering clear of the others while moving; at rest the field holds it, hands off.
-      if (v.stopAt !== null) return v.state.speed > 0 ? { ...ai, brake: true, boost: false } : AT_REST;
+      // Past a sprint's finish there is only the run-out: everyone glides into the force field,
+      // steering to its own place in the field's formation, and rests there.
+      if (v.hold !== null) return holdInput(v, v.hold);
       return human ? input : ai;
     });
     const before = this.racers.map((r) => r.distance);
@@ -461,7 +465,7 @@ export class Race {
     if (sa.crashed > 0 || sb.crashed > 0 || sa.fall !== null || sb.fall !== null || sa.branch !== sb.branch) return false;
     // Two racers the run-out's force field holds have nothing left to race for: they pass
     // through each other, so a queue easing to rest never shoves itself apart.
-    if (a.stopAt !== null && b.stopAt !== null) return false;
+    if (a.hold !== null && b.hold !== null) return false;
     return (
       Math.abs(this.track.ribbon(sa.branch).delta(sa.s, sb.s)) < RACER_LENGTH &&
       Math.abs(sb.x - sa.x) < 2 * RACER_HALF_WIDTH &&
@@ -486,21 +490,34 @@ export class Race {
   }
 
   /**
-   * A sprint's run-out ends in a force field (SPRINT_FIELD_*): a racer crossing the finish line
-   * (in the race or after it) is handed a stop SPRINT_FIELD_SINK past the field's membrane,
-   * each later one SPRINT_FIELD_QUEUE further back, and the field brings it to rest there
-   * (Vehicle.holdForStop): never at the road's end, never in a hard stop.
+   * A sprint's run-out ends in a block of force field (SPRINT_FIELD_*) reaching to the road's
+   * end: a racer crossing the finish line (in the race or after it) is handed the next place in
+   * the field's formation, and the field brings it to rest there (Vehicle.holdForStop): never
+   * at the road's end, never in a hard stop.
    */
   private forceField(v: Vehicle) {
     const st = v.state;
     if (this.track.course !== 'sprint' || st.branch >= 0) return;
     if (st.s >= this.track.length) throw new Error(`Race: ${st.id} ran through the force field to the end of ${this.track.def.id}`);
     const finish = this.track.startS + this.track.raceLength;
-    if (v.stopAt !== null || st.s < finish) return;
-    const stop = this.track.length - SPRINT_FIELD_BACK + SPRINT_FIELD_SINK - this.held * SPRINT_FIELD_QUEUE;
-    if (stop <= st.s) throw new Error(`Race: ${this.track.def.id}'s run-out has no room to hold racer ${this.held + 1}`);
-    v.stopAt = stop;
+    if (v.hold !== null || st.s < finish) return;
+    v.hold = this.fieldPlace(this.held, st.s);
     this.held++;
+  }
+
+  /**
+   * The n-th finisher's place in the field: rows of SPRINT_FIELD_LANES, the middle lane first
+   * and then out to either side, each side lane a little behind (an arrowhead), each row
+   * shallower than the last. `s` is where the racer is now: its place must lie ahead.
+   */
+  private fieldPlace(n: number, s: number): FieldHold {
+    const entry = this.track.length - SPRINT_FIELD_DEPTH;
+    const lane = n % SPRINT_FIELD_LANES;
+    // 0, then -1, 1, -2, 2…: out from the middle, alternating sides.
+    const side = lane === 0 ? 0 : (lane % 2 === 1 ? -1 : 1) * Math.ceil(lane / 2);
+    const rest = entry + SPRINT_FIELD_FIRST_REST - Math.floor(n / SPRINT_FIELD_LANES) * SPRINT_FIELD_ROW - Math.abs(side) * SPRINT_FIELD_STAGGER;
+    if (rest <= entry || rest <= s) throw new Error(`Race: ${this.track.def.id}'s force field has no room to hold racer ${n + 1}`);
+    return { entry, s: rest, x: side * SPRINT_FIELD_LANE * (this.track.widthAt(rest) / 2) };
   }
 
   /** Where on the main road a racer counts as being: a branch maps linearly onto the stretch it skips. */
@@ -554,5 +571,10 @@ const posB = { x: 0, y: 0, z: 0 };
 const frameA = makeFrame();
 const frameB = makeFrame();
 const NO_OBSTACLES: readonly Obstacle[] = [];
-/** A racer the force field holds at rest: no steer, no throttle, nothing to wobble it. */
-const AT_REST: PlayerInput = { steer: 0, nudge: 0, brake: true, boost: false };
+/**
+ * A racer the force field holds: no throttle, no boost, steering to its lane (in proportion
+ * once close, so it settles there instead of hunting across it).
+ */
+function holdInput(v: Vehicle, hold: FieldHold): PlayerInput {
+  return { steer: Math.max(-1, Math.min(1, (hold.x - v.targetX) / SPRINT_FIELD_STEER_SPAN)), nudge: 0, brake: true, boost: false };
+}

@@ -7,16 +7,17 @@ import { sideIndex } from './shape.ts';
 import { quadFacing } from './paint.ts';
 
 // Trackside furniture: the start gantry (and a sprint's finish gantry), grandstands, flags,
-// distance markers, corner chevron boards and the barriers closing a sprint's two ends. Lit
+// distance markers, corner chevron boards and the wall behind a sprint's grid (its far end is
+// open: the run-out ends in the force field, render/track/forceField.ts). Lit
 // props go into one merged mesh; their faces that must pop go into glow.
 
 const GANTRY_HEIGHT = 17;
 const GANTRY_BEAM = 4;
-/** The wall closing each end of a sprint's road: height, thickness, how far past the boundaries it reaches. */
+/** The wall behind a sprint's grid: height, thickness, how far past the boundaries it reaches. */
 const END_WALL_HEIGHT = 9;
 const END_WALL_DEPTH = 4;
 const END_WALL_REACH = 6;
-/** Chevron boards along an end wall's face, how many and their height. */
+/** Chevron boards along its face, how many and their height. */
 const END_WALL_CHEVRONS = 7;
 const END_WALL_BOARD = 3.2;
 const STAND_TIERS = 7;
@@ -88,7 +89,7 @@ export function buildDressing(cor: Corridor, props: FlatBuilder, seed: number, c
   for (const s of lines) flags(cor, props, s);
   markers(cor, props, lines[0], distance);
   chevronBoards(cor, props);
-  if (!cor.ribbon.closed) for (const end of [-1, 1] as const) endWall(cor, props, end);
+  if (!cor.ribbon.closed) gridWall(cor, props);
 }
 
 function gantry(cor: Corridor, props: FlatBuilder, s: number) {
@@ -224,22 +225,20 @@ function markers(cor: Corridor, props: FlatBuilder, start: number, distance: num
 }
 
 /**
- * The wall closing one end of a sprint's road (-1 behind the grid apron, 1 past the run-out):
- * across the whole course, boundary to boundary and a little beyond, a row of hazard
- * chevrons on the face the racers see.
+ * The wall closing a sprint's road behind the grid apron: across the whole course, boundary to
+ * boundary and a little beyond, a row of hazard chevrons on the face toward the grid.
  */
-function endWall(cor: Corridor, props: FlatBuilder, end: -1 | 1) {
+function gridWall(cor: Corridor, props: FlatBuilder) {
   const p = cor.paint;
-  const k = end < 0 ? 0 : cor.n - 1;
-  const smp = cor.ribbon.samples[k];
-  const B = basisAt(cor, k, 1, 0, smp.pos.y);
+  const smp = cor.ribbon.samples[0];
+  const B = basisAt(cor, 0, 1, 0, smp.pos.y);
   B.o = { ...smp.pos };
   const half = Math.max(smp.edgeL, smp.edgeR) + END_WALL_REACH;
-  // Standing just outside the road's end, so its face is the end of the drivable course.
-  const z = end * (END_WALL_DEPTH / 2);
+  // Standing just behind the road's start, so its face is the end of the drivable course.
+  const z = -END_WALL_DEPTH / 2;
   box(props, B, 0, z, 2 * half, END_WALL_DEPTH, -2, END_WALL_HEIGHT + 2, p.strata(smp.pos.y + END_WALL_HEIGHT / 2, 0.8, new THREE.Color()));
-  const face = z - end * (END_WALL_DEPTH / 2 + 0.05);
-  const facing = -end;
+  const face = z + END_WALL_DEPTH / 2 + 0.05;
+  const facing = 1;
   const w = (2 * half) / END_WALL_CHEVRONS;
   const y0 = END_WALL_HEIGHT / 2 - END_WALL_BOARD / 2;
   for (let i = 0; i < END_WALL_CHEVRONS; i++) {

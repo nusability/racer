@@ -408,6 +408,13 @@ export interface PlayerInput {
   boost: boolean;
 }
 
+/** Where a sprint's force field holds a finisher: main-road s where it enters the field, and the place (s, x) it rests at. */
+export interface FieldHold {
+  entry: number;
+  s: number;
+  x: number;
+}
+
 export interface RaceEntrant {
   id: string;
   name: string;

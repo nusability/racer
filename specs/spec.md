@@ -78,9 +78,14 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    craters to hop and a crater to jump, and a skim low over the gas giant's cloud tops); three of
    them fork. A course can be a point-to-point sprint, and a road can fork into routes (below).
 2. **Race**: six racers, 2–3 laps of a circuit, or one run of a point-to-point sprint: start
-   line to finish line, counted in four sectors, then a run-out where everyone glides to a
-   stop on the air brake, the fastest caught softly by a see-through force field closing its
-   end, which gives like jelly where a craft presses in. Throttle is automatic. The craft always flies along the
+   line to finish line, counted in four sectors, then a run-out with no wall at its end:
+   everyone glides on into a deep block of force field filling the road's last stretch, a
+   lattice of glowing field lines in the world's accent that parts round each craft's nose,
+   packs bright round it and sparks over its hull as it brakes it like a magnet, until it
+   hangs at rest in its place in an arrowhead formation. Once the player rests, the camera
+   cranes up and back out of the chase view, over the field, to take in the view from the
+   road's end (the gas giant in space, the land elsewhere), and then the results show.
+   Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
    buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
    glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
@@ -151,7 +156,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |
 | Laps | 2–3 per circuit, 8.9–11 km (each loop adds ~390 m of road to the ground plan) | Lap times 54–70 s on the starter racer |
-| Sprint | Raced once, 14–24 km start to finish (track-check); 120 m grid apron behind the start, 750 m run-out past the finish, closed by a force field 40 m before its end | Finishers are held on the air brake (85 m/s²), no boost; one the brake would carry past the field is eased on a steady decel (v²/2d, ~116 m/s² for a maxed Orbis Gyre at ~406 m/s) to rest 0.5 m past its membrane, never a hard stop; each later finisher rests 14 m further back, finishers pass through each other and sit still once stopped; a sprint pays like a full race, its best time is the "best run" |
+| Sprint | Raced once, 14–24 km start to finish (track-check); 120 m grid apron behind the start, 750 m run-out past the finish whose last 160 m are a block of force field (no end wall) | Past the line the engines cut: a finisher coasts at 8 m/s² (a stock glider enters the field at ~105–125 m/s), braking only as much as it must to enter at what the field's grip (150 m/s², under twice the air brake) can stop in its place (a maxed Orbis Gyre at ~370–406 m/s: ~107 m/s², entering at ~165–200 m/s); inside, a steady decel (v²/2d) to rest, never a hard stop. Places: rows of three (middle, left, right at half the road's half width), the first 130 m into the block, side lanes 10 m behind the middle, each row 28 m shallower; finishers pass through each other and sit still once stopped. The vista camera takes over at rest (4 s crane to 30 m back and 18 m up, above the field) and the results follow 6.5 s later. A sprint pays like a full race, its best time is the "best run" |
 | Forks | 2–3 routes over one stretch (left, main, right); each within ±0.6 s of the main road's way for a skilled stock driver, none both quickest by 0.25 s and no dearer on hull (track-check) | Each AI draws its route every pass, tilted ±0.25 toward the harder way by skill (difficulty = rough metres × amount + 40 m per obstacle); a hull past its shortcut limit takes the gentlest |
 | Mild rough ground | AIs ride rough stretches peaking under 0.4 amount (low bumps) at pace | Flat out over such ground costs a few % hull, less than lifting costs in time |
 | Rival parity | Every rival lifted to ≥ 98% of the player's performance index (topSpeed × (1 + 0.045 × boostPower × boostTank)) | Upgrades are a feel choice; they never trivialise a cup |

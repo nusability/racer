@@ -81,3 +81,27 @@ export const WRECK_CAM_FOV = 64;
 export const WRECK_CAM_FOV_BLEND = 1.5;
 /** Steps of the walk along the road that finds the camera's place in track space. */
 export const WRECK_CAM_PROJECT_STEPS = 4;
+
+// --- Vista camera: once the player rests in a sprint's force field (vistaCamera.ts) ---
+// Times and rates are per real second: the race is over, nothing is slowed.
+/** Seconds the camera takes to ease from the chase view into the vista: slow enough to read as a crane move, not a cut. */
+export const VISTA_CAM_EASE = 4;
+/**
+ * Where it settles: this far behind the craft (m), on the near side of the view, and this high
+ * above it: above the force field's block (render/track/forceField.ts), looking down over it,
+ * with the craft small in the foreground and the view beyond.
+ */
+export const VISTA_CAM_BACK = 30;
+export const VISTA_CAM_RISE = 18;
+/** Once there it keeps drifting, craning up and pulling back (m/s) and orbiting the craft (rad/s), so the craft slides slowly against the view. */
+export const VISTA_CAM_CRANE = 0.8;
+export const VISTA_CAM_PULL = 1.2;
+export const VISTA_CAM_ORBIT = 0.035;
+/**
+ * The camera looks along the view's heading, pitched halfway between the view and the craft
+ * below it, so both are in frame (the craft low, the view high); never steeper than the first
+ * nor shallower than the second (rad), whatever the view.
+ */
+export const VISTA_CAM_PITCH: readonly [number, number] = [-0.5, 0];
+/** A longer lens than the chase's: the planet or the land beyond stands large behind the craft. */
+export const VISTA_CAM_FOV = 62;
