@@ -74,7 +74,7 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const viewFar = atmosphere(quality, biome).cull;
   const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
-  const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : []);
+  const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : [], scenery.biome === 'city' ? scenery.streets : []);
   if (!kit.terrain) for (const v of views) hangInVoid(v.shape);
   const ground = new Ground(views, kit.ground, def.seed);
   // Landmarks first: they level the ground the corridor and terrain then read.

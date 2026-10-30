@@ -14,12 +14,17 @@ import type { BiomeKit, DressContext, Dressing } from './kit.ts';
 import { citySite } from './citySite.ts';
 import { CANYON_PER_KM, placeCity } from './cityDistricts.ts';
 import { CityParts } from './cityParts.ts';
+import { dressStreets } from './cityStreetKit.ts';
+import { streetMeshes } from './streetMeshes.ts';
 import type { AoLook } from '../../look/lookTuning.ts';
 
 // Neon Meridian: a night city. Dark asphalt streets and pale plazas off the course, a canyon of
 // lit high-rises lining it on a street grid (broken by low blocks and open squares, and kept
 // low round the inside of corners so the road ahead stays in view), towers behind them, a
 // skyline of taller towers ringing the horizon, and neon billboards on poles along the walls.
+// Where the course runs through the city's own streets (scenery.streets), the buildings come
+// right up to the pavement behind the race barriers, a street circuit (track/street.ts,
+// cityStreets.ts, cityStreetKit.ts, streetMeshes.ts).
 // The buildings are a dozen archetypes, glorious to run-down, mixed by district
 // (cityDistricts.ts, cityArchetypes.ts), drawn from a five-shape instanced kit whose windows,
 // grime and neon the shader draws (render/facade.ts). The road keeps the contrast: dark laned
@@ -101,10 +106,16 @@ function dressCity(ctx: DressContext, scenery: CityScenery, palette: TrackPalett
   const lapKm = ctx.corridors[0].ribbon.length / 1000;
   const parts = new CityParts();
   const counts = { canyon: Math.round(CANYON_PER_KM * lapKm * keep), towers: Math.round(scenery.towers * keep), skyline: Math.round(SKYLINE * keep) };
-  placeCity(ctx.ground, citySite(ctx.ground, ctx.quality), scenery, ctx.seed ^ 0xc17e, counts, ctx.quality === 'high', parts);
+  const site = citySite(ctx.ground, ctx.quality);
+  const detail = ctx.quality === 'high';
+  const streets = placeCity(ctx.ground, site, scenery, ctx.seed ^ 0xc17e, counts, detail, parts, ctx.corridors[0], keep);
+  dressStreets({ cor: ctx.corridors[0], site, parts, detail, seed: ctx.seed }, streets);
 
   const objects: THREE.Object3D[] = [];
   const owned: { dispose(): void }[] = [];
+  const street = streetMeshes(ctx.corridors[0], streets, ctx.seed);
+  owned.push(street);
+  objects.push(...street.objects);
   const mat = facadeMaterial({ palette, neon: CITY_NEON, baseShade: ao ? { amount: ao.buildingBase, height: ao.buildingHeight } : null, styled: true });
   const city = parts.meshes(mat);
   owned.push(mat, ...city.geometries);
@@ -156,7 +167,7 @@ function billboards(cor: Corridor, scenery: CityScenery, rng: Rng): { boards: TH
   const q = new THREE.Quaternion();
   for (let k = Math.floor(every / 2); k < r.samples.length; k += every) {
     const side = rng() < 0.5 ? -1 : 1;
-    if (cor.gap(k) || cor.tunnel(k) || cor.deck(k) || cor.junction(k) || cor.open(k, side) || cor.drop(k, side)) continue;
+    if (cor.gap(k) || cor.tunnel(k) || cor.deck(k) || cor.junction(k) || cor.street(k) || cor.open(k, side) || cor.drop(k, side)) continue;
     const prof = cor.profile(k, side);
     if (prof.hidden) continue;
     const walled = cor.shape.run[sideIndex(side)][k] < RUNOFF_MIN;

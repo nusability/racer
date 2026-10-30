@@ -21,7 +21,8 @@ export type SpotKind =
   | 'shortcutIn'
   | 'shortcutOut'
   | 'hazard'
-  | 'landmark';
+  | 'landmark'
+  | 'street';
 
 export interface Spot {
   kind: SpotKind;
@@ -56,6 +57,7 @@ const TAGS: Record<SpotKind, string> = {
   shortcutOut: 'SHORTCUT OUT',
   hazard: 'HAZARD',
   landmark: 'LANDMARK',
+  street: 'STREET',
 };
 
 function ribbonName(track: Track, branch: number): string {
@@ -138,6 +140,10 @@ export function trackSpots(track: Track): Spot[] {
     if (branch < -1 || (l.branch !== undefined && branch < 0)) throw new Error(`landmark ${l.kind} on ${track.def.id}: no shortcut "${l.branch}"`);
     const where = branch < 0 ? '' : ` (${ribbonName(track, branch)})`;
     spots.push({ kind: 'landmark', tag: TAGS.landmark, label: `${landmarkName(l.kind)}${where}`, branch, s: track.ribbon(branch).paramToS(l.at) });
+  }
+  const scenery = sceneryById(track.def.id);
+  if (scenery.biome === 'city') {
+    for (const st of scenery.streets) spots.push({ kind: 'street', tag: TAGS.street, label: st.name, branch: -1, s: track.paramToS(st.from) });
   }
   return spots.sort((a, b) => a.branch - b.branch || a.s - b.s);
 }

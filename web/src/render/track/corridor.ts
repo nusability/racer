@@ -24,6 +24,7 @@ import { quadFacing, rockQuad, type Paint } from './paint.ts';
 import { sideIndex, type RibbonView } from './shape.ts';
 import { portal, tunnelStrip } from './tunnel.ts';
 import { buildSupports, deckStrip, dropFace } from './deck.ts';
+import { streetStrip } from './street.ts';
 import type { AoLook } from '../look/lookTuning.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
@@ -146,6 +147,8 @@ export class Corridor {
           continue;
         }
         if (this.profile(k, side).hidden) continue;
+        // A street's lamps stand on its pavement, in the city's own street dressing.
+        if (this.street(k)) continue;
         if (sand && k % every === 0) this.scatter.pylons.push({ p: this.profile(k, side).pts[2], out, side, k, view: this.vi });
         if (!sand && k % lamps === 0) this.scatter.lights.push({ p: this.profile(k, side).pts[3], inward: { x: -out.x, y: 0, z: -out.z } });
       }
@@ -208,6 +211,9 @@ export class Corridor {
   }
   junction(k: number): boolean {
     return this.shape.junction[this.idx(k)] === 1;
+  }
+  street(k: number): boolean {
+    return this.shape.street[this.idx(k)] === 1;
   }
 
   // --- Road and run-off ribbon ---------------------------------------------------------------
@@ -283,6 +289,7 @@ export class Corridor {
       if (this.gap(k) !== this.gap(k + d) || this.tunnel(k) !== this.tunnel(k + d)) return true;
       if (this.shape.water[this.idx(k)] !== this.shape.water[this.idx(k + d)]) return true;
       if (this.deck(k) !== this.deck(k + d) || this.junction(k) !== this.junction(k + d)) return true;
+      if (this.street(k) !== this.street(k + d)) return true;
       if (this.drop(k, -1) !== this.drop(k + d, -1) || this.drop(k, 1) !== this.drop(k + d, 1)) return true;
       if (this.open(k, -1) !== this.open(k + d, -1) || this.open(k, 1) !== this.open(k + d, 1)) return true;
       for (const side of [-1, 1]) {
@@ -304,6 +311,8 @@ export class Corridor {
           for (const side of [-1, 1]) {
             if (this.open(a, side) || this.open(k, side)) continue;
             if (this.drop(a, side) && this.drop(k, side)) dropFace(this, c, a, k, side);
+            // A street's barrier is the track's wall: it stands even where a landmark covers the side.
+            else if (this.street(a) || this.street(k)) streetStrip(this, c, a, k, side);
             else if (!this.drop(a, side) && !this.drop(k, side)) this.sideStrip(c, a, k, side);
           }
           if (this.shape.water[this.idx(a)] && this.shape.water[this.idx(k)]) this.causewaySides(c, a, k);

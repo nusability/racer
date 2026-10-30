@@ -283,6 +283,15 @@ export class Ground {
     return Math.abs(near.d) > this.views[near.v].shape.outer[sideIndex(near.d)][near.k] + margin;
   }
 
+  /** True when (x, z) lies outside every ribbon's corridor geometry (checked per ribbon, as boundaryGap is). */
+  clearOfCorridors(x: number, z: number): boolean {
+    for (let v = 0; v < this.views.length; v++) {
+      const near = this.nearestOn(v, x, z);
+      if (near && Math.abs(near.d) < this.views[v].shape.outer[sideIndex(near.d)][near.k]) return false;
+    }
+    return true;
+  }
+
   /** Ground colour from the biome. */
   color(x: number, z: number, y: number, slope: number, out: THREE.Color): THREE.Color {
     return this.style.color(this, x, z, y, slope, out);

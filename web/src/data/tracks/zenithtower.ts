@@ -96,9 +96,11 @@ export const zenithtower: TrackDef = {
     { x: -1800, z: 91, y: 6.8 },
   ],
   features: [
+    // Out of the bore into the streets at the tower's foot, round its plaza to the line. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 62.6, to: 73.3 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
-    { kind: 'boostCells', at: 68.8, lateral: -27, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 68.8, lateral: -17, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 3.8, lateral: -27, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 18, lateral: 27, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 31.8, lateral: -27, count: 4, spacing: 26 },
@@ -201,6 +203,7 @@ export const zenithtowerScenery: TrackScenery = {
     { share: 1.5, mix: { ziggurat: 3, dome: 2, arcology: 1 }, grime: 0.1, neon: 0.4 },
     { share: 0.8, mix: { shanty: 2, slab: 2, capsule: 1 }, grime: 0.7, neon: 0.6 },
   ],
+  streets: [{ from: 62.6, to: 73.3, name: 'Tower Plaza', footbridges: [65.8], plaza: { at: 70, side: 1 }, stands: -1 }],
   landmarks: [
     { kind: 'stadium', at: 1.27, side: -1, distance: 40 },
     { kind: 'skyscrapers', at: 74.45, side: -1, distance: 60, scale: 1.6 },

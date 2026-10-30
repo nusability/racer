@@ -105,6 +105,19 @@ const GARDEN_LAMPS = 0.12;
 /** A landing pad's ring (share of its half width) and its edge light's dash pitch (m). */
 const PAD_RING = 0.62;
 const PAD_DASH = 4;
+/** Shopfronts: bay width (m), the glazing's sill and head over the pavement, the fascia's top (m). */
+const SHOP_BAY = 4.6;
+const SHOP_GLASS: readonly [number, number] = [0.45, 3.5];
+const SHOP_FASCIA = 4.5;
+/** Shop light: lit interiors' glow, the share of bays with a neon display, and their glow. */
+const SHOP_INTERIOR = 0.9;
+const SHOP_DISPLAY = 0.3;
+const SHOP_DISPLAY_GLOW = 1.3;
+/** At full grime this share of shopfronts is shuttered. */
+const SHOP_SHUTTERED = 0.6;
+/** Lamps and coloured lights: their glow. */
+const LAMP_GLOW = 1.6;
+const LIGHT_GLOW = 1.4;
 /** Roofs are darker than walls (they face the dark sky). */
 const ROOF_SHADE = 0.72;
 
@@ -361,9 +374,40 @@ const FRAGMENT = /* glsl */ `
       vec2 lq = vec2(along, up) / 3.0;
       emit += uWarm * step(fcHash(floor(lq) + seed), ${f(GARDEN_LAMPS)}) * fcRect(fract(lq), vec4(0.4, 0.4, 0.6, 0.6)) * 1.5;
     }
-    if (surf > ${S.garden}.5) {
+    if (surf > ${S.garden}.5 && surf < ${S.pad}.5) {
       // A pad's rim: a lit strip along the top of its edge.
       emit += neon * step(tall - up, 0.5) * on;
+    }
+    if (surf > ${S.pad}.5 && surf < ${S.shop}.5) {
+      // Shop windows between mullions over a dark plinth, a fascia of glyph signs over them.
+      vec2 sc = vec2(along / ${f(SHOP_BAY)}, up);
+      float bay = floor(sc.x);
+      float bq = fract(sc.x);
+      float glass = step(0.04, bq) * step(bq, 0.96) * step(${f(SHOP_GLASS[0])}, up) * step(up, ${f(SHOP_GLASS[1])});
+      float shut = step(fcHash(vec2(bay, seed + 1.9)), grime * ${f(SHOP_SHUTTERED)});
+      float display = step(fcHash(vec2(bay, seed + 6.1)), ${f(SHOP_DISPLAY)}) * step(0.25, bq) * step(bq, 0.75) * step(1.2, up) * step(up, 2.9);
+      vec3 interior = mix(uWarm, uCool, step(0.7, fcHash(vec2(bay, seed + 2.6))));
+      float sfw = pw.x / ${f(SHOP_BAY)};
+      float sd = 1.0 - smoothstep(0.3, 0.8, sfw);
+      // Shutters: ribbed steel, unlit.
+      diffuseColor.rgb *= mix(1.0, mix(0.35, 0.8 + 0.2 * step(0.5, fract(up * 4.0)), shut), glass);
+      emit += interior * glass * (1.0 - shut) * mix(0.6, 1.0, sd) * ${f(SHOP_INTERIOR)} * uGlow;
+      emit += fcNeonOf(floor(fcHash(vec2(bay, seed + 8.3)) * 2.999)) * display * (1.0 - shut) * ${f(SHOP_DISPLAY_GLOW)} * on;
+      float fascia = step(${f(SHOP_GLASS[1])} + 0.15, up) * step(up, ${f(SHOP_FASCIA)});
+      vec2 gc = vec2(along, up) / ${f(GLYPH * 0.6)};
+      float glyph = step(0.5, fcHash(floor(gc) + seed * 1.3)) * fcRect(fract(gc), vec4(0.15, 0.15, 0.85, 0.85));
+      float signed = step(fcHash(vec2(bay, seed + 4.7)), 1.0 - 0.5 * grime);
+      diffuseColor.rgb *= 1.0 - fascia * 0.7;
+      emit += fcNeonOf(floor(fcHash(vec2(bay, seed + 5.2)) * 2.999)) * fascia * signed * mix(0.3, glyph, sd) * ${f(SIGN_GLOW)} * on;
+      diffuseColor.rgb *= 1.0 - 0.6 * step(up, ${f(SHOP_GLASS[0])});
+    }
+    if (surf > ${S.shop}.5 && surf < ${S.lamp}.5) {
+      diffuseColor.rgb = vec3(0.1);
+      emit += uWarm * ${f(LAMP_GLOW)} * on;
+    }
+    if (surf > ${S.lamp}.5) {
+      diffuseColor.rgb = vec3(0.1);
+      emit += neon * ${f(LIGHT_GLOW)} * on;
     }
     // Shopfronts along the street, shuttered more often the grimier the street, neon-lit on a grimy one.
     float shop = shops * (1.0 - high) * step(up, ${f(SHOP_HEIGHT)}) * step(0.6, up) * step(fcHash(vec2(id.x, seed + 3.3)), ${f(SHOP_SHARE)} * (1.0 - 0.6 * grime));
@@ -389,7 +433,11 @@ const FRAGMENT = /* glsl */ `
       float leaf = fcNoise(r * 0.5 + seed);
       diffuseColor.rgb = mix(vec3(${rgb(LEAF_DARK)}), vec3(${rgb(LEAF_LIT)}), leaf);
     }
-    if (surf > ${S.garden}.5) {
+    if (surf > ${S.shop}.5) {
+      // A lamp or a light glows all over, top included.
+      diffuseColor.rgb = vec3(0.1);
+      emit += (surf < ${S.lamp}.5 ? uWarm * ${f(LAMP_GLOW)} : neon * ${f(LIGHT_GLOW)}) * on;
+    } else if (surf > ${S.garden}.5 && surf < ${S.pad}.5) {
       float rr = length(r) / max(min(rh.x, rh.y), 0.1);
       float ring = step(abs(rr - ${f(PAD_RING)}), 0.04);
       vec2 e = abs(r) / max(rh, vec2(0.1));

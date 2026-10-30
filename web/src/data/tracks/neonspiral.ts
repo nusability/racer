@@ -95,14 +95,16 @@ export const neonspiral: TrackDef = {
     { x: 0, z: -302, y: 6.4 },
   ],
   features: [
+    // Out of the last loop into the market streets: round the plaza, under the metro. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 54.6, to: 66.6 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
     { kind: 'boostCells', at: 9, lateral: -30, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 15, lateral: -30, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 21, lateral: -30, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 31, lateral: 30, count: 4, spacing: 26 },
-    { kind: 'boostCells', at: 57, lateral: 30, count: 4, spacing: 26 },
-    { kind: 'boostCells', at: 62, lateral: 30, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 57, lateral: 19, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 62, lateral: 19, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 13.09, lateral: -12, count: 1, spacing: 30 },
     { kind: 'boostCells', at: 13.31, lateral: 12, count: 1, spacing: 30 },
     { kind: 'boostCells', at: 13.54, lateral: -12, count: 1, spacing: 30 },
@@ -190,6 +192,7 @@ export const neonspiralScenery: TrackScenery = {
     { share: 2, mix: { monolith: 2, capsule: 2, slab: 2, dome: 1 }, grime: 0.45, neon: 0.85 },
     { share: 1, mix: { twist: 3, spire: 2, skybridge: 2 }, grime: 0.1, neon: 0.9 },
   ],
+  streets: [{ from: 54.6, to: 66.6, name: 'Neon Market', plaza: { at: 58, side: -1 }, metro: 60.5, stands: 1 }],
   landmarks: [
     { kind: 'neonBillboards', at: 1.07, side: -1, distance: 20 },
     { kind: 'hologramDragon', at: 20, side: 1, distance: 80 },

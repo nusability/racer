@@ -93,9 +93,11 @@ export const harborbridge: TrackDef = {
     { x: 363, z: 1800, y: 6.0 },
   ],
   features: [
+    // The harbour front: yachts at the quay on one side, shops and grandstands on the other. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 21.6, to: 33.8 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
-    { kind: 'boostCells', at: 32, lateral: -32, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 32, lateral: -20, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 40, lateral: -32, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 69, lateral: 32, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 3, lateral: 32, count: 4, spacing: 26 },
@@ -191,6 +193,7 @@ export const harborbridgeScenery: TrackScenery = {
     { share: 2, mix: { residential: 4, slab: 2, capsule: 1, ziggurat: 1 }, grime: 0.35, neon: 0.35 },
     { share: 0.8, mix: { arcology: 2, monolith: 1, dome: 1, spire: 1 }, grime: 0.15, neon: 0.4 },
   ],
+  streets: [{ from: 21.6, to: 33.8, name: 'Harbour Front', harbour: -1, footbridges: [29], stands: 1 }],
   landmarks: [
     { kind: 'stadium', at: 0.61, side: 1, distance: 40 },
     { kind: 'suspensionBridge', at: 55.5, side: -1, distance: 0, straddle: true },

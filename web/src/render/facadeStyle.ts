@@ -31,6 +31,16 @@ export const SURFACE = {
   garden: 11,
   /** A landing pad: lit edge and a ring marked on its deck. */
   pad: 12,
+  /**
+   * A street-level shopfront from the pavement up: lit shop windows between mullions (shuttered
+   * more often the grimier the street), a display glowing in the neon here and there, and a
+   * fascia over them carrying glyph signs.
+   */
+  shop: 13,
+  /** A lamp: burns warm white all over (street lamps, café strings, a kiosk's counter). */
+  lamp: 14,
+  /** A coloured light in the piece's neon hue (signals, displays, a fountain's lit jets). */
+  glow: 15,
 } as const;
 export type Surface = (typeof SURFACE)[keyof typeof SURFACE];
 

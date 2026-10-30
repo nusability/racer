@@ -14,6 +14,7 @@ import {
   WALL_TAPER,
 } from './config.ts';
 import { smoothstep } from './noise.ts';
+import { markStreets, type StreetSpans } from './street.ts';
 
 /** One drivable ribbon to dress: the main loop or a shortcut, with its authored features. */
 export interface RibbonView {
@@ -72,6 +73,10 @@ export interface CorridorShape {
   junction: Uint8Array;
   /** The road surface sits this far under its true height, so the other road of a flat X wins. */
   sink: Float32Array;
+  /** A city street section (track/street.ts): a race barrier on the kerb, a pavement behind it. */
+  street: Uint8Array;
+  /** The street's side is a harbour quay over a basin rather than a pavement under shopfronts. */
+  quay: [Uint8Array, Uint8Array];
 }
 
 /** Below this horizontal length the right vector is too steep to define the side by. */
@@ -86,7 +91,8 @@ export const sideIndex = (side: number): 0 | 1 => (side > 0 ? 1 : 0);
 /** Main-loop param spans whose run-off is water. */
 export type WaterSpans = { from: TrackParam; to: TrackParam }[];
 
-export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
+/** `streets`: the main loop's city street sections (track/street.ts), none outside a city. */
+export function ribbonViews(track: Track, water: WaterSpans, streets: StreetSpans): RibbonView[] {
   const views: RibbonView[] = [{ ribbon: track, features: track.def.features, branch: null, shape: corridorShape(track) }];
   const mainWater = views[0].shape.water;
   for (const w of water) {
@@ -113,6 +119,8 @@ export function ribbonViews(track: Track, water: WaterSpans): RibbonView[] {
       if (smp.s <= jEnd + r.step || smp.s >= xStart - r.step) open[k] = 1;
     });
   }
+  // After the junctions: a street's side that opens onto a branch has no barrier.
+  markStreets(track, views[0].shape, streets);
   return views;
 }
 
@@ -190,7 +198,7 @@ export function corridorShape(r: Ribbon): CorridorShape {
     }
   }
   const deck = Uint8Array.from(magnet);
-  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge: new Uint8Array(n), junction: new Uint8Array(n), sink: new Float32Array(n) };
+  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge: new Uint8Array(n), junction: new Uint8Array(n), sink: new Float32Array(n), street: new Uint8Array(n), quay: [new Uint8Array(n), new Uint8Array(n)] };
 }
 
 /** A course without ground under it: every sample outside a tunnel stands on a deck. */

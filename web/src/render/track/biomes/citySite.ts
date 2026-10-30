@@ -23,6 +23,14 @@ export interface CitySite {
   /** Highest roof the lot may carry (world y); Infinity where nothing caps it. */
   roofCap(lot: Lot): number;
   /**
+   * A street frontage lot (cityStreets.ts) may stand right on the building line: every point of
+   * it clear of every road's corridor (the pavement included), of the air round loops and
+   * bridges, of landmarks, and of the lots already claimed.
+   */
+  frontage(lot: Lot): boolean;
+  /** Takes the lot: no later building (grid, skyline, frontage) may overlap it. */
+  claim(lot: Lot): void;
+  /**
    * The rendered terrain under the lot: `lo` is the lowest point the base must reach (the
    * footprint grown by a terrain cell, since the mesh interpolates between its vertices),
    * `hi` the highest point inside the footprint, which the building's height is measured from.
@@ -57,6 +65,12 @@ const SIGHT_CELL = 100;
 const DROP_ROOF = 8;
 /** Points sampled across a footprint (per axis) for the landmark keep-out. */
 const LANDMARK_PROBES = 4;
+/** A frontage lot is probed every this many metres across its footprint (the pavement's width, so none slips between probes). */
+const FRONTAGE_PROBE = 6;
+/** A frontage lot keeps this far off landmark footprints: a landmark stands in its own space. */
+const FRONTAGE_LANDMARK = 6;
+/** Bucket size of the claimed-lot lookup, metres. */
+const CLAIM_CELL = 120;
 
 interface AirPoint {
   x: number;
@@ -79,9 +93,48 @@ export function citySite(ground: Ground, quality: Quality): CitySite {
   const sight = sightlines(ground.views);
   const cell = TERRAIN_TILE / TERRAIN_CELLS_NEAR[quality];
   const reachOf = (lot: Lot) => Math.hypot(lot.w, lot.d) / 2;
+  const claims = new Map<string, Lot[]>();
+  const claimKey = (i: number, j: number) => `${i},${j}`;
+  // The largest claim's reach: a lot is checked against every cell a claim reaching it could sit in.
+  let claimReach = 0;
+  const claimed = (lot: Lot) => {
+    const i = Math.floor(lot.x / CLAIM_CELL);
+    const j = Math.floor(lot.z / CLAIM_CELL);
+    const n = Math.ceil((reachOf(lot) + claimReach) / CLAIM_CELL);
+    for (let di = -n; di <= n; di++) {
+      for (let dj = -n; dj <= n; dj++) {
+        for (const c of claims.get(claimKey(i + di, j + dj)) ?? []) if (overlap(c, lot)) return true;
+      }
+    }
+    return false;
+  };
   return {
+    claim(lot) {
+      const key = claimKey(Math.floor(lot.x / CLAIM_CELL), Math.floor(lot.z / CLAIM_CELL));
+      claimReach = Math.max(claimReach, reachOf(lot));
+      const list = claims.get(key) ?? [];
+      list.push(lot);
+      claims.set(key, list);
+    },
+    frontage(lot) {
+      if (claimed(lot)) return false;
+      const reach = reachOf(lot);
+      for (const p of air) if (Math.hypot(p.x - lot.x, p.z - lot.z) < p.r + reach) return false;
+      const nw = Math.max(1, Math.ceil(lot.w / FRONTAGE_PROBE));
+      const nd = Math.max(1, Math.ceil(lot.d / FRONTAGE_PROBE));
+      for (let i = 0; i <= nw; i++) {
+        for (let j = 0; j <= nd; j++) {
+          const p = lotPoint(lot, (2 * i) / nw - 1, (2 * j) / nd - 1);
+          if (!ground.clearOfCorridors(p.x, p.z)) return false;
+          const q = lotPoint({ ...lot, w: lot.w + 2 * FRONTAGE_LANDMARK, d: lot.d + 2 * FRONTAGE_LANDMARK }, (2 * i) / nw - 1, (2 * j) / nd - 1);
+          if (ground.inFootprint(q.x, q.z)) return false;
+        }
+      }
+      return true;
+    },
     clear(lot) {
       const reach = reachOf(lot);
+      if (claimed(lot)) return false;
       if (!ground.clearOfCourse(lot.x, lot.z, BUILDING_CLEAR + reach)) return false;
       for (const p of air) if (Math.hypot(p.x - lot.x, p.z - lot.z) < p.r + reach) return false;
       const grown = { ...lot, w: lot.w + 2 * BUILDING_CLEAR, d: lot.d + 2 * BUILDING_CLEAR };
@@ -127,6 +180,28 @@ export function citySite(ground: Ground, quality: Quality): CitySite {
       return { lo, hi };
     },
   };
+}
+
+/** Whether two lots' footprints overlap (separating axes: each lot's two sides). */
+function overlap(a: Lot, b: Lot): boolean {
+  for (const yaw of [a.yaw, b.yaw]) {
+    for (const ax of [
+      { x: Math.cos(yaw), z: -Math.sin(yaw) },
+      { x: Math.sin(yaw), z: Math.cos(yaw) },
+    ]) {
+      const span = (l: Lot) => {
+        const c = l.x * ax.x + l.z * ax.z;
+        const ux = Math.cos(l.yaw) * ax.x - Math.sin(l.yaw) * ax.z;
+        const uz = Math.sin(l.yaw) * ax.x + Math.cos(l.yaw) * ax.z;
+        const r = (Math.abs(ux) * l.w + Math.abs(uz) * l.d) / 2;
+        return [c - r, c + r];
+      };
+      const [a0, a1] = span(a);
+      const [b0, b1] = span(b);
+      if (a1 <= b0 || b1 <= a0) return false;
+    }
+  }
+  return true;
 }
 
 /** World point at (a, b) ∈ [-1, 1]² across the lot (the instance matrix's rotation about +Y). */

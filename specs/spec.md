@@ -60,7 +60,15 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    corkscrew, a corkscrew that drops into a tunnel, loops on the deck of a flyover). Its city
    changes district by district, so every track has its own skyline: glass spires and holo-ad
    monoliths, domed civic towers and terraced megablocks, flats and capsule hotels, docks and
-   works, slums of grimy slabs and shanty-crusted towers under failing neon.
+   works, slums of grimy slabs and shanty-crusted towers under failing neon. Every city track
+   also runs through the city's own streets somewhere, like a street circuit: at ground level,
+   between race barriers (painted in the race livery, a debris fence above) that are the
+   track's walls, with pavements, lamps, trees, bus shelters and signals behind them, lit
+   shopfronts with awnings and café tables right on the pavement and the towers rising over
+   them, zebra crossings and lane arrows on the road, side streets closed off at their mouths,
+   and spectators along the barriers and on the terraces. Each street has its set pieces: a
+   tunnel under an office block, a plaza with a fountain inside a hairpin, the metro or a
+   footbridge overhead, grandstands between the shops, a harbour front with yachts at the quay.
    Orbital Reach, opened by the Neon Cup, is the space world: steel decks hung in the void over a
    gas giant, railed or with lit open edges (go over one and you tumble away into the void), station modules and
    asteroids to fly through, gaps in the void to jump, and loops and corkscrews held in floating

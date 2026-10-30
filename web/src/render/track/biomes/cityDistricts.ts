@@ -6,6 +6,8 @@ import { sideIndex } from '../shape.ts';
 import { ARCHETYPES, BLOCK_SCALE } from './cityArchetypes.ts';
 import { Builder, type Face, type Plot } from './cityBuilder.ts';
 import type { CityParts } from './cityParts.ts';
+import type { Corridor } from '../corridor.ts';
+import { layStreets, type Districts, type StreetLayout } from './cityStreets.ts';
 import { BUILDING_CLEAR, type CitySite, type Lot } from './citySite.ts';
 
 // Where the city's buildings stand and what each one is. A street grid round the course: the
@@ -67,16 +69,20 @@ interface Quarter {
   totals: number[];
 }
 
-/** Places the city: canyon and towers on the street grid round the course, then the skyline. */
-export function placeCity(g: Ground, site: CitySite, scenery: CityScenery, seed: number, counts: { canyon: number; towers: number; skyline: number }, detail: boolean, parts: CityParts): void {
+/**
+ * Places the city: the street sections' building lines first (they stand on the pavement), then
+ * canyon and towers on the street grid round the course, then the skyline. `keepTowers` is the
+ * share of frontage lots that carry a building over their shopfront.
+ */
+export function placeCity(g: Ground, site: CitySite, scenery: CityScenery, seed: number, counts: { canyon: number; towers: number; skyline: number }, detail: boolean, parts: CityParts, cor: Corridor, keepTowers: number): StreetLayout[] {
   const rng = mulberry32(seed);
   const quarters = districtMap(g, scenery.districts, mulberry32(seed ^ 0xd157));
-  const plant = (lot: Lot, rise: number, q: Quarter, kind: CityArchetype, small: boolean): boolean => {
+  const plant = (lot: Lot, rise: number, q: Quarter, kind: CityArchetype, small: boolean, street?: number): boolean => {
     const f = site.footing(lot);
     const plot: Plot = {
       ...lot,
       base: f.lo - BASE_SINK,
-      ground: f.hi,
+      ground: street ?? f.hi,
       top: site.roofCap(lot),
       rise,
       face: faceToCourse(g, lot),
@@ -88,8 +94,17 @@ export function placeCity(g: Ground, site: CitySite, scenery: CityScenery, seed:
     };
     return ARCHETYPES[kind](new Builder(plot));
   };
+  const districts: Districts = {
+    raise(lot, ground, rise) {
+      const q = quarters(lot.x, lot.z);
+      return plant(lot, rise, q, pick(q, rng), false, ground);
+    },
+    grime: (x, z) => quarters(x, z).district.grime,
+  };
+  const streets = layStreets(cor, scenery.streets, site, parts, mulberry32(seed ^ 0x57ee), districts, keepTowers, scenery.towerHeight);
   grid(g, site, scenery, rng, quarters, counts, plant);
   skyline(g, site, scenery, rng, quarters, counts.skyline, plant);
+  return streets;
 }
 
 type Plant = (lot: Lot, rise: number, q: Quarter, kind: CityArchetype, small: boolean) => boolean;

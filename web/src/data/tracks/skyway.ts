@@ -86,6 +86,8 @@ export const skyway: TrackDef = {
     { x: 0, z: 369, y: 21.9 },
   ],
   features: [
+    // Down off the ring road onto the start: the one stretch at street level, grandstands between the shops. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 61.2, to: 0.8 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
     { kind: 'boostCells', at: 11, lateral: -27, count: 4, spacing: 26 },
@@ -93,7 +95,7 @@ export const skyway: TrackDef = {
     { kind: 'boostCells', at: 32.6, lateral: -27, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 43, lateral: -27, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 54.6, lateral: -27, count: 4, spacing: 26 },
-    { kind: 'boostCells', at: 62.9, lateral: -27, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 62.9, lateral: -17, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 7.68, lateral: -12, count: 1, spacing: 30 },
     { kind: 'boostCells', at: 7.88, lateral: 12, count: 1, spacing: 30 },
     { kind: 'boostCells', at: 8.11, lateral: -12, count: 1, spacing: 30 },
@@ -192,6 +194,7 @@ export const skywayScenery: TrackScenery = {
     { share: 2, mix: { residential: 3, ziggurat: 2, capsule: 1, skybridge: 1 }, grime: 0.3, neon: 0.35 },
     { share: 1, mix: { industrial: 2, shell: 2, slab: 1 }, grime: 0.55, neon: 0.25 },
   ],
+  streets: [{ from: 61.2, to: 0.8, name: 'Grid Street', footbridges: [65.6], stands: -1 }],
   landmarks: [
     { kind: 'neonBillboards', at: 1.08, side: 1, distance: 20 },
     { kind: 'crane', at: 17.54, side: 1, distance: 15, hazard: 'crane' },

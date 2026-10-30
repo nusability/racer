@@ -83,6 +83,33 @@ export interface CityScenery extends SceneryBase {
    * so the character shifts along the lap: glass spires downtown, slums and plant by the docks.
    */
   districts: CityDistrict[];
+  /**
+   * Main-loop spans where the course runs through the city's own streets at ground level, like a
+   * street circuit: barriers along the kerb on both sides (the track's walls there), pavements
+   * with street furniture behind them, shopfronts right up to the pavement and the towers above.
+   * The track must wall the span on both sides and keep it at ground level (track-check).
+   */
+  streets: StreetSection[];
+}
+
+/** A street section of a city track, with its set pieces (each optional, inside from..to). */
+export interface StreetSection {
+  from: TrackParam;
+  to: TrackParam;
+  /** Shown in the level viewer and track-check, e.g. "Fountain Hairpin". */
+  name: string;
+  /** The city meets the water on this side: a quay with moored yachts instead of shopfronts. */
+  harbour?: -1 | 1;
+  /** A building block spans the road over this part: a short tunnel under it. */
+  tunnel?: { from: TrackParam; to: TrackParam };
+  /** An open plaza with a fountain on this side, centred at `at` (the inside of a hairpin). */
+  plaza?: { at: TrackParam; side: -1 | 1 };
+  /** An elevated metro line crosses over the road here. */
+  metro?: TrackParam;
+  /** Footbridges cross over the road at these points. */
+  footbridges?: TrackParam[];
+  /** Grandstands squeezed between the buildings on this side. */
+  stands?: -1 | 1;
 }
 
 /**

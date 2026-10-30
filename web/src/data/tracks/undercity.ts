@@ -92,10 +92,12 @@ export const undercity: TrackDef = {
     { x: -1600, z: 348, y: 6.0 },
   ],
   features: [
+    // The old town's streets from the start loop to the corkscrew: round its square and under the metro. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 3.6, to: 14.6 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
-    { kind: 'boostCells', at: 6, lateral: -29, count: 4, spacing: 26 },
-    { kind: 'boostCells', at: 13.6, lateral: -29, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 6, lateral: -18, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 13.6, lateral: -18, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 32, lateral: 29, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 42, lateral: 29, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 68, lateral: -29, count: 4, spacing: 26 },
@@ -191,6 +193,7 @@ export const undercityScenery: TrackScenery = {
     { share: 2, mix: { industrial: 5, shell: 2, slab: 1 }, grime: 0.75, neon: 0.2 },
     { share: 1, mix: { residential: 2, slab: 2, shell: 2, monolith: 1 }, grime: 0.65, neon: 0.4 },
   ],
+  streets: [{ from: 3.6, to: 14.6, name: 'Old Town', plaza: { at: 7, side: 1 }, metro: 10.2, footbridges: [13.2] }],
   landmarks: [
     { kind: 'skyscrapers', at: 1.08, side: -1, distance: 30 },
     { kind: 'maglev', at: 59.26, side: 1, distance: 20, hazard: 'maglev' },

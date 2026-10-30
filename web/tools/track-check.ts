@@ -2,7 +2,8 @@
 // corner radii, widths, jump clear speeds, flight paths that hit something, whether every
 // obstacle leaves an open way round, shortcut sanity and saving, how evenly a fork's routes
 // race, parts of the course that crowd each other, and rows of lights that would strobe at
-// speed. Exit code 1 when any check warns.
+// speed, and that city street sections are walled roads at ground level. Exit code 1 when any
+// check warns.
 import { TRACKS, sceneryById, trackById } from '../src/data/tracks/index.ts';
 import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
@@ -478,6 +479,51 @@ function checkVoid(t: Track, def: TrackDef, warn: string[]) {
   }
 }
 
+// --- City streets: sections raced through the city's own streets (scenery.streets) ------------
+// The barriers drawn along a street's kerbs are the track's walls, so the section must be walled
+// both sides; the street is at ground level, under buildings that come right to the pavement; and
+// with a tunnel block, the metro and footbridges overhead, nothing may throw a racer into the air.
+
+/** A street runs at most this far above the lap's lowest road (the city floor sits a fixed step under it), metres. */
+const STREET_LEVEL = 4;
+/** A street's side counts as walled under this much run-off, metres. */
+const STREET_WALLED = 1;
+
+function checkStreets(t: Track, def: TrackDef, warn: string[]) {
+  const scenery = sceneryById(def.id);
+  if (scenery.biome !== 'city') return;
+  if (scenery.streets.length === 0) warn.push('streets: a city track runs through its own streets somewhere (scenery.streets)');
+  const low = Math.min(...t.samples.map((p) => p.pos.y));
+  const junction = (s: number) =>
+    t.branches.some((b) => [b.entryS, b.exitS - BRANCH_JUNCTION_LENGTH].some((j) => t.delta(j, s) >= 0 && t.delta(j, s) <= BRANCH_JUNCTION_LENGTH));
+  for (const st of scenery.streets) {
+    const s0 = t.paramToS(st.from);
+    const len = t.wrap(t.paramToS(st.to) - s0);
+    const label = `street "${st.name}" @${st.from}..${st.to}`;
+    const inside = (p: number) => t.wrap(t.paramToS(p) - s0) <= len;
+    const pieces = [st.harbour ? 'harbour' : '', st.tunnel ? 'tunnel' : '', st.plaza ? 'plaza' : '', st.metro !== undefined ? 'metro' : '', st.footbridges?.length ? `${st.footbridges.length} footbridge(s)` : '', st.stands ? 'grandstands' : ''];
+    console.log(`  ${label}: ${fmt(len)}m  ${pieces.filter((x) => x).join(', ')}`);
+    // The samples a feature over the same span covers (core/track.ts forRange).
+    const k0 = Math.ceil(s0 / t.step - 1e-9);
+    for (let q = 0; (k0 + q) * t.step - s0 <= len + 1e-9; q++) {
+      const smp = t.samples[(k0 + q) % t.samples.length];
+      const what = smp.gap ? 'a chasm' : smp.magnet ? 'a loop or corkscrew' : Number.isFinite(smp.ceiling) ? 'a tunnel' : smp.dropL || smp.dropR ? 'an open drop' : smp.pos.y - low > STREET_LEVEL ? `${fmt(smp.pos.y - low)}m up` : null;
+      if (what) {
+        warn.push(`${label}: runs over ${what} at s=${fmt(smp.s)}: a street is a road at ground level`);
+        break;
+      }
+      if (!junction(smp.s) && (smp.edgeL - smp.width / 2 >= STREET_WALLED || smp.edgeR - smp.width / 2 >= STREET_WALLED)) {
+        warn.push(`${label}: run-off at s=${fmt(smp.s)}: a street has barriers (walls) on both sides`);
+        break;
+      }
+    }
+    for (const j of t.jumps) if (t.wrap(j.rampStart - s0) <= len || t.wrap(j.gapEnd - s0) <= len) warn.push(`${label}: a jump in a street throws racers into what stands overhead`);
+    for (const f of def.features) if (f.kind === 'kicker' && inside(f.at)) warn.push(`${label}: kicker @${f.at} in a street throws racers into what stands overhead`);
+    const pieceAt = [...(st.tunnel ? [st.tunnel.from, st.tunnel.to] : []), ...(st.plaza ? [st.plaza.at] : []), ...(st.metro !== undefined ? [st.metro] : []), ...(st.footbridges ?? [])];
+    for (const p of pieceAt) if (!inside(p)) warn.push(`${label}: set piece @${p} lies outside the section`);
+  }
+}
+
 function checkCrossings(t: Track, warn: string[]) {
   for (const c of t.crossings) {
     const a = t.sampleAt(c.s);
@@ -815,6 +861,7 @@ function check(def: TrackDef): string[] {
   if (lineR < RUNOUT_MIN_RADIUS) warn.push(`${def.course === 'circuit' ? 'start line' : 'start or finish line'} not on a straight (radius ${fmt(lineR)}m)`);
   checkWorld(t, def, warn);
   checkVoid(t, def, warn);
+  checkStreets(t, def, warn);
 
   const J = BRANCH_JUNCTION_LENGTH;
   for (const b of t.branches) {

@@ -78,9 +78,11 @@ export const downtown: TrackDef = {
     { x: 0, z: 175, y: 6.0 },
   ],
   features: [
+    // The north boulevard is a street circuit: under an office block, past the footbridge and round the fountain plaza. Barriers on the kerb both sides: walled.
+    { kind: 'walls', from: 4.3, to: 15.6 },
     // Boost cells cost line: strings wide of the apexes, S-chains on the straights and one
     // string across the road; none sits on the racing line.
-    { kind: 'boostCells', at: 11.25, lateral: -34, count: 4, spacing: 26 },
+    { kind: 'boostCells', at: 11.25, lateral: -22, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 23.25, lateral: -34, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 41.25, lateral: -34, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 53.25, lateral: -34, count: 4, spacing: 26 },
@@ -182,6 +184,7 @@ export const downtownScenery: TrackScenery = {
     { share: 1.5, mix: { dome: 3, ziggurat: 2, residential: 2, spire: 1 }, grime: 0.15, neon: 0.3 },
     { share: 1, mix: { residential: 3, capsule: 1, monolith: 1, slab: 1 }, grime: 0.3, neon: 0.5 },
   ],
+  streets: [{ from: 4.3, to: 15.6, name: 'Fountain Boulevard', tunnel: { from: 6.5, to: 7.2 }, footbridges: [9.2], plaza: { at: 12.5, side: 1 }, stands: -1 }],
   landmarks: [
     { kind: 'stadium', at: 0.6, side: -1, distance: 40 },
     { kind: 'maglev', at: 19.29, side: -1, distance: 20, hazard: 'maglev' },
