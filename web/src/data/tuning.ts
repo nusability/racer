@@ -88,12 +88,16 @@ export const FINISH_GRACE = 20;
 export const CATCHUP_START_GAP = 60;
 /** Gap where it reaches full strength. */
 export const CATCHUP_FULL_GAP = 450;
-/** Top speed an AI far ahead gives up (fraction). */
-export const CATCHUP_EASE = 0.03;
+/**
+ * Top speed an AI far ahead gives up (fraction). Mild: rivals have their own pace now (each
+ * rival's form, data/rivalSkills.ts), and a stronger band would gather the field back into a
+ * bunch that the player passes, or is passed by, all at once.
+ */
+export const CATCHUP_EASE = 0.01;
 /** Top speed an AI far behind gains (fraction): the most an AI ever exceeds its stats outside a
  * slipstream. Small, so a pack reeling the player in does it in the player's wake, not by magic;
  * behind like that, AIs still boost freely. */
-export const CATCHUP_PUSH = 0.05;
+export const CATCHUP_PUSH = 0.015;
 
 // Slipstream (src/core/slipstream.ts): every racer, player and AI alike, rides the wake of a
 // racer just ahead of it on the same ribbon. Distances along s are bumper to bumper.

@@ -71,7 +71,8 @@ export function rivalEntrant(rival: RivalDef, player?: RaceEntrant): RaceEntrant
     id: rival.id,
     name: rival.name,
     racerId: machine.racerId,
-    stats: machine.stats,
+    // The rival's form: its machine trimmed to its own pace, so the field strings out.
+    stats: { ...machine.stats, topSpeed: machine.stats.topSpeed * rival.pace },
     isPlayer: false,
     skill: rival.skill,
   };

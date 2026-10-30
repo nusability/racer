@@ -19,6 +19,12 @@ const WAIT: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
 const TIMEOUT_PER_LAP = 240;
 /** Seconds after GO before position changes count: the grid sorts itself out first. */
 const START_SHUFFLE = 5;
+/**
+ * A "bulk pass": the bot gains or loses at least this many places within BULK_WINDOW seconds,
+ * passing (or being passed by) a group at once rather than one rival at a time.
+ */
+const BULK_PLACES = 3;
+const BULK_WINDOW = 3;
 /** Races per track per bot (different seeds) to average out luck. */
 export const STUDY_RUNS = 5;
 const STUDY_SEED = 7000;
@@ -91,6 +97,12 @@ interface Outcome {
   overtakes: number;
   /** Share of its race the bot spent boosting. */
   boostShare: number;
+  /** Seconds between consecutive finishers (wrecks left out; a rival still running at the end by its pace). */
+  finishGaps: number[];
+  /** Seconds from the first finisher to the last. */
+  fieldSpread: number;
+  /** Times the bot gained or lost BULK_PLACES or more places within BULK_WINDOW seconds. */
+  bulkPasses: number;
   /** Championship points every entrant scored, by entrant id. */
   points: Map<string, number>;
 }
@@ -110,6 +122,9 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   let overtakes = 0;
   let boosting = 0;
   let place = me.place;
+  let bulkPasses = 0;
+  // The bot's place over the last BULK_WINDOW seconds, oldest first.
+  const recent: { time: number; place: number }[] = [];
   for (let n = 0; race.phase !== 'finished'; n++) {
     if (n > maxSteps) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} race timed out`);
     race.step(race.phase === 'countdown' ? WAIT : drive(race));
@@ -121,6 +136,13 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     if (race.time > START_SHUFFLE) {
       if (me.place > place) passed += me.place - place;
       if (me.place < place) overtakes += place - me.place;
+      recent.push({ time: race.time, place: me.place });
+      while (recent[0].time < race.time - BULK_WINDOW) recent.shift();
+      if (recent.some((p) => Math.abs(p.place - me.place) >= BULK_PLACES)) {
+        bulkPasses++;
+        // One swing is one bulk pass: start the window afresh from here.
+        recent.length = 0;
+      }
     }
     place = me.place;
     if (me.finishTime !== null && rivalEta === Infinity) {
@@ -136,6 +158,13 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const wreck = (Object.keys(c) as (keyof typeof c)[]).find((k) => c[k] > 0) ?? null;
   if (me.finishTime === null && wreck === null) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} neither finished nor wrecked`);
   const points = new Map(race.results().map((r) => [r.id, CUP_POINTS[r.place - 1]]));
+  // Everyone's finishing time; one still running when the race ended gets it from its pace so far.
+  const total = track.raceLength * track.def.laps;
+  const finishes = race.racers
+    .filter((r) => r.crashed <= 0)
+    .map((r) => r.finishTime ?? race.time + (total - r.distance) / (r.distance / race.time))
+    .sort((a, b) => a - b);
+  const finishGaps = finishes.slice(1).map((t, i) => t - finishes[i]);
   const rivals = race.racers.filter((r) => r !== me);
   const winner = Math.min(...race.racers.map((r) => r.finishTime ?? Infinity));
   // Only a circuit laps: a sprint is one run.
@@ -151,6 +180,9 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     passed,
     overtakes,
     boostShare: boosting / Math.max(SIM_DT, me.finishTime ?? race.time),
+    finishGaps,
+    fieldSpread: finishes.length > 1 ? finishes[finishes.length - 1] - finishes[0] : 0,
+    bulkPasses,
     points,
   };
 }
@@ -211,6 +243,15 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
   console.log(
     `  per race: mean place ${mean((o) => o.place)}, lead changes ${mean((o) => o.leadChanges)}, bot passed ${mean((o) => o.passed)}x, ` +
       `bot overtook ${mean((o) => o.overtakes)}x, bot boosting ${Math.round(100 * all.reduce((t, o) => t + o.boostShare, 0) / all.length)}% of its race`,
+  );
+  const median = (xs: number[]) => {
+    const q = [...xs].sort((a, b) => a - b);
+    return q.length ? q[Math.floor(q.length / 2)] : NaN;
+  };
+  const gaps = all.flatMap((o) => o.finishGaps);
+  console.log(
+    `  field: median gap between consecutive finishers ${fmt(median(gaps))} s (${Math.round((100 * gaps.filter((g) => g < 1).length) / Math.max(1, gaps.length))}% under 1 s), ` +
+      `1st to last median ${fmt(median(all.map((o) => o.fieldSpread)))} s; bulk passes (${BULK_PLACES}+ places in ${BULK_WINDOW} s) ${mean((o) => o.bulkPasses)} per race`,
   );
   const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);
   if (margins.length) {
