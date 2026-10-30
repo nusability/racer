@@ -128,8 +128,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 70% top speed and extra drag, no damage |
 | Obstacle hit | Within 25% of dead centre above 60% top speed = wreck; else 0.7 × centrality × pace ÷ armour hull | Solid hits cost 35–55% hull, glancing 10–20% |
-| Walls | Impact damage above 8 m/s sideways; grinding 3% hull/s | Never slows a racer below 65% top speed |
-| Racer contact | Shoved apart by closing speed, split by armour; 0.002 hull per m/s above 8 m/s | One hit per pair per second |
+| Walls | Impact hull 0.35 × ((v⊥ − 3)/27)^1.5 ÷ armour: 5 m/s ~1%, 10 m/s ~5%, 20 m/s ~18%, 30 m/s ~35%, 45 m/s ~70%; scraping 8% hull/s at top speed (less slower) | Never slows a racer below 65% top speed; a brush is cheap, a swerve into the wall at speed is serious |
+| Racer contact | Shoved apart by closing speed, split by armour; hull 0.25 × ((closing − 5)/25)^1.5 ÷ armour each: 10 m/s ~2%, 20 m/s ~12%, 30 m/s ~25% | One hit per pair per second. Rivals (skill ≥ 0.3) never steer into one alongside unless rock ahead needs the room, and every AI lifts rather than rear-end the racer ahead |
 | Repair cell | +25% hull | Once per racer per lap |
 | Loop | Radius ≥ 80 m (160 m tall, ~510 m of road, crown no tighter than half the radius); below 75 m/s in the upper half = wreck | Racers are held to the surface in loops and corkscrews; flat out the starter tops a loop at ~137 m/s, so only braking up the climb stalls. A corkscrew rolls at most once per 200 m |
 | Shortcuts | 1–2 per track, 18–22 m wide, walled | Stock glider, measured (track-check): flat out saves 1.5–3.5 s for 25–45% hull; lifting saves 0.2–2 s for ≤ 10%, and at least 0.8 s less than flat out |

@@ -72,6 +72,12 @@ import {
   AI_SHORTCUT_LO,
   AI_SHORTCUT_LOOK_TIME,
   AI_SKILL_CURVE,
+  AI_ASIDE_ALONG,
+  AI_ASIDE_GAP,
+  AI_ASIDE_IN_LINE,
+  AI_TAIL_MARGIN,
+  AI_TAIL_REACTION_HI,
+  AI_TAIL_REACTION_LO,
   AI_START_BOOST_CHANCE,
   AI_FALSE_START_CHANCE,
   AI_TARGET_NOISE,
@@ -214,6 +220,11 @@ export class AiDriver {
     if (st.damage >= AI_REPAIR_WANT) target = this.repairDetour(veh, ribbon, target, lineLook);
     const route = this.routeChoice(track, st, v, target);
     target = route.x;
+    // A glance at the mirrors: the line it wants never runs into a rival alongside.
+    const mirrors = this.skill >= AI_AVOID_RACERS_SKILL;
+    if (mirrors) target = this.keepAside(st, ribbon, field, target);
+    // Rock or a hazard close ahead: the path planner's call (rivals in it) beats the mirrors'.
+    let rockAhead = false;
 
     // 2. Obstacles, arches and racers ahead hand the target to the path planner.
     const obsLook = v * this.bySkill(AI_OBSTACLE_LOOK_TIME_LO, AI_OBSTACLE_LOOK_TIME_HI);
@@ -231,6 +242,7 @@ export class AiDriver {
       blockers.length = 0;
       for (const o of ribbon.obstaclesNear(st.s, RACER_LENGTH, obsLook, this.obstacleBuf)) blockers.push(o);
       this.addHazardBlockers(st, ribbon, v, obsLook, time, blockers);
+      rockAhead = blockers.length > 0;
       // Skilled pilots steer clear of rivals; the rest trade paint.
       if (this.skill >= AI_AVOID_RACERS_SKILL) this.addRacerBlockers(st, ribbon, field, blockers);
       if (blockers.length === 0) this.planAge = Infinity;
@@ -262,12 +274,15 @@ export class AiDriver {
       }
     }
     target += this.noise;
+    if (mirrors && !rockAhead) target = this.keepAside(st, ribbon, field, target);
     this.aimX = target;
     // Act on what was seen a reaction time ago (an empty history means the current target).
     this.seen.push(target);
     const lag = Math.round(this.bySkill(AI_REACTION_LO, AI_REACTION_HI) / SIM_DT);
     while (this.seen.length > lag + 1) this.seen.shift();
     target = this.seen[0];
+    // ...and the mirrors are checked again when acting, however late the driver acts.
+    if (mirrors && !rockAhead) target = this.keepAside(st, ribbon, field, target);
 
     // 3. Speed: brake when a bend ahead can't be held at this speed in the distance left.
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);
@@ -285,6 +300,7 @@ export class AiDriver {
     // A loop ahead wants all the speed there is: stalling at its top is a wreck.
     const loopAhead = profiles.loopAhead[Math.floor(ribbon.wrap(st.s) / ribbon.step) % profiles.loopAhead.length] === 1;
     if (this.crossTrafficAhead(st, ribbon, field, v)) brake = true;
+    if (this.tailAhead(st, ribbon, field)) brake = true;
     if (v < jumpSpeed || st.airborne || loopAhead) brake = false;
 
     // 4. Steer the target onto where it should be, cancelling the corner drift.
@@ -598,6 +614,46 @@ export class AiDriver {
     const made = { brake: envelope(BRAKE_DECEL), boost, boostRun, loopAhead, rough };
     this.profiles.set(ribbon, made);
     return made;
+  }
+
+  /**
+   * A racer straight ahead that this one would run into before the brake could match its speed
+   * (after this driver's moment to react, with a little room to spare): lift, rather than
+   * rear-end it. Every AI does it, novices late. Steering round it is the planner's job; this is
+   * for when there is no time or no lane, as off the grid.
+   */
+  private tailAhead(st: RacerState, ribbon: Ribbon, field: readonly RacerState[]): boolean {
+    for (const r of field) {
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || r.fall !== null) continue;
+      if (Math.abs(r.x - st.x) >= 2 * RACER_HALF_WIDTH + AI_TAIL_MARGIN) continue;
+      const gap = ribbon.delta(st.s, r.s) - RACER_LENGTH;
+      const closing = st.speed - r.speed;
+      if (gap < 0 || closing <= 0) continue;
+      const react = this.bySkill(AI_TAIL_REACTION_LO, AI_TAIL_REACTION_HI);
+      if (gap < (closing * closing) / (2 * BRAKE_DECEL) + closing * react + AI_TAIL_MARGIN) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The target kept clear of rivals alongside (overlapping along the road, or nearly): on each
+   * side, no closer than touching plus AI_ASIDE_GAP to the nearest. Squeezed from both sides, the
+   * middle of the gap. A rival dead in line is the tail check's (see tailAhead).
+   */
+  private keepAside(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], target: number): number {
+    const reach = 2 * RACER_HALF_WIDTH + AI_ASIDE_GAP;
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (const r of field) {
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || r.fall !== null) continue;
+      if (Math.abs(ribbon.delta(st.s, r.s)) >= RACER_LENGTH * AI_ASIDE_ALONG) continue;
+      const dx = r.x - st.x;
+      if (Math.abs(dx) < AI_ASIDE_IN_LINE) continue;
+      if (dx > 0) hi = Math.min(hi, r.x - reach);
+      else lo = Math.max(lo, r.x + reach);
+    }
+    if (lo > hi) return (lo + hi) / 2;
+    return clamp(target, lo, hi);
   }
 
   /** Racers on the same ribbon we are catching, placed where we would meet them. */

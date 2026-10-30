@@ -8,6 +8,7 @@ import {
   DAMAGE_TOP_SPEED_LOSS,
   GRIP_REF,
   HANDLING_REF,
+  IMPACT_DAMAGE_EXP,
   ROUGH_DAMAGE,
   ROUGH_DAMAGE_EXP,
   ROUGH_SAFE_SPEED,
@@ -27,6 +28,14 @@ export function steerRate(stats: RacerStats): number {
 export function cornerPull(stats: RacerStats, curvature: number, speed: number, brake: boolean, surfaceGrip: number): number {
   const pull = -curvature * speed * speed * CORNER_PULL * (GRIP_REF / (stats.grip * surfaceGrip));
   return brake ? pull * CORNER_PULL_BRAKE : pull;
+}
+
+/**
+ * Hull (before armour) a hit closing at `speed` m/s costs: nothing up to `free`, then rising to
+ * the power IMPACT_DAMAGE_EXP to `atRef` at `ref` m/s. Walls and rivals each pass their own.
+ */
+export function impactWear(speed: number, free: number, ref: number, atRef: number): number {
+  return atRef * (Math.max(0, speed - free) / (ref - free)) ** IMPACT_DAMAGE_EXP;
 }
 
 /** Top speed right now, given damage and whether boost is active. */

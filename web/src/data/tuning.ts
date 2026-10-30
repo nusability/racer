@@ -191,12 +191,25 @@ export const BOUNDARY_SPEED_LOSS = 0.6;
 export const BOUNDARY_GRIND_SPEED = 0.65;
 /** Sideways speed into a boundary that makes contact an impact rather than a press, m/s. */
 export const BOUNDARY_IMPACT_SPEED = 4;
-/** Boundary hits below this sideways speed do no damage, m/s. */
-export const BOUNDARY_DAMAGE_FREE_SPEED = 8;
-/** Damage per m/s of sideways speed above the free speed (before armour). */
-export const BOUNDARY_DAMAGE_PER_SPEED = 0.006;
-/** Grinding along a boundary wears the hull too, per second (before armour). */
-export const BOUNDARY_GRIND_DAMAGE = 0.03;
+/**
+ * A hit's hull cost rises with its closing speed past a free speed to this power (walls and
+ * rivals alike, see impactWear): a brush costs next to nothing, twice the speed costs nearly
+ * three times the hull, and a slam at speed is serious.
+ */
+export const IMPACT_DAMAGE_EXP = 1.5;
+/** Boundary hits below this sideways speed do no damage, m/s: a brush against the wall is free. */
+export const BOUNDARY_DAMAGE_FREE_SPEED = 3;
+/**
+ * Hull (before armour) a wall hit at BOUNDARY_DAMAGE_REF_SPEED sideways costs: a third of a
+ * stock hull for swerving into it flat out. 10 m/s costs ~5%, 20 m/s ~18%, 45 m/s ~70%.
+ */
+export const BOUNDARY_DAMAGE = 0.35;
+export const BOUNDARY_DAMAGE_REF_SPEED = 30;
+/**
+ * Grinding along a boundary wears the hull too: this much per second at the glider's top speed
+ * (before armour), less as it slows. Scrapes add up: three seconds of wall is a quarter hull.
+ */
+export const BOUNDARY_GRIND_DAMAGE = 0.08;
 /** Fraction of the sideways speed bounced back off a boundary. */
 export const BOUNDARY_RESTITUTION = 0.3;
 /** Scrape intensity of a gentle grind; impact speed adds to it. */
@@ -244,9 +257,14 @@ export const RACER_SHOVE_MIN = 4;
 /** A shove moves the victim's line this many seconds' worth: a nudge sends it off its line. */
 export const RACER_SHOVE_TARGET_TIME = 0.25;
 /** Racer contacts closing slower than this do no damage, m/s: rubbing is free, ramming is not. */
-export const RACER_DAMAGE_FREE_SPEED = 8;
-/** Hull per m/s of closing speed above that in a racer contact (before armour). */
-export const RACER_DAMAGE_PER_SPEED = 0.002;
+export const RACER_DAMAGE_FREE_SPEED = 5;
+/**
+ * Hull (before armour) each racer loses in a contact closing at RACER_DAMAGE_REF_SPEED (see
+ * impactWear): a quarter of a stock hull for a full-blooded ram. A 10 m/s swipe costs ~2%,
+ * 20 m/s ~12%.
+ */
+export const RACER_DAMAGE = 0.25;
+export const RACER_DAMAGE_REF_SPEED = 30;
 /** Forward speed both racers lose per m/s of a side contact's closing speed: trading paint costs time. */
 export const RACER_SCRUB = 0.3;
 /** Fraction of the speed difference exchanged in a nose-to-tail bump. */
@@ -424,8 +442,29 @@ export const AI_HAZARD_TIME_MARGIN = 0.3;
 export const AI_REPAIR_WANT = 0.35;
 /** It swerves for a repair cell within this of its line, metres. */
 export const AI_REPAIR_DETOUR = 20;
-/** AIs at or above this skill steer around rivals; below it they bump and barge. */
-export const AI_AVOID_RACERS_SKILL = 0.5;
+/**
+ * AIs at or above this skill steer around rivals; below it they bump and barge. Contacts are
+ * dear, so every cup rival (skill 0.32 and up) looks out for the others; only the clumsiest don't.
+ */
+export const AI_AVOID_RACERS_SKILL = 0.3;
+/**
+ * An AI that would rear-end the racer straight ahead before its brake could match that one's
+ * speed lifts: it reckons on this long to react (a novice later than an ace, so it still bumps,
+ * just softer), and keeps this much room (metres, also the sideways overlap that counts as
+ * straight ahead). Contacts cost hull, off the grid most of all.
+ */
+export const AI_TAIL_REACTION_LO = 0.15;
+export const AI_TAIL_REACTION_HI = 0.05;
+export const AI_TAIL_MARGIN = 1;
+/**
+ * An AI that avoids rivals (AI_AVOID_RACERS_SKILL) never steers its target closer than touching
+ * plus AI_ASIDE_GAP metres to a rival alongside: one within AI_ASIDE_ALONG car lengths along the
+ * road and more than AI_ASIDE_IN_LINE metres to one side (closer than that it is dead ahead or
+ * behind, and the tail check's).
+ */
+export const AI_ASIDE_GAP = 1;
+export const AI_ASIDE_ALONG = 1.5;
+export const AI_ASIDE_IN_LINE = 0.5;
 /** How far toward a rival's line an AI tucks in to draft it (0..1 of the offset): aces ride wakes. */
 export const AI_DRAFT_TUCK_LO = 0;
 export const AI_DRAFT_TUCK_HI = 1;
@@ -445,7 +484,7 @@ export const AI_DRAFT_PASS_CLEARANCE = 1.5;
  * damage-free closing speed (RACER_DAMAGE_FREE_SPEED), so a pull-out that does touch a rival
  * rubs rather than rams.
  */
-export const AI_DRAFT_SHIFT_RATE = 6;
+export const AI_DRAFT_SHIFT_RATE = 4.5;
 /** Arrival-time window (s) inside which an AI yields to cross traffic at a flat crossing. */
 export const AI_CROSSING_WINDOW_LO = 0;
 export const AI_CROSSING_WINDOW_HI = 0.7;

@@ -9,6 +9,7 @@ import { Vehicle } from './vehicle.ts';
 import { hazardObstacles } from './hazards.ts';
 import { junctionBounds, type JunctionBounds } from './junction.ts';
 import { Slipstream } from './slipstream.ts';
+import { impactWear } from './handling.ts';
 import {
   AUTOPILOT_SKILL,
   BRANCH_JUNCTION_LENGTH,
@@ -26,8 +27,9 @@ import {
   RACER_BUMP_SHARE,
   RACER_CONTACT_COOLDOWN,
   RACER_HALF_WIDTH,
+  RACER_DAMAGE,
   RACER_DAMAGE_FREE_SPEED,
-  RACER_DAMAGE_PER_SPEED,
+  RACER_DAMAGE_REF_SPEED,
   RACER_HEIGHT,
   RACER_HIT_INTENSITY_SPEED,
   RACER_LENGTH,
@@ -357,8 +359,9 @@ export class Race {
           }
         }
         if (!fresh) continue;
-        a.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
-        b.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
+        const wear = impactWear(closing, RACER_DAMAGE_FREE_SPEED, RACER_DAMAGE_REF_SPEED, RACER_DAMAGE);
+        a.harm(wear, events);
+        b.harm(wear, events);
         const intensity = Math.min(1, closing / RACER_HIT_INTENSITY_SPEED);
         events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity });
         events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity });
@@ -416,8 +419,9 @@ export class Race {
         push(a, fa, -1, shareA, impulse);
         push(b, fb, 1, shareB, impulse);
         if (!fresh) continue;
-        a.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
-        b.harm(Math.max(0, closing - RACER_DAMAGE_FREE_SPEED) * RACER_DAMAGE_PER_SPEED, events);
+        const wear = impactWear(closing, RACER_DAMAGE_FREE_SPEED, RACER_DAMAGE_REF_SPEED, RACER_DAMAGE);
+        a.harm(wear, events);
+        b.harm(wear, events);
         const intensity = Math.min(1, closing / RACER_HIT_INTENSITY_SPEED);
         events.push({ type: 'hit', id: a.state.id, kind: 'racer', intensity });
         events.push({ type: 'hit', id: b.state.id, kind: 'racer', intensity });

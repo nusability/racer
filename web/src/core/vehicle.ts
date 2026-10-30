@@ -5,7 +5,7 @@
 
 import type { BoostCell, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
 import { gustAt } from './hazards.ts';
-import { cornerPull, currentTopSpeed, roughOverspeed, roughWear, steerRate } from './handling.ts';
+import { cornerPull, currentTopSpeed, impactWear, roughOverspeed, roughWear, steerRate } from './handling.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { makeFrame, type Ribbon } from './track.ts';
 import {
@@ -20,8 +20,9 @@ import {
   BOOST_REFILL_DELAY,
   BOOST_RESUME_FILL,
   BOOST_START_FILL,
+  BOUNDARY_DAMAGE,
   BOUNDARY_DAMAGE_FREE_SPEED,
-  BOUNDARY_DAMAGE_PER_SPEED,
+  BOUNDARY_DAMAGE_REF_SPEED,
   BOUNDARY_GRIND_SPEED,
   BOUNDARY_IMPACT_SPEED,
   BOUNDARY_GRIND_DAMAGE,
@@ -339,7 +340,7 @@ export class Vehicle {
     this.wallSide = side;
     if (impact) {
       st.speed = Math.max(0, st.speed - vn * BOUNDARY_SPEED_LOSS);
-      this.damage(Math.max(0, vn - BOUNDARY_DAMAGE_FREE_SPEED) * BOUNDARY_DAMAGE_PER_SPEED);
+      this.damage(impactWear(vn, BOUNDARY_DAMAGE_FREE_SPEED, BOUNDARY_DAMAGE_REF_SPEED, BOUNDARY_DAMAGE));
       st.vx = -side * vn * BOUNDARY_RESTITUTION;
     } else if (vn > 0) st.vx = 0;
     const top = currentTopSpeed(this.stats, st, st.boosting) * this.pace * (1 + this.slip);
@@ -348,7 +349,7 @@ export class Vehicle {
       const grind = thrust * (1 - BOUNDARY_GRIND_SPEED ** ACCEL_TAPER_EXP);
       st.speed = Math.max(top * BOUNDARY_GRIND_SPEED, st.speed - grind * SIM_DT);
     }
-    this.damage(BOUNDARY_GRIND_DAMAGE * SIM_DT);
+    this.damage(BOUNDARY_GRIND_DAMAGE * (st.speed / this.stats.topSpeed) * SIM_DT);
     this.drive.scrapeTime += SIM_DT;
     const intensity = clamp(SCRAPE_BASE_INTENSITY + vn / IMPACT_INTENSITY_SPEED, 0, 1);
     events.push({ type: 'scrape', id: st.id, side, intensity });

@@ -6,8 +6,9 @@ import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
 import { Vehicle, type CrashReason } from '../src/core/vehicle.ts';
-import { DROP_DEPTH, GRAVITY, SIM_DT, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
-import type { FloorKind, PlayerInput, RaceEvent, TrackDef } from '../src/core/types.ts';
+import { Race } from '../src/core/race.ts';
+import { BOUNDARY_RESTITUTION, DROP_DEPTH, GRAVITY, HANDLING_REF, LATERAL_RESPONSE, RACER_HALF_WIDTH, SIM_DT, TARGET_OVERREACH, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
+import type { FloorKind, PlayerInput, RaceEntrant, RaceEvent, TrackDef } from '../src/core/types.ts';
 import { WIDE_JUMP_AT, WIDE_JUMP_RAMP, WIDE_JUMP_TAKEOFF, simDraftOval, simWideJump } from './sim-test-track.ts';
 
 type Fail = (msg: string) => void;
@@ -171,8 +172,104 @@ function wideJumpCheck(fail: Fail) {
   if (!landed || reason !== null) fail(`wide jump: a racer coming down over the landing road ${reason ? `wrecked (${reason})` : 'did not land'}`);
 }
 
+// --- Fragility: walls and rivals break a glider, a brush is cheap ---------------------------------
+
+/** Sideways speeds a starter is put into the wall at, m/s: a brush, a nudge, a swipe, a slam. */
+const WALL_HITS = [5, 10, 20, 30, 45];
+/** Rivals side by side closing at these speeds, m/s. */
+const RACER_HITS = [4, 10, 20, 30];
+/** A slam (30 m/s sideways) costs at least this share of a stock hull; a brush (5 m/s) at most this. */
+const SLAM_MIN = 0.25;
+const BRUSH_MAX = 0.01;
+/** A second of scraping along a wall at top speed costs at least this much hull. */
+const GRIND_MIN = 0.06;
+/** Two rivals swiping at 20 m/s cost each at least this much hull; rubbing at 4 m/s nothing. */
+const SWIPE_MIN = 0.08;
+/** Doubled armour must halve a hit to within this fraction. */
+const ARMOUR_TOLERANCE = 0.05;
+
+/**
+ * Hull a stock starter (armour `armor`) loses hitting the oval's right-hand wall at `vn` m/s
+ * sideways at top speed: put half a step out from the wall, with its target just past the wall
+ * (as close as it may get) and a sideways speed that the chase toward it leaves at exactly vn.
+ */
+function wallHit(vn: number, armor: number): number {
+  const track = new Track(simDraftOval);
+  const stats = { ...starter(), armor };
+  const lineX = track.maxXAt(CHECK_S) - RACER_HALF_WIDTH;
+  const v = new Vehicle('wall', stats, track, CHECK_S, lineX - vn * SIM_DT * 0.5, 0, SEED);
+  v.state.speed = stats.topSpeed;
+  v.targetX = lineX + TARGET_OVERREACH;
+  // One step of the critically damped chase: vx' = vx + (w²·d − 2w·vx)·dt, solved for vx' = vn.
+  const w = LATERAL_RESPONSE * (stats.handling / HANDLING_REF);
+  const d = v.targetX - v.state.x;
+  v.state.vx = (vn - w * w * d * SIM_DT) / (1 - 2 * w * SIM_DT);
+  v.step(IDLE, track, [], 0, []);
+  const hit = Math.abs(v.state.vx) / BOUNDARY_RESTITUTION;
+  if (Math.abs(hit - vn) > 0.01) throw new Error(`fragility check: meant a ${vn} m/s wall hit, got ${hit.toFixed(2)}`);
+  return v.state.damage;
+}
+
+/** Hull lost holding a stock starter against the wall for a second at top speed (no impact). */
+function grindSecond(): number {
+  const track = new Track(simDraftOval);
+  const stats = starter();
+  const v = new Vehicle('grind', stats, track, CHECK_S, track.maxXAt(CHECK_S) - RACER_HALF_WIDTH, 0, SEED);
+  v.state.speed = stats.topSpeed;
+  v.targetX = track.maxXAt(CHECK_S);
+  for (let t = 0; t < 1; t += SIM_DT) {
+    v.step(IDLE, track, [], t, []);
+    v.state.speed = stats.topSpeed;
+  }
+  return v.state.damage;
+}
+
+/** Hull each of two stock starters loses touching side by side, closing at `closing` m/s. */
+function racerHit(closing: number): number {
+  const track = new Track(simDraftOval);
+  const stats = starter();
+  const entrant = (i: number): RaceEntrant => ({ id: `r${i}`, name: `r${i}`, racerId: STARTER, stats, isPlayer: false, skill: 1 });
+  const race = new Race(track, { laps: 1, seed: SEED, entrants: [entrant(0), entrant(1)] });
+  race.phase = 'racing';
+  race.vehicles.forEach((v, i) => {
+    const side = i === 0 ? -1 : 1;
+    v.state.s = CHECK_S;
+    v.state.speed = stats.topSpeed;
+    // Just apart, each moving in at half the closing speed: they touch in the first step.
+    v.state.x = side * (RACER_HALF_WIDTH + (closing * SIM_DT) / 4);
+    v.state.vx = (-side * closing) / 2;
+    v.targetX = v.state.x - (side * closing) / (LATERAL_RESPONSE * (stats.handling / HANDLING_REF));
+  });
+  race.step(IDLE);
+  return Math.max(...race.racers.map((r) => r.damage));
+}
+
+function fragilityCheck(fail: Fail) {
+  const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+  const walls = WALL_HITS.map((vn) => ({ vn, hull: wallHit(vn, 1) }));
+  const racers = RACER_HITS.map((c) => ({ c, hull: racerHit(c) }));
+  const grind = grindSecond();
+  const slam = wallHit(30, 1);
+  const armoured = wallHit(30, 2);
+  console.log(
+    `
+fragility (stock starter, hull per hit): walls ${walls.map((w) => `${w.vn} m/s ${pct(w.hull)}`).join(', ')}; ` +
+      `scraping a wall at top speed ${pct(grind)}/s; rivals side by side ${racers.map((r) => `${r.c} m/s ${pct(r.hull)}`).join(', ')}; armour 2 at 30 m/s ${pct(armoured)}`,
+  );
+  if (slam < SLAM_MIN) fail(`fragility: a 30 m/s wall slam costs only ${pct(slam)} (< ${pct(SLAM_MIN)})`);
+  if (wallHit(5, 1) > BRUSH_MAX) fail(`fragility: brushing a wall at 5 m/s costs ${pct(wallHit(5, 1))} (> ${pct(BRUSH_MAX)})`);
+  if (grind < GRIND_MIN) fail(`fragility: a second of scraping at top speed costs only ${pct(grind)} (< ${pct(GRIND_MIN)})`);
+  if (racerHit(20) < SWIPE_MIN) fail(`fragility: a 20 m/s swipe between rivals costs only ${pct(racerHit(20))} (< ${pct(SWIPE_MIN)})`);
+  if (racerHit(4) > 0) fail(`fragility: rubbing at 4 m/s costs ${pct(racerHit(4))}`);
+  if (Math.abs(armoured * 2 - slam) > slam * ARMOUR_TOLERANCE) fail(`fragility: armour 2 took ${pct(armoured)} of a slam that costs ${pct(slam)}`);
+  for (let i = 1; i < walls.length; i++) {
+    if (!(walls[i].hull > walls[i - 1].hull)) fail(`fragility: a ${walls[i].vn} m/s wall hit costs no more than a ${walls[i - 1].vn} m/s one`);
+  }
+}
+
 export function physicsChecks(fail: Fail) {
   airSteerCheck(fail);
   fallCheck(fail);
   wideJumpCheck(fail);
+  fragilityCheck(fail);
 }
