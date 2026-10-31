@@ -60,8 +60,9 @@ const POLE_W = 0.9;
 const BOARD_SETBACK = 6;
 /** Boards turn this far from square to the road, toward oncoming racers. */
 const BOARD_TOE = 0.6;
-/** A board's near edge keeps this far off any road. */
-const BOARD_CLEAR = 1;
+/** A board and its pole as the clearance audit sees them (unit shapes standing on their base). */
+const BOARD_SHAPE = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+const POLE_SHAPE = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
 /** Sign light by day and at deep dusk. */
 const SIGN_DAY = 0.55;
 const SIGN_DUSK = 1;
@@ -176,19 +177,18 @@ function billboards(cor: Corridor, scenery: CityScenery, rng: Rng): { boards: TH
     const out = { x: cor.shape.rx[k] * side, z: cor.shape.rz[k] * side };
     const x = top.x + out.x * BOARD_SETBACK;
     const z = top.z + out.z * BOARD_SETBACK;
-    // Never over any road: a crossing or a neighbouring stretch may run just behind the wall.
-    const near = cor.ground.nearest(x, z);
-    if (near) {
-      const smp = cor.ground.views[near.v].ribbon.samples[near.k];
-      if (Math.abs(near.d) < (near.d < 0 ? smp.edgeL : smp.edgeR) + (BOARD_W / 2) * Math.sin(BOARD_TOE) + BOARD_CLEAR) continue;
-    }
     const pole = range(rng, POLE_H[0], POLE_H[1]);
     const t = r.samples[k].tangent;
     // Face back down the road (toward −tangent), toed in toward the road.
     const face = Math.atan2(-t.x, -t.z) - side * BOARD_TOE;
     q.setFromAxisAngle(UP, face);
-    boards.push(new THREE.Matrix4().compose(new THREE.Vector3(x, top.y + pole, z), q, new THREE.Vector3(BOARD_W, BOARD_H, 1)));
-    poles.push(new THREE.Matrix4().compose(new THREE.Vector3(x, top.y - 1, z), q, new THREE.Vector3(POLE_W, pole + 1, POLE_W)));
+    const board = new THREE.Matrix4().compose(new THREE.Vector3(x, top.y + pole, z), q, new THREE.Vector3(BOARD_W, BOARD_H, 1));
+    const post = new THREE.Matrix4().compose(new THREE.Vector3(x, top.y - 1, z), q, new THREE.Vector3(POLE_W, pole + 1, POLE_W));
+    // Never over any road: a crossing, a neighbouring stretch or a level of a spiral may run just behind the wall.
+    const env = cor.ground.envelope;
+    if (!env.clearOf(BOARD_SHAPE, board, 'scenery') || !env.clearOf(POLE_SHAPE, post, 'scenery')) continue;
+    boards.push(board);
+    poles.push(post);
   }
   return { boards, poles };
 }

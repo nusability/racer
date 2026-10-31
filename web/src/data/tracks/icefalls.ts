@@ -368,7 +368,8 @@ export const icefallsScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: -1, distance: -148, straddle: true },
     { kind: 'avalancheSlope', at: 185.17, side: -1, distance: 10, hazard: 'avalanche' },
-    { kind: 'frozenFalls', at: 121.81, side: -1, distance: 60 },
+    // Back off the cliff road: nearer, its curtain of ice hung over the road's edge.
+    { kind: 'frozenFalls', at: 121.81, side: -1, distance: 130 },
     { kind: 'iceStation', at: 249.35, side: -1, distance: 30 },
     { kind: 'skiJump', at: 203.8, side: -1, distance: 60 },
   ],

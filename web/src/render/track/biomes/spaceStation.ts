@@ -181,6 +181,18 @@ function overlaps(a: Span, others: readonly Span[], gap: number): boolean {
 
 /** Whether a box (horizontal footprint corners, vertical span) keeps clear of every road. */
 export function clearOfRoads(g: Ground, corners: P3[], y0: number, y1: number): boolean {
+  // The prism itself must also stay out of every ribbon's envelope in 3D: the footprint test
+  // below goes by the horizontally nearest sample, which over a loop can be the loop's crown
+  // high above while the prism stands in the road at its foot.
+  const pos: number[] = [];
+  const at = (i: number, y: number) => [corners[i].x, y, corners[i].z];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    pos.push(...at(i, y0), ...at(j, y0), ...at(j, y1), ...at(i, y0), ...at(j, y1), ...at(i, y1));
+  }
+  pos.push(...at(0, y0), ...at(1, y0), ...at(2, y0), ...at(0, y0), ...at(2, y0), ...at(3, y0));
+  pos.push(...at(0, y1), ...at(1, y1), ...at(2, y1), ...at(0, y1), ...at(2, y1), ...at(3, y1));
+  if (!g.envelope.clearOfTriangles(pos)) return false;
   const [a, b, , d] = corners;
   const nu = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / FOOTPRINT_STEP));
   const nv = Math.max(1, Math.ceil(Math.hypot(d.x - a.x, d.z - a.z) / FOOTPRINT_STEP));

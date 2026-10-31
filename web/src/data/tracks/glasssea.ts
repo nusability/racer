@@ -192,7 +192,9 @@ export const glasssea: TrackDef = {
     { kind: 'boostPad', at: 47.6, lateral: 0 },
     { kind: 'boostPad', at: 97.6, lateral: -10 },
     { kind: 'repairCells', at: 79.2, lateral: 22, count: 3, spacing: 30 },
-    { kind: 'runoff', from: 64, to: 72.1, amount: 18, side: 1 },
+    // Both legs of the hairpin at 64..72 keep their inside run-off short, past its ends too, so
+    // neither leg's sand reaches over the other (they pass nine metres apart in height).
+    { kind: 'runoff', from: 63, to: 73, amount: 18, side: 1 },
     // The Glass Mile home: a leap over a fault in the glass, then flat out to the last corner.
     { kind: 'jump', at: 105.6, rampLength: 100, rampHeight: 6, gapLength: 60 },
     { kind: 'boostPad', at: 120.5, lateral: 0 },
@@ -255,6 +257,6 @@ export const glassseaScenery: TrackScenery = {
     { kind: 'sandbeast', at: 6.5, side: 1, distance: 40, hazard: 'beast' },
     { kind: 'skyfleet', at: 31, side: -1, distance: 300 },
     { kind: 'wreck', at: 109, side: -1, distance: 10 },
-    { kind: 'balloons', at: 72, side: -1, distance: 200 },
+    { kind: 'balloons', at: 79, side: -1, distance: 390 },
   ],
 };

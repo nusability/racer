@@ -253,7 +253,8 @@ export const rattlesnakeScenery: TrackScenery = {
   boundary: 'dune',
   oases: [],
   landmarks: [
-    { kind: 'grandstand', at: 0.12, side: -1, distance: -148, straddle: true },
+    // Centred on the straight before the line, where the road runs straight past its whole length.
+    { kind: 'grandstand', at: 135.37, side: -1, distance: -108, straddle: true },
     { kind: 'mine', at: 83.5, side: -1, distance: 60, hazard: 'ore' },
     { kind: 'cliffVillage', at: 67, side: -1, distance: 40, scale: 1.4 },
     { kind: 'wreck', at: 116, side: 1, distance: 30 },

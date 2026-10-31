@@ -261,6 +261,9 @@ export const tidalcaves: TrackDef = {
     { kind: 'boostPad', at: 133.4, lateral: 0 },
     // Tight corners keep their inside run-off short, so the sand never folds over itself.
     { kind: 'runoff', from: 4.6, to: 14.4, amount: 20, side: 1 },
+    // Past the crossroads the harbour lobe's right run-off stays short: wide, it reached under
+    // the start gantry's leg on the cliff lobe's straight beside it.
+    { kind: 'runoff', from: 122, to: 123.4, amount: 8, side: 1 },
     { kind: 'runoff', from: 20.6, to: 25.4, amount: 22, side: -1 },
     { kind: 'runoff', from: 26.6, to: 31.4, amount: 22, side: 1 },
     { kind: 'runoff', from: 30.6, to: 35.4, amount: 22, side: -1 },
@@ -317,10 +320,11 @@ export const tidalcavesScenery: TrackScenery = {
   hutsPerKm: 2,
   road: 'causeway',
   landmarks: [
-    { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
+    // On the right of the start straight: on the left it stood across the lap's leg behind it.
+    { kind: 'grandstand', at: 0.55, side: 1, distance: -153, straddle: true },
     { kind: 'cliffVillage', at: 36.5, side: 1, distance: 10, scale: 1.3 },
     { kind: 'lighthouse', at: 81.5, side: -1, distance: 40, afloat: true },
-    { kind: 'harbor', at: 122, side: -1, distance: 30, afloat: true },
-    { kind: 'cruiseliner', at: 137, side: -1, distance: 400, afloat: true },
+    { kind: 'harbor', at: 121.5, side: -1, distance: 100, afloat: true },
+    { kind: 'cruiseliner', at: 144.5, side: -1, distance: 620, afloat: true },
   ],
 };

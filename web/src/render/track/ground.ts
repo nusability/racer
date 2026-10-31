@@ -10,6 +10,7 @@ import {
   SEA_LEVEL,
   TERRAIN_SINK,
 } from './config.ts';
+import { CourseEnvelope } from './clearance.ts';
 import { smoothstep, valueNoise, type Noise2 } from './noise.ts';
 import { sideIndex, type RibbonView } from './shape.ts';
 
@@ -49,6 +50,8 @@ export class Ground {
   /** Seeded noise and a prevailing wind direction, for the biome's ground shapes. */
   readonly noise: Noise2;
   readonly windDir: { x: number; z: number };
+  /** Where racers drive and fly, every ribbon: scenery placement keeps out of it, and the clearance audit holds it to that. */
+  readonly envelope: CourseEnvelope;
   /**
    * One field per ribbon view: cell → the nearest stamped sample of that ribbon, or -1. Kept
    * per ribbon so a point by a junction is measured against every ribbon near it, not just the
@@ -83,6 +86,7 @@ export class Ground {
       }
     }
     this.base = style.base(minY);
+    this.envelope = new CourseEnvelope(views.map((v) => ({ ribbon: v.ribbon, features: v.features })));
     this.noise = valueNoise(seed * 7 + 3);
     const a = seed * 0.7;
     this.windDir = { x: Math.cos(a), z: Math.sin(a) };
@@ -253,8 +257,34 @@ export class Ground {
       const flat = sh.drop[side][near.k] ? DROP_FLOOR_REACH : falls ? SHOULDER_FLAT : Math.max(SHOULDER_FLAT, sh.run[side][near.k] + SHOULDER_FLAT);
       const blend = Math.max(GROUND_BLEND_MIN, Math.abs(h - roadSide) * GROUND_BLEND_PER_M);
       h = roadSide + (h - roadSide) * smoothstep((out - flat) / blend);
+      h = Math.min(h, this.underOthers(x, z, near.v));
     }
     return h;
+  }
+
+  /**
+   * The highest the ground may stand at (x, z) for every ribbon but `own` whose drivable width
+   * (road and run-off up to the hard boundary) it lies in: just under that ribbon's surface.
+   * The ground eases to the nearest ribbon only; where a shortcut's road runs close beside the
+   * main loop's run-off (at its peel and rejoin), the run-off is the other ribbon's, and nothing
+   * may rise in it either. Chasms, tunnels and decks have no ground of their own to hold down.
+   */
+  private underOthers(x: number, z: number, own: number): number {
+    let cap = Infinity;
+    for (let v = 0; v < this.views.length; v++) {
+      if (v === own) continue;
+      const near = this.nearestOn(v, x, z);
+      if (!near) continue;
+      const sh = this.views[v].shape;
+      const smp = this.views[v].ribbon.samples[near.k];
+      if (smp.gap || sh.tunnel[near.k] || sh.deck[near.k]) continue;
+      const side = sideIndex(near.d);
+      if (Math.abs(near.d) > (near.d < 0 ? smp.edgeL : smp.edgeR)) continue;
+      if (sh.open[side][near.k] && Math.abs(near.d) > smp.width / 2) continue;
+      const surface = sh.water[near.k] && Math.abs(near.d) > smp.width / 2 ? SEA_LEVEL - LAGOON_DEPTH : this.surfaceY(near);
+      cap = Math.min(cap, surface - SHOULDER_DROP);
+    }
+    return cap;
   }
 
   /** Terrain mesh height: as height(), but sunk wherever corridor geometry covers it. */

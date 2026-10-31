@@ -15,7 +15,8 @@ import { Ground } from './track/ground.ts';
 import { buildHazards } from './track/hazards.ts';
 import { buildScheduled } from './track/scheduled.ts';
 import { buildJunctions, type SignQuads } from './track/junction.ts';
-import { DRAWS_OWN_BARRIER, checkLandmarkClearance, placeLandmarks, updateLandmarks } from './track/landmarks.ts';
+import { DRAWS_OWN_BARRIER, placeLandmarks, updateLandmarks } from './track/landmarks.ts';
+import { auditClearance, type ClearanceFinding } from './track/clearance.ts';
 import { makePaint } from './track/paint.ts';
 import { buildPosts } from './track/posts.ts';
 import { hangInVoid, ribbonViews } from './track/shape.ts';
@@ -51,6 +52,18 @@ export interface TrackScene {
    * through solid-looking ground. Empty when the course is clean.
    */
   auditGround(maxRise: number): { branch: number; s: number; x: number; rise: number }[];
+  /**
+   * The clearance audit run as the scene was built (track/clearance.ts): every spot where
+   * scenery stands in a ribbon's drivable envelope. Empty when the course is clean.
+   */
+  readonly clearance: ClearanceFinding[];
+  /**
+   * Dev check: runs every landmark's animation on to race time `time` (from the last time asked,
+   * in order) and audits the landmarks again. What moves (a regatta's yachts, a hoist's load, a
+   * ship backing off between rams) must stay clear all race long, not just as built; the
+   * scenery check sweeps a race's clock with it.
+   */
+  clearanceAt(time: number): ClearanceFinding[];
   dispose(): void;
 }
 
@@ -164,10 +177,10 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   for (const o of dressing.objects) group.add(o);
   const bound = new Set(scenery.landmarks.flatMap((l) => (l.hazard === undefined ? [] : [l.hazard])));
   const ownBarrier = new Set(scenery.landmarks.flatMap((l) => (l.hazard !== undefined && DRAWS_OWN_BARRIER.has(l.kind) ? [l.hazard] : [])));
-  const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, { glow, props }, bound, ownBarrier, quality);
+  const scheduled = buildScheduled(corridors.map((c) => c.ribbon), kit.debris, paint, { glow, props }, ground.envelope, bound, ownBarrier, quality);
   for (const o of scheduled.objects) group.add(o);
   add(props.build(), mats.plain, 'props');
-  for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit)) group.add(m);
+  for (const m of buildPosts(scatter, paint, scenery.boundary, glow, mats.plain, mats.unlit, ground.envelope)) group.add(m);
   for (const c of corridors) {
     const boulders = buildGameplayBoulders(c, quality, mats.plain, def.seed);
     if (boulders) group.add(boulders);
@@ -187,7 +200,6 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const cells = { boost: buildCells(ribbons, 'boost', quality), repair: buildCells(ribbons, 'repair', quality) };
   for (const f of Object.values(cells)) for (const m of f.meshes) group.add(m);
   for (const l of landmarks) group.add(l.landmark.group);
-  checkLandmarkClearance(landmarks, ground);
   // A sprint's run-out ends in the force field that holds its finishers (core/race.ts).
   const field = buildForceField(track, new THREE.Color(def.palette.accent), quality);
   if (field) {
@@ -195,9 +207,21 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
     cullable.push(field.mesh);
   }
 
+  // Everything is built: audit it before the first frame poses anything.
+  const boundSpans = landmarks.flatMap((l) => (l.hazard ? [{ group: l.landmark.group, s0: l.hazard.s0, s1: l.hazard.s1 }] : []));
+  const clearance = auditClearance(group.children, track, ground.envelope, boundSpans);
+  let posedAt = 0;
+
   let last: number | null = null;
   return {
     group,
+    clearance,
+    clearanceAt(time) {
+      if (time < posedAt) throw new Error(`clearanceAt: time runs forward only (asked ${time} after ${posedAt})`);
+      for (const l of landmarks) l.landmark.update(time, time - posedAt);
+      posedAt = time;
+      return auditClearance(landmarks.map((l) => l.landmark.group), track, ground.envelope, boundSpans);
+    },
     update(time, cameraPos) {
       const dt = last === null ? 0 : Math.max(0, Math.min(0.1, time - last));
       last = time;

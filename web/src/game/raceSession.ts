@@ -22,6 +22,7 @@ import { createRacerModel, type RacerModel } from '../render/racerModel.ts';
 import { emptySnapshot, lerpSnapshot, poseObject, snapshot, type PoseSnapshot } from '../render/racerPose.ts';
 import { DRAFT_STREAKS, SpeedLines } from '../render/speedLines.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../render/trackScene.ts';
+import { reportClearance } from '../render/track/clearance.ts';
 import { describeLook, resolveLook, type ActiveLook } from '../render/look/look.ts';
 import { worldEnvironment } from '../render/look/env.ts';
 import { PostFx } from '../render/look/postFx.ts';
@@ -233,6 +234,10 @@ export class RaceSession {
     const air = atmosphere(detail, worldOfTrack(def.id).biome);
     this.env = applyEnvironment(this.scene, def.palette, air);
     this.trackScene = buildTrackScene(this.track, detail, look);
+    // Scenery standing in the drivable envelope is a build bug: a dev build refuses the race, a
+    // live one races on and says so in the console.
+    reportClearance(this.track, this.trackScene.clearance);
+    if (import.meta.env.DEV && this.trackScene.clearance.length > 0) throw new Error(`clearance audit: scenery stands in the course on ${def.id} (see the console)`);
     this.scene.add(this.trackScene.group);
     this.glowPools = look?.wetSheen
       ? new GlowPools(this.track, request.entrants.map((e) => racerById(e.racerId).visual.glow), look.look.glowPool)

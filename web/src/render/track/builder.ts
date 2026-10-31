@@ -21,6 +21,17 @@ export class FlatBuilder {
     return this.pos.length / 9;
   }
 
+  /** Corner positions (x, y, z each) of every triangle added since there were `mark` triangles. */
+  positionsSince(mark: number): readonly number[] {
+    return this.pos.slice(mark * 9);
+  }
+
+  /** Takes back every triangle added since there were `mark` triangles. */
+  truncate(mark: number): void {
+    this.pos.length = mark * 9;
+    this.col.length = mark * 9;
+  }
+
   /** Counter-clockwise when seen from the front. */
   tri(a: P3, b: P3, c: P3, ca: THREE.Color, cb: THREE.Color = ca, cc: THREE.Color = ca): void {
     this.pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);

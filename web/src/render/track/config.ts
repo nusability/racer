@@ -117,6 +117,8 @@ export const TERRAIN_CELLS_FAR = { low: 10, high: 12 } as const;
 export const TERRAIN_NEAR_DIST = 700;
 /** Tiles get a downward skirt so neighbours of different resolution never show a crack. */
 export const TERRAIN_SKIRT = 25;
+/** Terrain more than this above the road or run-off counts as a sand bank you fly through (the ground audit). */
+export const GROUND_RISE_MAX = 0.5;
 /** Terrain under the corridor sinks this far so it never pokes through road or shoulders. */
 export const TERRAIN_SINK = 7;
 /** Shortest distance over which the ground eases from road level to the open dunes. */

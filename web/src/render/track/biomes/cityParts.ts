@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { facadeBox, facadeCylinder, facadeDome, facadeSpire, facadeTwist } from '../../facadeGeometry.ts';
 import type { FacadeMaterial } from '../../facade.ts';
 import { packStyle, type FacadeStyle } from '../../facadeStyle.ts';
+import type { ClearanceRule } from '../clearance.ts';
 
 // Every piece of every city building, collected by kit shape and drawn as one instanced mesh
 // per shape (five draws for the whole city), each instance carrying its own tint and facade style.
@@ -20,6 +21,8 @@ interface Part {
   m: THREE.Matrix4;
   tint: THREE.Color;
   style: FacadeStyle;
+  /** How the clearance audit judges it: a street's fence posts are its barrier, not scenery. */
+  rule: ClearanceRule;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -31,10 +34,10 @@ export class CityParts {
   private readonly parts: Record<PartShape, Part[]> = { box: [], cylinder: [], dome: [], spire: [], twist: [] };
 
   /** A shape w × h × d with its base centred on (x, y, z), turned by yaw about +Y. */
-  add(shape: PartShape, x: number, y: number, z: number, w: number, h: number, d: number, yaw: number, tint: THREE.Color, style: FacadeStyle): void {
+  add(shape: PartShape, x: number, y: number, z: number, w: number, h: number, d: number, yaw: number, tint: THREE.Color, style: FacadeStyle, rule: ClearanceRule = 'scenery'): void {
     if (!(w > 0 && h > 0 && d > 0)) throw new Error(`city part ${shape} has a degenerate size ${w} × ${h} × ${d}`);
     const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(w, h, d));
-    this.parts[shape].push({ m, tint, style });
+    this.parts[shape].push({ m, tint, style, rule });
   }
 
   /** A box of cross-section w × d strung from a to b (a cable, a pipe). */
@@ -47,7 +50,7 @@ export class CityParts {
     X.crossVectors(Y, Math.abs(Y.y) > 0.99 ? Z.set(1, 0, 0) : UP).normalize();
     Z.crossVectors(X, Y);
     const m = new THREE.Matrix4().makeBasis(X.clone().multiplyScalar(w), Y.clone().multiplyScalar(len), Z.clone().multiplyScalar(d)).setPosition(a);
-    this.parts.box.push({ m, tint, style });
+    this.parts.box.push({ m, tint, style, rule: 'scenery' });
   }
 
   /** One instanced mesh per shape in use. */
@@ -69,6 +72,7 @@ export class CityParts {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
       mesh.name = `city-${shape}`;
+      if (list.some((p) => p.rule !== 'scenery')) mesh.userData.clearance = list.map((p) => p.rule);
       objects.push(mesh);
       geometries.push(geo);
     }

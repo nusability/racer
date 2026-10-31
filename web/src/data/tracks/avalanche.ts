@@ -295,7 +295,8 @@ export const avalancheScenery: TrackScenery = {
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: -1, distance: -148, straddle: true },
     { kind: 'iceStation', at: 46.04, side: 1, distance: 20, hazard: 'rotorwash' },
-    { kind: 'avalancheSlope', at: 94.93, side: 1, distance: 10, hazard: 'avalanche' },
+    // Along to the far end of the avalanche's span: nearer the col, its slope stood over the Col Cut.
+    { kind: 'avalancheSlope', at: 95.93, side: 1, distance: 20, hazard: 'avalanche' },
     { kind: 'icePalace', at: 151.52, side: -1, distance: 60 },
     { kind: 'snowcatConvoy', at: 15.74, side: -1, distance: 25 },
   ],

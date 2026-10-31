@@ -325,7 +325,7 @@ export const snowfieldScenery: TrackScenery = {
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
     { kind: 'mammothHerd', at: 11.14, side: -1, distance: 40, hazard: 'herd' },
     { kind: 'iceStation', at: 69.49, side: -1, distance: 30 },
-    { kind: 'skiJump', at: 184.99, side: -1, distance: 60 },
+    { kind: 'skiJump', at: 189.49, side: -1, distance: 90 },
     { kind: 'snowcatConvoy', at: 112.61, side: -1, distance: 25 },
   ],
 };

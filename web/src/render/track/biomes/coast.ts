@@ -253,14 +253,16 @@ export function buildCoastLife(
     return out;
   };
   const geos = [palm(), hut(), tower(), surfFlag(), grass(), buoy(), gull()];
+  const clear = { envelope: ground.envelope, as: 'scenery' } as const;
   const meshes = [
-    instanced(geos[0], lit, spots(scenery.palmsPerKm, 4, 90), 'palms'),
-    instanced(geos[1], lit, spots(scenery.hutsPerKm, 12, 60), 'huts'),
-    instanced(geos[2], lit, spots(scenery.hutsPerKm * 0.4, 6, 30), 'lifeguardTowers'),
-    instanced(geos[3], lit, spots(scenery.hutsPerKm * 0.8, 2, 20), 'surfFlags'),
-    instanced(geos[4], lit, spots(scenery.palmsPerKm * 3, 2, 70), 'duneGrass'),
+    instanced(geos[0], lit, spots(scenery.palmsPerKm, 4, 90), 'palms', clear),
+    instanced(geos[1], lit, spots(scenery.hutsPerKm, 12, 60), 'huts', clear),
+    instanced(geos[2], lit, spots(scenery.hutsPerKm * 0.4, 6, 30), 'lifeguardTowers', clear),
+    instanced(geos[3], lit, spots(scenery.hutsPerKm * 0.8, 2, 20), 'surfFlags', clear),
+    instanced(geos[4], lit, spots(scenery.palmsPerKm * 3, 2, 70), 'duneGrass', clear),
   ].filter((m): m is THREE.InstancedMesh => m !== null);
-  const buoyMesh = instanced(geos[5], lit, buoys.map((p) => ({ pos: { ...p }, yaw: 0, scale: { x: 1, y: 1, z: 1 } })), 'buoys');
+  // Buoys float on the boundary line itself: they may straddle it, never stand in the run-off.
+  const buoyMesh = instanced(geos[5], lit, buoys.map((p) => ({ pos: { ...p }, yaw: 0, scale: { x: 1, y: 1, z: 1 } })), 'buoys', { envelope: ground.envelope, as: 'marker' });
   if (buoyMesh) meshes.push(buoyMesh);
   // Gulls circle over beaches near the course.
   const flock = Array.from({ length: GULLS[quality] }, () => {

@@ -1,7 +1,9 @@
-// The cruise liner as a blocker hazard: the ship steams along a channel that cuts the course,
+// The cruise liner as a blocker hazard: the ship steams in along a channel that cuts the course,
 // stops across the road for the 'down' stage with its bow at the edge of the opening (racers
-// thread past the stem), then steams on. If the opening leaves road on both sides, a tug
-// shoves a barge across the other part. Ship and barge are placed with the binding each frame.
+// thread past the stem), then backs out the way it came. If the opening leaves road on both
+// sides, a tug shoves a barge across the other part from the far bank and takes it back. Each
+// stays on its own bank of the road, so neither sails on through whatever else the channel
+// crosses (a shortcut along the shore). Ship and barge are placed with the binding each frame.
 
 import * as THREE from 'three';
 import type { Kit } from '../b/kit.ts';
@@ -12,10 +14,12 @@ import { blockerStage } from '../../../core/hazards.ts';
 import { HAZARD_BAR_RADIUS } from '../../../data/tuning.ts';
 import type { HazardBinding, Landmark } from '../types.ts';
 import { DARK, GLASS, WHITE, hull } from './kit.ts';
-import { HIDDEN, mover, type HazardOf } from './hazard.ts';
+import { mover, type HazardOf } from './hazard.ts';
 
-/** How far (track metres, beyond the ship's own length) it sails in and out of view. */
+/** How far (track metres, beyond the ship's own length) it sails in from and backs out to. */
 const TRAVEL_EXTRA = 220;
+/** The tug brings the barge from its mooring this far up the channel (track metres) and takes it back there. */
+const BARGE_TRAVEL = 110;
 /** The barge reaches this far past each end of the road it closes. */
 const BARGE_OVERLAP = 4;
 const BARGE = { len: 24, beam: 10, depth: 5 } as const;
@@ -91,30 +95,26 @@ export function shipCrossing(kit: Kit, lm: Landmark, bound: { binding: HazardBin
     obj.matrixWorldNeedsUpdate = true;
   };
 
-  /** Track-x offset from the rest position: arriving decelerates, leaving accelerates. */
-  const shift = (time: number): number => {
+  /** Track-x offset from the rest position over `reach`: arriving decelerates, backing out accelerates. */
+  const shift = (time: number, reach: number): number => {
     const st = blockerStage(d, time);
-    if (st.stage === 'warn') return -travel * (1 - st.progress) ** 2;
+    if (st.stage === 'warn') return -reach * (1 - st.progress) ** 2;
     if (st.stage === 'down') return 0;
-    return travel * st.progress ** 2;
+    return -reach * st.progress ** 2;
   };
 
   return (time) => {
-    const dx = shift(time);
+    const dx = shift(time, travel);
     binding.toLocal(hazard.s0, shipRest + dir * dx, 0, p);
     p.y = 0;
     ship.matrix.copy(turn).setPosition(p);
     ship.matrixWorldNeedsUpdate = true;
     if (barge) {
       // The barge comes from the opposite bank, so the two close the road like a pincer.
-      const bx = bargeRest - dir * dx;
+      const bx = bargeRest - dir * shift(time, BARGE_TRAVEL);
       place(barge, bx, bargeLen, 0);
       const tug = barge.userData.tug as THREE.Mesh;
       place(tug, bx, 1, -(bargeLen / 2 + BARGE.len / 2 - 2));
-      if (Math.abs(dx) > travel * 0.98) {
-        barge.matrix.copy(HIDDEN);
-        tug.matrix.copy(HIDDEN);
-      }
     }
   };
 }

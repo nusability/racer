@@ -184,11 +184,12 @@ function buildWoods(corridors: Corridor[], scenery: IceScenery, mat: THREE.Mater
     }
   }
   const out: THREE.Object3D[] = [];
-  const woods = instanced(pineGeometry(), mat, pines, 'pines');
+  const keep = { envelope: corridors[0].ground.envelope, as: 'scenery' } as const;
+  const woods = instanced(pineGeometry(), mat, pines, 'pines', keep);
   if (woods) out.push(woods);
   const g = new THREE.IcosahedronGeometry(1, 0);
   paintGeometry(g, ICE_BLUE);
-  const ice = instanced(g, mat, seracs, 'seracs');
+  const ice = instanced(g, mat, seracs, 'seracs', keep);
   if (ice) out.push(ice);
   return out;
 }

@@ -6,6 +6,7 @@ import { RIDGE_RISE, RUNOFF_MIN, type Quality } from './config.ts';
 import { sideIndex } from './shape.ts';
 import type { Corridor } from './corridor.ts';
 import { quadFacing } from './paint.ts';
+import type { CourseEnvelope } from './clearance.ts';
 
 // Repeated props as InstancedMesh: one draw call per kind however many stand around the lap.
 
@@ -28,16 +29,29 @@ export interface Placement {
   color?: THREE.Color;
 }
 
-export function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: Placement[], name: string): THREE.InstancedMesh | null {
-  if (list.length === 0) return null;
-  const mesh = new THREE.InstancedMesh(geo, mat, list.length);
-  const m = new THREE.Matrix4();
+/** What scatter keeps clear of: the course's envelope, judged as scenery or as a boundary marker (which straddles its line). */
+export interface KeepClear {
+  envelope: CourseEnvelope;
+  as: 'scenery' | 'marker';
+}
+
+/**
+ * One instanced mesh of `geo` at every placement. `keepClear`: scatter drops every placement whose
+ * piece would reach into the course's envelope (the scatter rule the clearance audit holds it to);
+ * null for what stands on the course on purpose (the gameplay boulders).
+ */
+export function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: Placement[], name: string, keepClear: KeepClear | null): THREE.InstancedMesh | null {
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
-  list.forEach((p, i) => {
+  const placed = list.flatMap((p) => {
     q.setFromAxisAngle(up, p.yaw);
-    m.compose(new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z), q, new THREE.Vector3(p.scale.x, p.scale.y, p.scale.z));
-    mesh.setMatrixAt(i, m);
+    const at = new THREE.Matrix4().compose(new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z), q, new THREE.Vector3(p.scale.x, p.scale.y, p.scale.z));
+    return keepClear && !keepClear.envelope.clearOf(geo, at, keepClear.as) ? [] : [{ at, color: p.color }];
+  });
+  if (placed.length === 0) return null;
+  const mesh = new THREE.InstancedMesh(geo, mat, placed.length);
+  placed.forEach((p, i) => {
+    mesh.setMatrixAt(i, p.at);
     if (p.color) mesh.setColorAt(i, p.color);
   });
   mesh.instanceMatrix.needsUpdate = true;
@@ -85,7 +99,7 @@ export function buildGameplayBoulders(cor: Corridor, quality: Quality, mat: THRE
     rocks.push({ pos, yaw: rng() * 6.3, scale: { x: r, y: o.height * 0.62, z: r }, color: cor.paint.strata(pos.y + rng() * 9, 0.9, rockCol).clone() });
   }
   if (rocks.length === 0) return null;
-  return instanced(rockGeometry(quality), mat, rocks, `boulders${cor.vi}`);
+  return instanced(rockGeometry(quality), mat, rocks, `boulders${cor.vi}`, null);
 }
 
 export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Quality, mat: THREE.Material, seed: number): THREE.InstancedMesh[] {
@@ -104,7 +118,7 @@ export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Q
       rocks.push({ pos: { ...spot.pos, y: spot.pos.y + r * 0.2 }, yaw: rng() * 6.3, scale: { x: r, y: r * range(rng, 0.5, 0.9), z: r * range(rng, 0.8, 1.3) }, color: cor.paint.strata(spot.pos.y + rng() * 9, 0.9, rockCol).clone() });
     }
   }
-  const rockMesh = rocks.length === 0 ? null : instanced(rockGeometry(quality), mat, rocks, 'scatterRocks');
+  const rockMesh = rocks.length === 0 ? null : instanced(rockGeometry(quality), mat, rocks, 'scatterRocks', { envelope: cor.ground.envelope, as: 'scenery' });
   if (rockMesh) meshes.push(rockMesh);
 
   if (scenery.scatter !== 'rocks') {
@@ -116,7 +130,7 @@ export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Q
       const yaw = scenery.scatter === 'bones' ? Math.atan2(k.right.x, k.right.z) + (rng() < 0.5 ? 0 : Math.PI) : rng() * 6.3;
       return { pos: { ...spot.pos, y: spot.pos.y - 1 }, yaw, scale: { x: sc, y: sc * range(rng, 0.8, 1.3), z: sc } };
     });
-    const m = instanced(geo, mat, list, `scatter-${scenery.scatter}`);
+    const m = instanced(geo, mat, list, `scatter-${scenery.scatter}`, { envelope: cor.ground.envelope, as: 'scenery' });
     if (m) meshes.push(m);
   }
 
@@ -143,7 +157,7 @@ export function buildInstanced(cor: Corridor, scenery: DesertScenery, quality: Q
       palms.push({ pos: { ...p, y: cor.ground.meshHeight(p.x, p.z) }, yaw: rng() * 6.3, scale: { x: 1, y: range(rng, 0.9, 1.2), z: 1 } });
     }
   }
-  const palmMesh = instanced(palm(), mat, palms, 'palms');
+  const palmMesh = instanced(palm(), mat, palms, 'palms', { envelope: cor.ground.envelope, as: 'scenery' });
   if (palmMesh) meshes.push(palmMesh);
   return meshes;
 }

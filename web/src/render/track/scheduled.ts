@@ -7,6 +7,7 @@ import { HAZARD_ROCK_HEIGHT } from '../../data/tuning.ts';
 import { FlatBuilder, type P3 } from './builder.ts';
 import { KERB_BLOCK, type Quality } from './config.ts';
 import { quadFacing, type Paint } from './paint.ts';
+import type { CourseEnvelope } from './clearance.ts';
 
 // Scheduled hazards on the road, drawn from the same race-time schedule the simulation
 // collides with (core/hazards.ts): target rings shrinking onto a dropper's landing spots with
@@ -43,6 +44,15 @@ const CLEAR_FRACTION = 0.12;
 /** Beacon posts at the road edges: height, lamp size, flash rate in warnings (Hz). */
 const POST_HEIGHT = 7;
 const POST_WIDTH = 0.5;
+/** Beacon posts stand this far past the hard boundary: out of the run-off a racer can drive. */
+const POST_OUT = 2;
+/**
+ * Where that spot is still inside another stretch's envelope (a flat X's other leg), the post
+ * steps out by this much at a time, up to the most it may before it no longer marks its own
+ * road; past that it is left out.
+ */
+const POST_STEP = 0.5;
+const POST_SHIFT_MAX = 8;
 const LAMP_SIZE = 1.3;
 const FLASH_RATE = 3;
 /** A blocker's barrier drops in over this many seconds at the end of its warning. */
@@ -93,6 +103,7 @@ export function buildScheduled(
   look: DebrisLook,
   paint: Paint,
   into: { glow: FlatBuilder; props: FlatBuilder },
+  env: CourseEnvelope,
   bound: Set<string>,
   ownBarrier: Set<string>,
   quality: Quality,
@@ -157,9 +168,9 @@ export function buildScheduled(
   const lampSpots: { r: Ribbon; s: number; x: number; kind: 'edge' | 'open' | 'cross'; slot: Slot | null }[] = [];
   for (const slot of [...blockers, ...sweepers]) {
     const { r, h } = slot;
-    for (const x of [h.minX - 2, h.maxX + 2]) {
-      post(posts, r, h.s0, x);
-      lampSpots.push({ r, s: h.s0, x, kind: 'edge', slot });
+    for (const side of [-1, 1]) {
+      const x = beacon(posts, env, r, h.s0, side < 0 ? h.minX - POST_OUT : h.maxX + POST_OUT, side);
+      if (x !== null) lampSpots.push({ r, s: h.s0, x, kind: 'edge', slot });
     }
     if (h.def.type === 'blocker') {
       // Green lamps over the opening: where to aim.
@@ -180,9 +191,8 @@ export function buildScheduled(
       for (const ds of [-half, half]) band(glow, paint, main, s0 + ds, -main.widthAt(s0 + ds) / 2, main.widthAt(s0 + ds) / 2);
       for (const ds of [-CROSS_WARN, CROSS_WARN]) {
         for (const side of [-1, 1]) {
-          const x = side * (main.widthAt(s0 + ds) / 2 + 3);
-          post(posts, main, s0 + ds, x);
-          lampSpots.push({ r: main, s: s0 + ds, x, kind: 'cross', slot: null });
+          const x = beacon(posts, env, main, s0 + ds, side < 0 ? main.minXAt(s0 + ds) - POST_OUT : main.maxXAt(s0 + ds) + POST_OUT, side);
+          if (x !== null) lampSpots.push({ r: main, s: s0 + ds, x, kind: 'cross', slot: null });
         }
       }
     }
@@ -423,6 +433,20 @@ const GIRDER_DEPTH = 0.62;
 const GIRDER_WEB = 0.14;
 /** The top girder lies skewed across the others, as a dropped load does. */
 const GIRDER_CROSS_YAW = 0.5;
+
+/**
+ * A beacon post at x, stepped out toward `side` until it stands clear of the course's envelope:
+ * the x it stands at, or null when it found no room.
+ */
+function beacon(b: FlatBuilder, env: CourseEnvelope, r: Ribbon, s: number, x: number, side: number): number | null {
+  for (let d = 0; d <= POST_SHIFT_MAX; d += POST_STEP) {
+    const mark = b.triangles;
+    post(b, r, s, x + side * d);
+    if (env.clearOfTriangles(b.positionsSince(mark))) return x + side * d;
+    b.truncate(mark);
+  }
+  return null;
+}
 
 /** A beacon post at the roadside, square in section. */
 function post(b: FlatBuilder, r: Ribbon, s: number, x: number) {

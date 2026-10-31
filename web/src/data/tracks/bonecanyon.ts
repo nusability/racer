@@ -241,7 +241,8 @@ export const bonecanyonScenery: TrackScenery = {
     { kind: 'grandstand', at: 0.1, side: -1, distance: -148, straddle: true },
     { kind: 'colossus', at: 59.5, side: -1, distance: 10, scale: 1.5 },
     { kind: 'cliffVillage', at: 29, side: 1, distance: 10, scale: 1.2, straddle: true },
-    { kind: 'wreck', at: 84, side: 1, distance: 30 },
+    // Across the canyon from the bend at 84: there the lap's other legs ran through its hull.
+    { kind: 'wreck', at: 96.25, side: -1, distance: 0 },
     { kind: 'mine', at: 37, side: -1, distance: 30 },
     { kind: 'sandbeast', at: 61.3, side: -1, distance: 40, hazard: 'neck' },
   ],

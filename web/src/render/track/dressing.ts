@@ -11,8 +11,11 @@ import { quadFacing } from './paint.ts';
 // open: the run-out ends in the force field, render/track/forceField.ts). Lit
 // props go into one merged mesh; their faces that must pop go into glow.
 
-const GANTRY_HEIGHT = 17;
+/** The start gantry's top over the road, where nothing flies over the line higher than it. */
+const GANTRY_LOW = 17;
 const GANTRY_BEAM = 4;
+/** Depth of the gantry's legs and beam along the road. */
+const GANTRY_DEPTH = 3;
 /** The wall behind a sprint's grid: height, thickness, how far past the boundaries it reaches. */
 const END_WALL_HEIGHT = 9;
 const END_WALL_DEPTH = 4;
@@ -98,21 +101,27 @@ function gantry(cor: Corridor, props: FlatBuilder, s: number) {
   const s0 = cor.ribbon.samples[cor.idx(k)];
   // The gantry spans the whole course, boundary to boundary, so nothing stands on drivable sand.
   const half = Math.max(s0.edgeL, s0.edgeR);
+  // Where racers fly over the line (a kicker just before it), the beam rises over their arc
+  // wherever it spans the road (its depth, and a sample either side).
+  const reach = Math.ceil(GANTRY_DEPTH / cor.ribbon.step);
+  let clear = 0;
+  for (let d = -reach; d <= reach; d++) clear = Math.max(clear, cor.ground.envelope.headroom(cor.vi - 1, cor.idx(k + d)));
+  const height = Math.max(GANTRY_LOW, clear + GANTRY_BEAM);
   const B = basisAt(cor, k, 1, 0, s0.pos.y);
   B.o = { ...s0.pos };
   const dark = p.black.clone().multiplyScalar(2.2);
-  for (const side of [-1, 1]) box(props, B, side * (half + 3), 0, 3, 3, -3, GANTRY_HEIGHT + 3, dark);
-  box(props, B, 0, 0, 2 * half + 9, 3, GANTRY_HEIGHT - GANTRY_BEAM, GANTRY_BEAM, dark);
+  for (const side of [-1, 1]) box(props, B, side * (half + 3), 0, GANTRY_DEPTH, GANTRY_DEPTH, -3, height + 3, dark);
+  box(props, B, 0, 0, 2 * half + 9, GANTRY_DEPTH, height - GANTRY_BEAM, GANTRY_BEAM, dark);
   // Banner faces both ways, chequer strip below it, accent stripe above.
   for (const facing of [-1, 1]) {
     const z = facing * 1.55;
-    panel(cor.glow, B, -half - 4, half + 4, GANTRY_HEIGHT - GANTRY_BEAM + 0.9, GANTRY_HEIGHT - 0.4, z, p.accent, facing);
+    panel(cor.glow, B, -half - 4, half + 4, height - GANTRY_BEAM + 0.9, height - 0.4, z, p.accent, facing);
     const squares = 24;
     for (let i = 0; i < squares; i++) {
       const x0 = -half - 4 + ((2 * half + 8) * i) / squares;
       const x1 = -half - 4 + ((2 * half + 8) * (i + 1)) / squares;
       for (let r = 0; r < 2; r++) {
-        const y0 = GANTRY_HEIGHT - GANTRY_BEAM + r * 0.45;
+        const y0 = height - GANTRY_BEAM + r * 0.45;
         panel(cor.glow, B, x0, x1, y0, y0 + 0.45, z, (i + r) % 2 ? p.white : p.black, facing);
       }
     }
@@ -160,20 +169,25 @@ function grandstands(cor: Corridor, props: FlatBuilder, rng: () => number, corne
       const k = Math.round(track.wrap(s) / track.step);
       const B = basisAt(cor, k, side, 0);
       if (!usable(cor, k, side)) continue;
-      for (let t = 0; t < STAND_TIERS; t++) {
-        const x = side * (STAND_SETBACK + (t + 0.5) * STAND_TIER_DEPTH);
-        box(props, B, x, 0, STAND_TIER_DEPTH, CROWD_CELL, -4, 4 + t * STAND_TIER_RISE, concrete);
-        const fans = crowd[Math.floor(rng() * crowd.length)];
-        box(props, B, x - side * 0.6, 0, 1.2, CROWD_CELL * 0.8, t * STAND_TIER_RISE, 0.9 + rng() * 0.5, fans);
-      }
-      if (c % 6 === 0) {
-        const xBack = side * (STAND_SETBACK + STAND_TIERS * STAND_TIER_DEPTH);
-        box(props, B, xBack, 0, 0.5, 0.5, 0, STAND_TIERS * STAND_TIER_RISE + 6, concrete);
-      }
-      const roofY = STAND_TIERS * STAND_TIER_RISE + 5.5;
-      box(props, B, side * (STAND_SETBACK + (STAND_TIERS * STAND_TIER_DEPTH) / 2 + 1), 0, STAND_TIERS * STAND_TIER_DEPTH + 4, CROWD_CELL, roofY, 0.6, c % 2 ? roofCol : p.white);
+      keepClear(cor, props, () => standCell(cor, props, B, side, c, rng, crowd, concrete, roofCol));
     }
   }
+}
+
+/** One crowd cell of a stand: its tiers of concrete and fans, a mast every few cells, the roof. */
+function standCell(cor: Corridor, props: FlatBuilder, B: Basis, side: number, c: number, rng: () => number, crowd: THREE.Color[], concrete: THREE.Color, roofCol: THREE.Color) {
+  for (let t = 0; t < STAND_TIERS; t++) {
+    const x = side * (STAND_SETBACK + (t + 0.5) * STAND_TIER_DEPTH);
+    box(props, B, x, 0, STAND_TIER_DEPTH, CROWD_CELL, -4, 4 + t * STAND_TIER_RISE, concrete);
+    const fans = crowd[Math.floor(rng() * crowd.length)];
+    box(props, B, x - side * 0.6, 0, 1.2, CROWD_CELL * 0.8, t * STAND_TIER_RISE, 0.9 + rng() * 0.5, fans);
+  }
+  if (c % 6 === 0) {
+    const xBack = side * (STAND_SETBACK + STAND_TIERS * STAND_TIER_DEPTH);
+    box(props, B, xBack, 0, 0.5, 0.5, 0, STAND_TIERS * STAND_TIER_RISE + 6, concrete);
+  }
+  const roofY = STAND_TIERS * STAND_TIER_RISE + 5.5;
+  box(props, B, side * (STAND_SETBACK + (STAND_TIERS * STAND_TIER_DEPTH) / 2 + 1), 0, STAND_TIERS * STAND_TIER_DEPTH + 4, CROWD_CELL, roofY, 0.6, c % 2 ? roofCol : cor.paint.white);
 }
 
 function flags(cor: Corridor, props: FlatBuilder, at: number) {
@@ -188,12 +202,28 @@ function flags(cor: Corridor, props: FlatBuilder, at: number) {
     for (const side of [-1, 1]) {
       if (!usable(cor, k, side)) continue;
       const B = basisAt(cor, k, side, 6);
-      box(props, B, 0, 0, 0.35, 0.35, -1, 11, pole);
       const flag = (i + (side > 0 ? 1 : 0)) % 2 ? p.accent : p.white;
-      panel(cor.glow, B, -side * 0.2, -side * 3.6, 7.6, 10.6, 0, flag, -1);
-      panel(cor.glow, B, -side * 0.2, -side * 3.6, 7.6, 10.6, 0, flag, 1);
+      keepClear(cor, props, () => {
+        box(props, B, 0, 0, 0.35, 0.35, -1, 11, pole);
+        panel(cor.glow, B, -side * 0.2, -side * 3.6, 7.6, 10.6, 0, flag, -1);
+        panel(cor.glow, B, -side * 0.2, -side * 3.6, 7.6, 10.6, 0, flag, 1);
+      });
     }
   }
+}
+
+/**
+ * Draws a prop (into the props and the glow) and keeps it only if it stands clear of the course's
+ * envelope: beside one stretch it can still stand in another's run-off, or hang over a flight.
+ */
+function keepClear(cor: Corridor, props: FlatBuilder, draw: () => void): void {
+  const a = props.triangles;
+  const b = cor.glow.triangles;
+  draw();
+  const env = cor.ground.envelope;
+  if (env.clearOfTriangles(props.positionsSince(a)) && env.clearOfTriangles(cor.glow.positionsSince(b))) return;
+  props.truncate(a);
+  cor.glow.truncate(b);
 }
 
 /** Room beside the course for a prop: open run-off on that side, no chasm, tunnel or junction. */
@@ -217,9 +247,11 @@ function markers(cor: Corridor, props: FlatBuilder, start: number, distance: num
       if (!usable(cor, k, side)) continue;
       const B = basisAt(cor, k, side, 5);
       const h = km ? 10 : 7;
-      box(props, B, 0, 0, 0.5, 0.5, -1, h, post);
-      panel(cor.glow, B, -1.6, 1.6, h - 3, h, -0.3, km ? p.accent : p.white);
-      panel(cor.glow, B, -1.2, 1.2, h - 2.2, h - 1.6, -0.35, p.black);
+      keepClear(cor, props, () => {
+        box(props, B, 0, 0, 0.5, 0.5, -1, h, post);
+        panel(cor.glow, B, -1.6, 1.6, h - 3, h, -0.3, km ? p.accent : p.white);
+        panel(cor.glow, B, -1.2, 1.2, h - 2.2, h - 1.6, -0.35, p.black);
+      });
     }
   }
 }
@@ -261,15 +293,17 @@ function chevronBoards(cor: Corridor, props: FlatBuilder) {
     const turn = -side;
     if (!usable(cor, k, side)) continue;
     const B = basisAt(cor, k, side, 4.5);
-    box(props, B, 0, 0.4, 0.3, 0.3, -1, 2.2, back);
-    box(props, B, 2.2, 0.4, 0.3, 0.3, -1, 2.2, back);
-    panel(cor.glow, B, -1.6, 3.8, 1.2, 4.6, 0, p.black);
-    for (let c = 0; c < 2; c++) {
-      const x0 = -0.9 + c * 2.4;
-      const tip = x0 + turn * 0.9 + (turn > 0 ? 0 : 1.5);
-      const base = tip - turn * 0.9;
-      quadFacing(cor.glow, at(B, base, 1.5, -0.05), at(B, base + turn * 0.6, 1.5, -0.05), at(B, tip + turn * 0.6, 2.9, -0.05), at(B, tip, 2.9, -0.05), { x: -B.f.x, y: 0, z: -B.f.z }, p.hazard);
-      quadFacing(cor.glow, at(B, tip, 2.9, -0.05), at(B, tip + turn * 0.6, 2.9, -0.05), at(B, base + turn * 0.6, 4.3, -0.05), at(B, base, 4.3, -0.05), { x: -B.f.x, y: 0, z: -B.f.z }, p.hazard);
-    }
+    keepClear(cor, props, () => {
+      box(props, B, 0, 0.4, 0.3, 0.3, -1, 2.2, back);
+      box(props, B, 2.2, 0.4, 0.3, 0.3, -1, 2.2, back);
+      panel(cor.glow, B, -1.6, 3.8, 1.2, 4.6, 0, p.black);
+      for (let c = 0; c < 2; c++) {
+        const x0 = -0.9 + c * 2.4;
+        const tip = x0 + turn * 0.9 + (turn > 0 ? 0 : 1.5);
+        const base = tip - turn * 0.9;
+        quadFacing(cor.glow, at(B, base, 1.5, -0.05), at(B, base + turn * 0.6, 1.5, -0.05), at(B, tip + turn * 0.6, 2.9, -0.05), at(B, tip, 2.9, -0.05), { x: -B.f.x, y: 0, z: -B.f.z }, p.hazard);
+        quadFacing(cor.glow, at(B, tip, 2.9, -0.05), at(B, tip + turn * 0.6, 2.9, -0.05), at(B, base + turn * 0.6, 4.3, -0.05), at(B, base, 4.3, -0.05), { x: -B.f.x, y: 0, z: -B.f.z }, p.hazard);
+      }
+    });
   }
 }

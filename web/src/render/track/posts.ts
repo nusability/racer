@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FlatBuilder, type P3 } from './builder.ts';
 import type { Boundary, Scatter } from './corridor.ts';
 import { quadFacing, type Paint } from './paint.ts';
+import type { CourseEnvelope } from './clearance.ts';
 
 // Boundary pylons along the run-off lips and lamp posts along the walls: hundreds of them,
 // two instanced meshes each (lit body, unlit light), whatever the lap length.
@@ -13,6 +14,13 @@ const FENCE_Y: [number, number] = [2.2, 2.9];
 const LAMP_HEIGHT = 10;
 const LAMP_ARM = 3.5;
 const UP = new THREE.Vector3(0, 1, 0);
+/**
+ * A post that would lean into the course (an upright post on the low side of a banked bend, a
+ * lip inside another stretch's run-off) steps out along its own line by this much at a time, up
+ * to the most it may move before it no longer marks the boundary; past that it is left out.
+ */
+const POST_STEP = 0.25;
+const POST_SHIFT_MAX = 3;
 
 function bodyOf(build: (b: FlatBuilder) => void): THREE.BufferGeometry {
   const b = new FlatBuilder();
@@ -32,25 +40,39 @@ function cuboid(b: FlatBuilder, x0: number, y0: number, z0: number, x1: number, 
   }
 }
 
-function instance(geo: THREE.BufferGeometry, mat: THREE.Material, items: { p: P3; dir: P3 }[], name: string): THREE.InstancedMesh | null {
-  if (items.length === 0) return null;
-  const mesh = new THREE.InstancedMesh(geo, mat, items.length);
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const one = new THREE.Vector3(1, 1, 1);
-  items.forEach((it, i) => {
-    // Local +X points along dir (toward the road for lamps, outward for pylons).
-    q.setFromAxisAngle(UP, Math.atan2(-it.dir.z, it.dir.x));
-    m.compose(new THREE.Vector3(it.p.x, it.p.y, it.p.z), q, one);
-    mesh.setMatrixAt(i, m);
+/** Where a post stands: local +X along dir (toward the road for lamps, outward for pylons). */
+function placement(p: P3, dir: P3): THREE.Matrix4 {
+  const q = new THREE.Quaternion().setFromAxisAngle(UP, Math.atan2(-dir.z, dir.x));
+  return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(1, 1, 1));
+}
+
+/**
+ * The posts (each made of `geos`) that can stand clear of the course: each at its spot, or
+ * stepped out along `out` until every part passes the envelope as a boundary marker.
+ */
+function settle<T extends { p: P3 }>(env: CourseEnvelope, geos: THREE.BufferGeometry[], items: T[], dir: (it: T) => P3, out: (it: T) => P3): (T & { m: THREE.Matrix4 })[] {
+  return items.flatMap((it) => {
+    const o = out(it);
+    for (let d = 0; d <= POST_SHIFT_MAX; d += POST_STEP) {
+      const p = { x: it.p.x + o.x * d, y: it.p.y, z: it.p.z + o.z * d };
+      const m = placement(p, dir(it));
+      if (geos.every((g) => env.clearOf(g, m, 'marker'))) return [{ ...it, p, m }];
+    }
+    return [];
   });
+}
+
+function instance(geo: THREE.BufferGeometry, mat: THREE.Material, at: THREE.Matrix4[], name: string): THREE.InstancedMesh | null {
+  if (at.length === 0) return null;
+  const mesh = new THREE.InstancedMesh(geo, mat, at.length);
+  at.forEach((m, i) => mesh.setMatrixAt(i, m));
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
   mesh.name = name;
   return mesh;
 }
 
-export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, glow: FlatBuilder, lit: THREE.Material, unlit: THREE.Material): THREE.InstancedMesh[] {
+export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, glow: FlatBuilder, lit: THREE.Material, unlit: THREE.Material, env: CourseEnvelope): THREE.InstancedMesh[] {
   const dark = paint.black.clone().multiplyScalar(2.4);
   const pylon = bodyOf((b) => {
     for (let i = 0; i < 4; i++) cuboid(b, -0.3, -1 + i * 1.1, -0.3, 0.3, i * 1.1 + 0.1, 0.3, i % 2 ? dark : paint.white);
@@ -62,15 +84,15 @@ export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, g
   });
   const lampHead = bodyOf((b) => cuboid(b, LAMP_ARM - 1.2, LAMP_HEIGHT - 0.6, -0.4, LAMP_ARM + 0.2, LAMP_HEIGHT - 0.25, 0.4, new THREE.Color(0xfff1c8)));
 
-  const pylons = scatter.pylons.map((p) => ({ p: p.p, dir: p.out }));
-  const lamps = scatter.lights.map((l) => ({ p: l.p, dir: l.inward }));
+  const pylons = settle(env, [pylon, tip], scatter.pylons, (p) => p.out, (p) => p.out);
+  const lamps = settle(env, [lampPost, lampHead], scatter.lights, (l) => l.inward, (l) => ({ x: -l.inward.x, y: 0, z: -l.inward.z }));
   if (boundary === 'fence') {
     // Energy fence: a glowing band between neighbouring pylons on the same lip.
     const accent = paint.accent;
-    for (let i = 0; i + 1 < scatter.pylons.length; i++) {
-      for (let j = i + 1; j < Math.min(scatter.pylons.length, i + 4); j++) {
-        const a = scatter.pylons[i];
-        const b = scatter.pylons[j];
+    for (let i = 0; i + 1 < pylons.length; i++) {
+      for (let j = i + 1; j < Math.min(pylons.length, i + 4); j++) {
+        const a = pylons[i];
+        const b = pylons[j];
         if (a.view !== b.view || a.side !== b.side || Math.hypot(a.p.x - b.p.x, a.p.z - b.p.z) > 60) continue;
         const q = (p: P3, y: number): P3 => ({ x: p.x, y: p.y + y, z: p.z });
         quadFacing(glow, q(a.p, FENCE_Y[0]), q(b.p, FENCE_Y[0]), q(b.p, FENCE_Y[1]), q(a.p, FENCE_Y[1]), { x: -a.out.x, y: 0, z: -a.out.z }, accent);
@@ -80,9 +102,9 @@ export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, g
     }
   }
   return [
-    instance(pylon, lit, pylons, 'pylons'),
-    instance(tip, unlit, pylons, 'pylonTips'),
-    instance(lampPost, lit, lamps, 'lampPosts'),
-    instance(lampHead, unlit, lamps, 'lamps'),
+    instance(pylon, lit, pylons.map((p) => p.m), 'pylons'),
+    instance(tip, unlit, pylons.map((p) => p.m), 'pylonTips'),
+    instance(lampPost, lit, lamps.map((l) => l.m), 'lampPosts'),
+    instance(lampHead, unlit, lamps.map((l) => l.m), 'lamps'),
   ].filter((m): m is THREE.InstancedMesh => m !== null);
 }

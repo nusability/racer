@@ -307,7 +307,8 @@ export const coralcoveScenery: TrackScenery = {
   road: 'causeway',
   landmarks: [
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
-    { kind: 'regatta', at: 24, side: 1, distance: 150, afloat: true },
+    // Out in open water: closer in, its yachts sailed across the lagoon run-off.
+    { kind: 'regatta', at: 22.5, side: 1, distance: 380, afloat: true },
     // On the headland top, beside the hairpin it names.
     { kind: 'lighthouse', at: 58.5, side: -1, distance: 10 },
     { kind: 'beachParty', at: 86.2, side: -1, distance: 10 },

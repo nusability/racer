@@ -18,14 +18,12 @@ import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import type { PlayerInput, TrackDef, TrackFeature } from '../src/core/types.ts';
-import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, DRAFT_TOP_SPEED, GRAVITY, SIM_DT, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_BRIDGE_CLEARANCE, DRAFT_TOP_SPEED, GRAVITY, PLANNED_TOP_SPEED, SIM_DT, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
 
 /** Every jump must be cleared by a racer slowed to this, with margin. */
 const JUMP_CLEAR_TARGET = 100;
 /** Warn when a jump needs more than this fraction of the target to clear. */
 const JUMP_CLEAR_MARGIN = 0.9;
-/** Fastest racer we plan for (upgraded + boost), m/s. */
-const TOP_SPEED = 240;
 /** Starter top speed, used for the lap-time estimate. */
 const STARTER_SPEED = 150;
 /** Typical racing speed, used to turn a shortcut's distance saving into seconds. */
@@ -236,16 +234,16 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
     const f = features.find((x) => x.kind === 'jump' && Math.abs(sAt(x.at) - j.rampStart) < 1) as Extract<TrackFeature, { kind: 'jump' }>;
     const slope = (2 * f.rampHeight) / f.rampLength;
     const vmin = minClearSpeed(t, j.lip, slope);
-    const fast = fly(t, j.lip, TOP_SPEED, TOP_SPEED * slope);
+    const fast = fly(t, j.lip, PLANNED_TOP_SPEED, PLANNED_TOP_SPEED * slope);
     const runout = minRadiusBetween(t, j.rampStart, t.wrap(j.lip + fast.distance + 100 - j.rampStart));
     console.log(
       `    jump @${f.at} gap ${f.gapLength}m ramp ${f.rampHeight}/${f.rampLength} lip ${slope.toFixed(2)}: ` +
-        `min clear ${vmin.toFixed(0)} m/s (${(vmin * 3.6).toFixed(0)} km/h); @${TOP_SPEED}: ${fmt(fast.distance)}m apex ${fast.apex.toFixed(0)}m; ` +
+        `min clear ${vmin.toFixed(0)} m/s (${(vmin * 3.6).toFixed(0)} km/h); @${PLANNED_TOP_SPEED}: ${fmt(fast.distance)}m apex ${fast.apex.toFixed(0)}m; ` +
         `run-out radius ${fmt(runout)}m`,
     );
     if (vmin > JUMP_CLEAR_TARGET * JUMP_CLEAR_MARGIN) w(`jump @${f.at} needs ${vmin.toFixed(0)} m/s (> ${JUMP_CLEAR_TARGET * JUMP_CLEAR_MARGIN})`);
     if (runout < RUNOUT_MIN_RADIUS) w(`jump @${f.at} ramp/run-out curves (radius ${fmt(runout)}m)`);
-    for (const v of [vmin * 1.05, JUMP_CLEAR_TARGET, STARTER_SPEED, TOP_SPEED]) {
+    for (const v of [vmin * 1.05, JUMP_CLEAR_TARGET, STARTER_SPEED, PLANNED_TOP_SPEED]) {
       const fl = fly(t, j.lip, v, v * slope);
       if (fl.hit) w(`jump @${f.at} at ${v.toFixed(0)} m/s: ${fl.hit}`);
     }
@@ -258,7 +256,7 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
       const slope = (2 * f.height) / f.length;
       const parts: string[] = [];
       let far = 0;
-      for (const v of [STARTER_SPEED, TOP_SPEED]) {
+      for (const v of [STARTER_SPEED, PLANNED_TOP_SPEED]) {
         const fl = fly(t, top, v, v * slope);
         far = Math.max(far, fl.distance);
         parts.push(`@${v}: ${fmt(fl.distance)}m apex ${fl.apex.toFixed(0)}m`);

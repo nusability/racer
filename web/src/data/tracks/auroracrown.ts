@@ -341,7 +341,8 @@ export const auroracrownScenery: TrackScenery = {
   pinesPerKm: 14,
   seracs: 8,
   landmarks: [
-    { kind: 'grandstand', at: 0.1, side: -1, distance: -148, straddle: true },
+    // Back along the start straight: at the line its far end stood across the lap's last leg.
+    { kind: 'grandstand', at: 222.85, side: -1, distance: -148, straddle: true },
     { kind: 'auroraSky', at: 0.0, side: -1, distance: 0 },
     { kind: 'iceStation', at: 31.37, side: -1, distance: 20, hazard: 'rotorwash' },
     { kind: 'snowcatConvoy', at: 210.15, side: -1, distance: 20, hazard: 'snowcat' },

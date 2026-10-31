@@ -14,6 +14,8 @@ import { buildUi, type DisplaySettings, type RaceClock, type ViewerApi, type Vie
 import { trackHazards, trackSpots, triggerTime, type ViewerHazard } from './viewer/spots.ts';
 import { Stage } from './viewer/stage.ts';
 import type { FieldRacer } from './forceField.ts';
+import { GROUND_RISE_MAX } from './config.ts';
+import { describeFinding } from './clearance.ts';
 
 // The level viewer (track-viewer.html): every level, one at a time, to fly round, jump to its
 // points of interest and fire its hazards. Opened from the hidden debug menu; works on a phone
@@ -325,7 +327,9 @@ const viewer = {
   clock,
   collect: (branch: number, cell: number, item: 'boost' | 'repair' = 'boost') => stage.trackScene.collectCell(item, branch, cell),
   resetCells: () => stage.trackScene.resetCells(),
-  auditGround: (maxRise = 0.5) => stage.trackScene.auditGround(maxRise),
+  auditGround: (maxRise = GROUND_RISE_MAX) => stage.trackScene.auditGround(maxRise),
+  /** The clearance audit of the track as built: one line per spot where scenery stands in the drivable envelope. */
+  auditClearance: () => stage.trackScene.clearance.map((f) => describeFinding(stage.track, f)),
   landmarks: () =>
     stage.trackScene.group.children
       .filter((o) => o.name.startsWith('landmark:'))

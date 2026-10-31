@@ -356,8 +356,10 @@ export const volcanoisleScenery: TrackScenery = {
   lava: true,
   landmarks: [
     { kind: 'grandstand', at: 0.05, side: -1, distance: -148, straddle: true },
-    { kind: 'harbor', at: 188.4, side: 1, distance: 30, afloat: true },
-    { kind: 'volcano', at: 37.5, side: 1, distance: 250, afloat: true, hazard: 'bombs' },
+    // Clear of the Black Channel, which now cuts across the old quay.
+    { kind: 'harbor', at: 190.9, side: 1, distance: 40, heading: 0.15, afloat: true },
+    // Out to sea a little, a touch smaller: its flanks stood over the cliff road and in the Lava Tube.
+    { kind: 'volcano', at: 38.5, side: 1, distance: 330, scale: 0.95, afloat: true, hazard: 'bombs' },
     { kind: 'whales', at: 149.8, side: -1, distance: 250, afloat: true },
     { kind: 'lighthouse', at: 175, side: -1, distance: 40, afloat: true },
   ],

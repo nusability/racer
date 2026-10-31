@@ -281,9 +281,11 @@ export const frozenharbor: TrackDef = {
     { kind: 'boostPad', at: 147.56, lateral: 0 },
     { kind: 'repairCells', at: 161.07, lateral: 12, count: 3, spacing: 26 },
     { kind: 'kicker', at: 162.52, length: 40, height: 2 },
+    // The icebreaker rams in from the right: lying back on the left between rams, its stern
+    // stood in the bridge approach overhead.
     {
       kind: 'hazard',
-      hazard: { type: 'sweeper', id: 'icebreaker', at: 111.75, radius: 14, height: 14, xFrom: -95, xTo: 95, cross: 4, hold: 2, period: 18, phase: 0 },
+      hazard: { type: 'sweeper', id: 'icebreaker', at: 111.75, radius: 14, height: 14, xFrom: 95, xTo: -95, cross: 4, hold: 2, period: 18, phase: 0 },
     },
   ],
   branches: [
@@ -326,7 +328,7 @@ export const frozenharborScenery: TrackScenery = {
   seracs: 6,
   landmarks: [
     { kind: 'grandstand', at: 0.1, side: 1, distance: -148, straddle: true },
-    { kind: 'icebreaker', at: 111.75, side: -1, distance: 30, hazard: 'icebreaker' },
+    { kind: 'icebreaker', at: 111, side: 1, distance: 30, hazard: 'icebreaker' },
     { kind: 'iceStation', at: 24.74, side: 1, distance: 30 },
     { kind: 'frozenFalls', at: 61.37, side: 1, distance: 60 },
     { kind: 'snowcatConvoy', at: 186.45, side: -1, distance: 25 },

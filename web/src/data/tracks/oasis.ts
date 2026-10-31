@@ -237,7 +237,9 @@ export const oasisScenery: TrackScenery = {
   ],
   landmarks: [
     { kind: 'fair', at: 2.5, side: 1, distance: 5 },
-    { kind: 'bazaar', branch: 'bazaar', at: 3.5, side: 1, distance: -153, straddle: true },
+    // Beside the Bazaar Run, between it and the main road: the rerouted run bends where the
+    // market's straight lane runs, so it can no longer run down the lane.
+    { kind: 'bazaar', branch: 'bazaar', at: 3, side: 1, distance: 105 },
     { kind: 'oasisTown', at: 70, side: -1, distance: 10, scale: 1.3 },
     { kind: 'skyfleet', at: 106, side: -1, distance: 260, hazard: 'airshipwash' },
     { kind: 'balloons', at: 86, side: -1, distance: 150 },

@@ -7,7 +7,8 @@ import { GRAPHICS_PROFILE, type GraphicsLevel } from '../../graphicsTuning.ts';
 import { resolveLook, type LookFlags } from '../../look/look.ts';
 import { PostFx } from '../../look/postFx.ts';
 import { applyEnvironment, buildTrackScene, type TrackScene } from '../../trackScene.ts';
-import { FOG_FAR, atmosphere } from '../config.ts';
+import { FOG_FAR, GROUND_RISE_MAX, atmosphere } from '../config.ts';
+import { reportClearance } from '../clearance.ts';
 
 // The level viewer's 3D side: one renderer for the page's life, and one track scene at a time
 // that is built, and fully disposed before the next one, the way a race session does it.
@@ -17,8 +18,6 @@ const FOV = 72;
 const NEAR = 0.5;
 /** The far plane sits past the fog so the fogged horizon is never clipped. */
 const FAR_MARGIN = 300;
-/** Terrain more than this above the road or run-off counts as a sand bank you fly through. */
-const GROUND_RISE_MAX = 0.5;
 
 export interface StageSettings {
   level: GraphicsLevel;
@@ -99,6 +98,8 @@ export class Stage {
       const h = hits[0];
       console.error(`ground audit: ${hits.length} spots stand over ${GROUND_RISE_MAX}m above the drivable surface, first at branch ${h.branch} s=${h.s.toFixed(0)} x=${h.x} (+${h.rise.toFixed(1)}m)`);
     }
+    // Clearance audit: scenery must never stand in the drivable envelope (the viewer shows it so it can be found).
+    reportClearance(track, scene.clearance);
   }
 
   private disposeBuilt(): void {

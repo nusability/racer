@@ -706,5 +706,7 @@ export const HAZARD_BAR_RADIUS = 2.2;
 export const HAZARD_BAR_SPACING = 3.5;
 /** A slick stretch blends its grip in over this fraction (inverse) of its length at each end. */
 export const SLICK_BLEND_FRACTION = 8;
+/** The fastest racer the courses are planned for (fully upgraded, on boost), m/s: its jumps fly highest and furthest. */
+export const PLANNED_TOP_SPEED = 240;
 /** Least height difference between the two roads at a 'bridge' crossing, metres. */
 export const CROSSING_BRIDGE_CLEARANCE = 14;

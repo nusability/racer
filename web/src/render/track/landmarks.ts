@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { CourseHazard } from '../../core/hazards.ts';
 import type { Track } from '../../core/track.ts';
 import type { TrackScenery } from '../../data/tracks/scenery.ts';
 import { LANDMARKS, type Landmark } from '../landmarks/index.ts';
@@ -15,8 +16,8 @@ export interface PlacedLandmark {
   /** World centre and footprint radius after scaling, for culling. */
   centre: THREE.Vector3;
   radius: number;
-  /** Allowed to reach over the boundary; skipped by the clearance check. */
-  straddle: boolean;
+  /** The course hazard it is bound to (it reaches over the road there), or null. */
+  hazard: CourseHazard | null;
   /**
    * Where its hazard crosses the course, for a bound landmark: its moving parts reach far
    * past its footprint, so it stays on while that spot is in view.
@@ -88,7 +89,7 @@ export function placeLandmarks(track: Track, scenery: TrackScenery, ground: Grou
     g.updateMatrixWorld(true);
     toLocal.copy(g.matrixWorld).invert();
     const spot = hazard ? track.toWorld((hazard.hazard.s0 + hazard.hazard.s1) / 2, 0, 0) : null;
-    placed.push({ kind: p.kind, landmark, centre: new THREE.Vector3(x, y, z), radius, straddle: p.straddle === true || SKY.has(p.kind), hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
+    placed.push({ kind: p.kind, landmark, centre: new THREE.Vector3(x, y, z), radius, hazard: hazard?.hazard ?? null, hazardAt: spot ? new THREE.Vector3(spot.x, spot.y, spot.z) : null });
   });
   return placed;
 }
@@ -110,22 +111,6 @@ function branchRibbon(track: Track, id: string) {
   const b = track.branches.find((x) => x.def.id === id);
   if (!b) throw new Error(`Track ${track.def.id}: no branch "${id}" for a landmark`);
   return b.ribbon;
-}
-
-/** Warns (dev aid) about landmarks whose footprint reaches onto some part of the course. */
-export function checkLandmarkClearance(placed: PlacedLandmark[], ground: Ground): void {
-  for (const p of placed) {
-    // A bound landmark reaches over the road on purpose (that is its job).
-    if (p.straddle || p.hazardAt !== null) continue;
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-      const x = p.centre.x + Math.cos(a) * p.radius * 0.9;
-      const z = p.centre.z + Math.sin(a) * p.radius * 0.9;
-      if (!ground.clearOfCourse(x, z, -40)) {
-        console.warn(`landmark ${p.landmark.group.name} overlaps the course near (${x.toFixed(0)}, ${z.toFixed(0)})`);
-        break;
-      }
-    }
-  }
 }
 
 /**

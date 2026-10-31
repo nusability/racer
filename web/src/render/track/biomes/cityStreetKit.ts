@@ -6,6 +6,7 @@ import { beats, type Rhythm } from '../rhythm.ts';
 import { BARRIER_H, FENCE_TOP, KERB_H, PAVEMENT, QUAY, WATER_DROP, streetFrame } from '../street.ts';
 import type { CityParts, PartShape } from './cityParts.ts';
 import type { CitySite } from './citySite.ts';
+import type { ClearanceRule } from '../clearance.ts';
 import { METRO_RUN, PLAZA_HALF, PLAZA_R, SIDE_RUN, type Front, type StreetLayout } from './cityStreets.ts';
 
 // What dresses a street section, drawn from the city's own instanced kit (cityParts.ts), so the
@@ -31,6 +32,8 @@ const CROWN: readonly [number, number] = [4.2, 6.4];
 /** Benches, bins and hydrants (small furniture, high quality only): shares per tree gap. */
 const BENCH_SHARE = 0.45;
 const HYDRANT_SHARE = 0.2;
+/** Hydrants stand at the kerb, this far behind the barrier. */
+const HYDRANT_AT = 1.2;
 /** A bus shelter about every this many metres of shopfront. */
 const SHELTER_EVERY = 320;
 /** Café tables under an awning: this share of awnings has them. */
@@ -50,6 +53,8 @@ const KNOT_SHARE = 0.25;
 /** A person: body width, height (shoulders) and depth, and the head's size, metres. */
 const PERSON: readonly [number, number, number] = [0.48, 1.45, 0.3];
 const HEAD = 0.26;
+/** People stand up to this share taller (or shorter) than PERSON's height. */
+const PERSON_TALL = 1.1;
 /** An open stretch of building line this long or more gets a crowd (this share) or a hedge. */
 const OPEN_MIN = 6;
 const OPEN_CROWD = 0.6;
@@ -73,6 +78,8 @@ const METRO_DECK: readonly [number, number] = [1.8, 8];
 const TRAIN: readonly [number, number, number] = [3.3, 3.6, 64];
 /** Footbridges: deck clearance, width, parapet height. */
 const FOOT_CLEAR = 7.5;
+/** The most a footbridge rises over FOOT_CLEAR to clear a banked or climbing road; more is an authoring error. */
+const FOOT_RISE_MAX = 6;
 const FOOT_W = 3.4;
 const PARAPET = 1.3;
 /** The side street's pavements are this wide. */
@@ -118,6 +125,13 @@ const style = (surface: Surface, o: { hue?: NeonHue; mode?: NeonMode; grime?: nu
   elevated: true,
 });
 const PLAIN = style(SURFACE.plain);
+/**
+ * Furniture stands upright, but on a banked street the drivable envelope leans out over the low
+ * side's pavement: a lamp or a tree there steps back by this much at a time until it clears.
+ */
+const LEAN_STEP = 0.25;
+/** A unit box standing on its base, to test a piece's room against the envelope. */
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
 /** People are plain and clean: no panel seams worth the name at their size, no street stain. */
 const PERSON_STYLE = style(SURFACE.plain, { grime: 0 });
 const LAMP = style(SURFACE.lamp);
@@ -155,10 +169,27 @@ class Side {
   }
 
   /** A kit shape w (along) × h × d (across), its base at `y` over the road edge, `dx` out from the boundary. */
-  put(shape: PartShape, u: number, dx: number, y: number, w: number, h: number, d: number, tint: THREE.Color, st: FacadeStyle, turn = 0): void {
+  put(shape: PartShape, u: number, dx: number, y: number, w: number, h: number, d: number, tint: THREE.Color, st: FacadeStyle, turn = 0, rule: ClearanceRule = 'scenery'): void {
     const f = this.frame(u);
     const p = f.at(dx, y);
-    this.x.parts.add(shape, p.x, p.y, p.z, w, h, d, f.yaw + turn, tint, st);
+    this.x.parts.add(shape, p.x, p.y, p.z, w, h, d, f.yaw + turn, tint, st, rule);
+  }
+
+  /**
+   * The nearest spot from `dx` out to the building line where an upright piece w × h × d (its
+   * base at `y`) stands clear of the course's envelope, or null when the pavement has no room.
+   */
+  clear(u: number, dx: number, y: number, w: number, h: number, d: number): number | null {
+    const f = this.frame(u);
+    const env = this.x.cor.ground.envelope;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), f.yaw);
+    for (let out = dx; out + d / 2 <= PAVEMENT; out += LEAN_STEP) {
+      const p = f.at(out, y);
+      m.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(w, h, d));
+      if (env.clearOf(UNIT_BOX, m, 'scenery')) return out;
+    }
+    return null;
   }
 
   /** Room over the pavement at u, dx before a sightline cap (metres over the road edge). */
@@ -208,9 +239,12 @@ function pavement(S: Side, fronts: Front[], rng: Rng): void {
   const { l, side } = S;
   const salt = side > 0 ? 0x9e37 : 0;
   for (const u of beats({ gap: LAMPS.gap, salt: LAMPS.salt ^ salt ^ l.s0 }, l.length)) {
-    S.put('box', u, LAMP_AT, KERB_H, 0.24, LAMP_H, 0.24, METAL, PLAIN);
-    S.put('box', u, LAMP_AT - LAMP_ARM / 2, LAMP_H - 0.25, 0.14, 0.14, LAMP_ARM, METAL, PLAIN);
-    S.put('box', u, LAMP_AT - LAMP_ARM + 0.3, LAMP_H - 0.5, 0.5, 0.22, 1.1, METAL, LAMP);
+    // The arm reaches back over the road above the envelope; the post steps back on a bank.
+    const at = S.clear(u, LAMP_AT, KERB_H, 0.24, LAMP_H, 0.24);
+    if (at === null) continue;
+    S.put('box', u, at, KERB_H, 0.24, LAMP_H, 0.24, METAL, PLAIN);
+    S.put('box', u, at - LAMP_ARM / 2, LAMP_H - 0.25, 0.14, 0.14, LAMP_ARM, METAL, PLAIN);
+    S.put('box', u, at - LAMP_ARM + 0.3, LAMP_H - 0.5, 0.5, 0.22, 1.1, METAL, LAMP);
   }
   const quay = fronts.some((f) => f.kind === 'quay');
   if (quay) return;
@@ -218,10 +252,11 @@ function pavement(S: Side, fronts: Front[], rng: Rng): void {
     const f = kindAt(fronts, u);
     if (!f || (f.kind !== 'shop' && f.kind !== 'open' && f.kind !== 'stand')) continue;
     const crown = range(rng, CROWN[0], CROWN[1]);
-    if (S.headroom(u, TREE_AT, crown) > crown + KERB_H + 1) {
-      S.put('box', u, TREE_AT, KERB_H, 1.7, 0.75, 1.7, PLANTER, style(SURFACE.plain, { grime: 0.5 }));
-      S.put('cylinder', u, TREE_AT, KERB_H + 0.7, 0.35, crown * 0.45, 0.35, BARK, PLAIN);
-      S.put('dome', u, TREE_AT, KERB_H + crown * 0.35, crown * 0.75, crown * 1.3, crown * 0.75, PLANTER, GARDEN);
+    const at = S.clear(u, TREE_AT, KERB_H, crown * 0.75, crown * 1.65, crown * 0.75);
+    if (at !== null && S.headroom(u, at, crown) > crown + KERB_H + 1) {
+      S.put('box', u, at, KERB_H, 1.7, 0.75, 1.7, PLANTER, style(SURFACE.plain, { grime: 0.5 }));
+      S.put('cylinder', u, at, KERB_H + 0.7, 0.35, crown * 0.45, 0.35, BARK, PLAIN);
+      S.put('dome', u, at, KERB_H + crown * 0.35, crown * 0.75, crown * 1.3, crown * 0.75, PLANTER, GARDEN);
     }
     if (!S.x.detail) continue;
     const r = rng();
@@ -230,7 +265,8 @@ function pavement(S: Side, fronts: Front[], rng: Rng): void {
       S.put('box', u + 4, TREE_AT + 1.05, KERB_H + 0.5, 2.2, 0.55, 0.1, METAL, PLAIN);
       S.put('box', u + 4, TREE_AT + 0.8, KERB_H, 1.8, 0.42, 0.4, METAL, PLAIN);
     } else if (r < BENCH_SHARE + HYDRANT_SHARE) {
-      S.put('cylinder', u + 3, 1.2, KERB_H, 0.38, 0.8, 0.38, HYDRANT, PLAIN);
+      const at = S.clear(u + 3, HYDRANT_AT, KERB_H, 0.38, 0.8, 0.38);
+      if (at !== null) S.put('cylinder', u + 3, at, KERB_H, 0.38, 0.8, 0.38, HYDRANT, PLAIN);
     } else {
       S.put('cylinder', u + 3, TREE_AT + 0.6, KERB_H, 0.6, 1, 0.6, METAL, PLAIN);
     }
@@ -299,13 +335,15 @@ function openFront(S: Side, f: Front, rng: Rng): void {
 /** People standing in a row from u0 to u1, `dx` out, on a floor `y` over the road edge. */
 function crowd(S: Side, u0: number, u1: number, dx: number, y: number, rng: Rng): void {
   for (let u = u0; u < u1; u += range(rng, 0.6, 1.4)) {
-    person(S.point(u, dx + range(rng, -0.3, 0.3), y), S.frame(u).yaw, S.x.parts, rng);
+    // Standing at the barrier of a banked street, a spectator steps back off the envelope's lean.
+    const at = S.clear(u, dx + range(rng, -0.3, 0.3), y, PERSON[0], PERSON[1] * PERSON_TALL + HEAD * 1.15, PERSON[2]);
+    if (at !== null) person(S.point(u, at, y), S.frame(u).yaw, S.x.parts, rng);
   }
 }
 
 /** One person standing at p (feet), facing across the street. */
 function person(p: THREE.Vector3, yaw: number, parts: CityParts, rng: Rng): void {
-  const h = PERSON[1] * range(rng, 0.9, 1.1);
+  const h = PERSON[1] * range(rng, 2 - PERSON_TALL, PERSON_TALL);
   parts.add('box', p.x, p.y, p.z, PERSON[0], h, PERSON[2], yaw, new THREE.Color(CROWD[Math.floor(rng() * CROWD.length)]), PERSON_STYLE);
   parts.add('box', p.x, p.y + h, p.z, HEAD, HEAD * 1.15, HEAD, yaw, new THREE.Color(SKIN[Math.floor(rng() * SKIN.length)]), PERSON_STYLE);
 }
@@ -411,7 +449,8 @@ function fencePosts(S: Side): void {
   for (const u of beats({ gap: [3.5, 5.5], salt: 0xfe ^ S.l.s0 ^ (S.side > 0 ? 1 : 0) }, S.l.length)) {
     const k = S.frame(u).k;
     if (cor.open(k, S.side) || cor.shape.quay[S.side > 0 ? 1 : 0][cor.idx(k)]) continue;
-    S.put('box', u, 0.4, BARRIER_H - 0.1, 0.1, FENCE_TOP - BARRIER_H + 0.1, 0.1, METAL, PLAIN);
+    // The debris fence's posts are the barrier's, part of the course's wall.
+    S.put('box', u, 0.4, BARRIER_H - 0.1, 0.1, FENCE_TOP - BARRIER_H + 0.1, 0.1, METAL, PLAIN, 0, 'course');
   }
 }
 
@@ -522,10 +561,20 @@ function footbridge(x: StreetKitContext, l: StreetLayout, u: number, rng: Rng): 
   const a = L.point(u, PAVEMENT);
   const b = R.point(u, PAVEMENT);
   const f = L.frame(u);
-  const y = Math.max(a.y, b.y) + FOOT_CLEAR;
   const span = a.distanceTo(b);
   const cx = (a.x + b.x) / 2;
   const cz = (a.z + b.z) / 2;
+  // The deck (and the lamp strip under it) clears the envelope over the whole road, which may
+  // bank or climb under it: up from FOOT_CLEAR over the higher pavement until it does.
+  const env = x.cor.ground.envelope;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), f.yaw);
+  const deck = new THREE.Matrix4();
+  let y = Math.max(a.y, b.y) + FOOT_CLEAR;
+  for (; ; y += LEAN_STEP) {
+    deck.compose(new THREE.Vector3(cx, y - 0.2, cz), q, new THREE.Vector3(FOOT_W, 0.8, span));
+    if (env.clearOf(UNIT_BOX, deck, 'scenery')) break;
+    if (y > Math.max(a.y, b.y) + FOOT_CLEAR + FOOT_RISE_MAX) throw new Error(`city: a footbridge at u=${u.toFixed(0)} finds no clear height over the road`);
+  }
   x.parts.add('box', cx, y, cz, FOOT_W, 0.6, span, f.yaw, new THREE.Color(0x5c5e66), PLAIN);
   const tx = Math.cos(f.yaw) * (FOOT_W / 2);
   const tz = -Math.sin(f.yaw) * (FOOT_W / 2);
@@ -533,7 +582,8 @@ function footbridge(x: StreetKitContext, l: StreetLayout, u: number, rng: Rng): 
     x.parts.add('box', cx + o * tx, y + 0.6, cz + o * tz, 0.2, PARAPET, span, f.yaw, METAL, style(SURFACE.sign, { hue: Math.floor(rng() * 3) as NeonHue }));
   }
   x.parts.add('box', cx, y - 0.2, cz, FOOT_W * 0.5, 0.2, span - 2, f.yaw, METAL, LAMP);
-  for (const S of [L, R]) S.put('box', u, PAVEMENT - 0.7, -0.5, 0.7, FOOT_CLEAR + 0.5, 0.7, STONE, PLAIN);
+  // Piers up from each pavement to the deck's underside.
+  for (const [S, p] of [[L, a], [R, b]] as const) S.put('box', u, PAVEMENT - 0.7, -0.5, 0.7, y - p.y + 0.5, 0.7, STONE, PLAIN);
   if (x.detail) {
     for (let d = 2; d < span - 2; d += range(rng, 0.8, 1.6)) {
       const t = d / span;
