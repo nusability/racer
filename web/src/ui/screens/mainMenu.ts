@@ -58,8 +58,9 @@ export function mainMenuScreen(ctx: AppCtx): Screen {
     'div',
     'menu__side',
     logo(),
-    ...crowns.map((w) => h('div', 'badge badge--gold', `👑 ${w.name.toUpperCase()} CHAMPION`)),
+    // One wrapping row, so five crowns don't stack into a column that pushes the tiles off a phone.
+    ...(crowns.length > 0 ? [h('div', 'menu__crowns', ...crowns.map((w) => h('div', 'badge badge--gold', `👑 ${w.name.toUpperCase()} CHAMPION`)))] : []),
     creditsChip(save.credits),
   );
-  return { el: h('div', 'screen screen--menu', side, tiles), backdrop: 'sunset' };
+  return { el: h('div', 'screen screen--menu list-scroll', side, tiles), backdrop: 'sunset' };
 }
