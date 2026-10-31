@@ -39,17 +39,20 @@ function oval(id: string, floor: FloorKind, features: TrackDef['features'], y = 
 const AIR_CHECK_TIME = 0.5;
 /** Height the craft is put in the air at, metres: high enough not to land within the check. */
 const AIR_CHECK_HEIGHT = 30;
-/** In the air, full steer (or the same drag) may move the craft at most this share of what it does on the road. */
-const AIR_CHECK_MAX_SHARE = 0.2;
+/** In the air, full steer (or the same drag) may move the craft at most this share of what it does on the road (a hop is no dodge). */
+const AIR_CHECK_MAX_SHARE = 0.25;
 /** ...and still at least this share: a pilot can line up a landing. */
 const AIR_CHECK_MIN_SHARE = 0.03;
 /** The drag each step in the nudge run, metres: about a quick thumb. */
 const AIR_CHECK_NUDGE = 0.3;
+/** The AIR STEERING knob at double must move the craft in the air at least this many times as far as tuned; at half, at most the inverse. */
+const AIR_KNOB = 2;
+const AIR_KNOB_MIN_GAIN = 1.5;
 
 /** Sideways metres moved in AIR_CHECK_TIME of `input` from a standing start at top speed, on the road or in the air. */
-function sideways(track: Track, input: PlayerInput, air: boolean): number {
+function sideways(track: Track, input: PlayerInput, air: boolean, ph = AS_TUNED): number {
   const stats = starter();
-  const v = new Vehicle('air', stats, track, CHECK_S, 0, 0, SEED, AS_TUNED);
+  const v = new Vehicle('air', stats, track, CHECK_S, 0, 0, SEED, ph);
   v.state.speed = stats.topSpeed;
   if (air) {
     v.grounded = false;
@@ -71,6 +74,15 @@ function airSteerCheck(fail: Fail) {
   for (const [what, share] of [['steer', keys], ['drag', thumb]] as const) {
     if (share > AIR_CHECK_MAX_SHARE) fail(`air steering: ${what} in the air moves ${(share * 100).toFixed(0)}% as far as on the road (> ${AIR_CHECK_MAX_SHARE * 100}%)`);
     if (share < AIR_CHECK_MIN_SHARE) fail(`air steering: ${what} in the air moves only ${(share * 100).toFixed(0)}% as far as on the road: no way to line up a landing`);
+  }
+  // The owner's AIR STEERING multiplier reaches the craft, for a key and a drag alike.
+  const knob = (m: number) => resolvePhysics({ ...PHYSICS_AS_TUNED, airSteer: m });
+  for (const [what, input] of [['steer', steer], ['drag', drag]] as const) {
+    const tuned = sideways(track, input, true);
+    const more = sideways(track, input, true, knob(AIR_KNOB)) / tuned;
+    const less = sideways(track, input, true, knob(1 / AIR_KNOB)) / tuned;
+    console.log(`  AIR STEERING ×${AIR_KNOB}: ${what} moves ${more.toFixed(2)}x as far; ×${1 / AIR_KNOB}: ${less.toFixed(2)}x`);
+    if (more < AIR_KNOB_MIN_GAIN || less > 1 / AIR_KNOB_MIN_GAIN) fail(`air steering: the AIR STEERING knob barely changes ${what} in the air (×${AIR_KNOB} ${more.toFixed(2)}x, ×${1 / AIR_KNOB} ${less.toFixed(2)}x)`);
   }
 }
 

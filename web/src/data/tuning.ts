@@ -190,11 +190,15 @@ export const AI_CREST_LOOKBACK = 60;
 export const CORNER_PULL_BRAKE = 0.35;
 /**
  * Share of the steer rate and of a drag's nudge that still moves the lateral target in the air:
- * with no ground to push against a pod can only line up its landing a little, it can't swerve.
+ * with no ground to push against a pod lines up its landing, it can't swerve. With
+ * AIR_RESPONSE_FACTOR, a stock starter's full input over a typical jump (1.2 s in the air) moves
+ * it ~13 m, a lane of a wide (54 m) road, where a fifth of the steer gave ~7.5 m and left the
+ * landing where the lip threw it; over a 0.5 s hop it moves ~3.5 m, short of the ~5 m a dodge
+ * round a rock needs (on the road: 17 m).
  */
-export const AIR_STEER_FACTOR = 0.2;
+export const AIR_STEER_FACTOR = 0.3;
 /** Share of the lateral chase's response kept in the air: sideways motion carries on, slowly corrected. */
-export const AIR_RESPONSE_FACTOR = 0.35;
+export const AIR_RESPONSE_FACTOR = 0.5;
 /** Frenet denominator floor: keeps ds/dt finite far on the inside of very tight turns. */
 export const FRENET_MIN_DENOM = 0.3;
 

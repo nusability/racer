@@ -445,7 +445,7 @@ export const sunfield: TrackDef = {
         { x: 693, z: 716, y: -0.8 },
       ],
       features: [
-        { kind: 'rough', from: 3.1, to: 4.9, amount: 0.9 },
+        { kind: 'rough', from: 3.1, to: 4.9, amount: 1 },
       ],
     },
   ],

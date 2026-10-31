@@ -439,6 +439,8 @@ export interface PhysicsTuning {
   suction: number;
   /** The speed a wall takes off a craft pressed into it round a bend (WALL_CORNER_FRICTION). */
   wallScrape: number;
+  /** How much steering and drags still do in the air, target rate and response alike (AIR_STEER_FACTOR, AIR_RESPONSE_FACTOR). */
+  airSteer: number;
 }
 
 export interface RaceConfig {

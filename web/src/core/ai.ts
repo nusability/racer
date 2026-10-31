@@ -94,8 +94,6 @@ import {
   SLICK_DAMPING_FLOOR,
   AI_CREST_LOOKBACK,
   GRAVITY,
-  AIR_RESPONSE_FACTOR,
-  AIR_STEER_FACTOR,
   CREST_GRIP_MIN,
   AI_DRIFT_ROOM_LO,
   AI_DRIFT_ROOM_HI,
@@ -862,12 +860,12 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
       }
       // In the air the grip is the cushion's least and the steer a fraction (as in Vehicle).
       const load = air ? CREST_GRIP_MIN : roadLoad(v, p.vcurve, ph);
-      const steer = air ? AIR_STEER_FACTOR : 1;
+      const steer = air ? ph.airSteer : 1;
       // Bending the other way the drift helps reel it in: count only this bend's own push.
       const pull = Math.sign(p.curvature) === sign ? (v * v * Math.abs(p.curvature)) / (budget * p.grip * load) : 0;
       target = Math.max(0, target + (pull - steer) * rate * dt);
       // The hull chases the target as in Vehicle: a damped spring, slow to start in the air.
-      const w = air ? response * AIR_RESPONSE_FACTOR * Math.sqrt(p.grip) : response * Math.sqrt(Math.min(1, p.grip * load));
+      const w = air ? response * ph.airResponse * Math.sqrt(p.grip) : response * Math.sqrt(Math.min(1, p.grip * load));
       const zeta = !air && p.grip * load < 1 ? Math.max(SLICK_DAMPING_FLOOR, p.grip * load) : 1;
       const maxLat = LATERAL_SPEED_MAX * (stats.handling / HANDLING_REF);
       hullV = clamp(hullV + (w * w * (target - hull) - 2 * zeta * w * hullV) * dt, -maxLat, maxLat);

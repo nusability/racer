@@ -10,8 +10,6 @@ import { mulberry32, type Rng } from './rng.ts';
 import { makeFrame, type Ribbon } from './track.ts';
 import {
   ACCEL_TAPER_EXP,
-  AIR_RESPONSE_FACTOR,
-  AIR_STEER_FACTOR,
   ARCH_HALF_DEPTH,
   BOOST_ACCEL_MULT,
   BOOST_PAD_DURATION,
@@ -217,7 +215,7 @@ export class Vehicle {
     const surfaceGrip = ribbon.gripAt(sOld);
     const grip = surfaceGrip * (airborne ? CREST_GRIP_MIN : roadLoad(st.speed, ribbon.vcurveAt(sOld), this.physics));
     // In the air the pilot moves its target only a little, by key or by drag alike.
-    const air = airborne ? AIR_STEER_FACTOR : 1;
+    const air = airborne ? this.physics.airSteer : 1;
     const drift = cornerPull(this.stats, curvature, st.speed, brake, grip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
     this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge * air;
     // Past a wall the target overreaches a little (pushing grinds); past an open edge, far
@@ -229,7 +227,7 @@ export class Vehicle {
     // x chases the target with a cap on sideways speed: critically damped with full grip,
     // looser and overshooting on a slick surface or a crest.
     const k = this.stats.handling / HANDLING_REF;
-    const w = airborne ? LATERAL_RESPONSE * k * AIR_RESPONSE_FACTOR * Math.sqrt(surfaceGrip) : LATERAL_RESPONSE * k * Math.sqrt(Math.min(1, grip));
+    const w = airborne ? LATERAL_RESPONSE * k * this.physics.airResponse * Math.sqrt(surfaceGrip) : LATERAL_RESPONSE * k * Math.sqrt(Math.min(1, grip));
     const zeta = !airborne && grip < 1 ? Math.max(SLICK_DAMPING_FLOOR, grip) : 1;
     const maxLat = LATERAL_SPEED_MAX * k;
     st.vx = clamp(st.vx + (w * w * (this.targetX - st.x) - 2 * zeta * w * st.vx) * dt, -maxLat, maxLat);

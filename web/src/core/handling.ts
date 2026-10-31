@@ -8,6 +8,8 @@ import {
   CORNER_PULL_BRAKE,
   DAMAGE_TOP_SPEED_LOSS,
   AI_CREST_LOOKBACK,
+  AIR_RESPONSE_FACTOR,
+  AIR_STEER_FACTOR,
   CREST_GRIP_MIN,
   CREST_LIGHTNESS,
   WALL_CORNER_FRICTION,
@@ -47,7 +49,7 @@ export function impactWear(speed: number, free: number, ref: number, atRef: numb
 }
 
 /** The game as tuned: every multiplier of the owner's live tuning at 1. */
-export const PHYSICS_AS_TUNED: PhysicsTuning = { cornerGrip: 1, crestLightness: 1, suction: 1, wallScrape: 1 };
+export const PHYSICS_AS_TUNED: PhysicsTuning = { cornerGrip: 1, crestLightness: 1, suction: 1, wallScrape: 1, airSteer: 1 };
 
 /** A race's physics, resolved from the owner's multipliers (PhysicsTuning) and data/tuning.ts. */
 export interface Physics {
@@ -60,6 +62,10 @@ export interface Physics {
   readonly liftOff: number;
   /** See WALL_CORNER_FRICTION. */
   readonly wallFriction: number;
+  /** Share of the steer rate and of a drag that moves the lateral target in the air (see AIR_STEER_FACTOR). */
+  readonly airSteer: number;
+  /** Share of the lateral chase's response kept in the air (see AIR_RESPONSE_FACTOR). */
+  readonly airResponse: number;
 }
 
 export function resolvePhysics(t: PhysicsTuning): Physics {
@@ -72,6 +78,10 @@ export function resolvePhysics(t: PhysicsTuning): Physics {
     crestLightness: CREST_LIGHTNESS * t.crestLightness,
     liftOff: GRAVITY + HOVER_SUCTION * t.suction,
     wallFriction: WALL_CORNER_FRICTION * t.wallScrape,
+    // One knob for both: the owner tunes how much air control there is, and a faster target the
+    // craft chases no faster (or the reverse) would only change how it feels to get there.
+    airSteer: AIR_STEER_FACTOR * t.airSteer,
+    airResponse: AIR_RESPONSE_FACTOR * t.airSteer,
   };
 }
 

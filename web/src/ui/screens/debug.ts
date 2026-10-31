@@ -117,6 +117,7 @@ export function debugScreen(ctx: AppCtx): Screen {
       { key: 'crestLightness', label: 'CREST LIGHTNESS', aria: 'Crest lightness multiplier' },
       { key: 'suction', label: 'SUCTION', aria: 'Suction (lift-off threshold) multiplier' },
       { key: 'wallScrape', label: 'WALL SCRAPE', aria: 'Wall scrape speed loss multiplier' },
+      { key: 'airSteer', label: 'AIR STEERING', aria: 'Air steering multiplier' },
     ];
     const status = h('p', 'note debug__physics-status');
     const show = (t: PhysicsTuning) => {

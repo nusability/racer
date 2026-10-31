@@ -35,9 +35,11 @@ const CREST_DROP_ACCEL = 41.5;
  * The physics the ideal line corners with: the one the layouts were written against (crests
  * lightening the craft fully, against gravity plus the first suction, 38 + 45 m/s²), fixed, so
  * a layout's character is the layout's and not whatever the owner's live tuning or the tuned
- * middle ground make of it (more grip would read as more throttle on every track).
+ * middle ground make of it (more grip would read as more throttle on every track). Its air
+ * control is the first one too (a fifth of the steer, 0.35 of the response), though the ideal
+ * line's cornering limit never reads it.
  */
-const LAYOUT_PHYSICS: Physics = { tuning: PHYSICS_AS_TUNED, gripScale: 1, crestLightness: 1, liftOff: 83, wallFriction: 0 };
+const LAYOUT_PHYSICS: Physics = { tuning: PHYSICS_AS_TUNED, gripScale: 1, crestLightness: 1, liftOff: 83, wallFriction: 0, airSteer: 0.2, airResponse: 0.35 };
 const CREST_CORNER_REACH = 200;
 /** The ideal line's glider: the stock starter the hull and lap targets are written for. */
 const IDEAL_RACER = 'dustwing';

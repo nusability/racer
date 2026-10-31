@@ -185,7 +185,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Boost pad / launch boost | 1.2 s / 0.9 s free boost | Launch boost only for a press within 0.3 s after GO |
 | False start | Any boost during the countdown: 1.0 s stall at GO, no launch boost | AIs false-start 0.25·(1−skill)², perfect-start 0.8·skill |
 | Gravity | 38 m/s² | Jumps read weighty at these speeds |
-| Air steering | 20% of the steer rate and of a drag, 35% of the lateral response | In the air a pod lines up its landing, it can't swerve: full input moves it ~10% as far as on the road |
+| Air steering | 30% of the steer rate and of a drag, 50% of the lateral response; the debug menu's AIR STEERING multiplier scales both (×1.00 as tuned) | In the air a pod lines up its landing, it can't swerve: a stock starter's full input over a typical jump (1.2 s) moves it ~13 m, a lane of a wide road (on the road: ~48 m); over a 0.5 s hop ~3.5 m, short of a dodge |
 | Falls | Ground 70 m below an open edge (~1.9 s of fall), a chasm's floor 72 m below its lower edge, the sea at sea level; over the void lost 150 m down (~2.8 s) | What lies below is set per track (ground, water or void) and must match its world; a fall that drifts back under the road or into a stretch with a wall or run-off hits the course |
 | Jump clearance | ≥ 57–88 m/s | Slowest speed that clears each chasm |
 | Respawn | 2 s out, 30 m back, 60% top speed | About 3 s lost per wreck |

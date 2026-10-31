@@ -27,7 +27,11 @@ export function loadDebugFlags(store: KeyValueStore): DebugFlags {
   return { enabled: o.enabled === true, perfOverlay: o.perfOverlay === true, look: parseLook(o.look, raw), physics: parsePhysics(o.physics, raw) };
 }
 
-/** Flags stored before the physics tuning existed have none: the game as tuned. */
+/**
+ * Flags stored before the physics tuning existed have none: the game as tuned. Likewise a knob
+ * added since the flags were stored (AIR STEERING joined the first four) is as tuned, so a
+ * device keeps the owner's other multipliers instead of failing to load them.
+ */
 function parsePhysics(v: unknown, raw: string): PhysicsTuning {
   if (v === undefined) return { ...PHYSICS_AS_TUNED };
   if (typeof v !== 'object' || v === null) throw new Error(`Bad physics tuning in storage: ${raw}`);
@@ -35,6 +39,7 @@ function parsePhysics(v: unknown, raw: string): PhysicsTuning {
   const out = { ...PHYSICS_AS_TUNED };
   for (const k of Object.keys(PHYSICS_AS_TUNED) as (keyof PhysicsTuning)[]) {
     const x = o[k];
+    if (x === undefined) continue;
     if (typeof x !== 'number' || !(x > 0)) throw new Error(`Bad physics tuning "${k}" in storage: ${raw}`);
     out[k] = x;
   }
