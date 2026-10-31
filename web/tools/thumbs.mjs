@@ -55,12 +55,12 @@ const SHOTS = {
   devilsteeth: { at: 20.2, x: 60, view: 'orbit', yaw: -0.3, pitch: 0.75, dist: 330, hazard: 'spill', hazardAt: 2.8, why: 'the digger past the Jaw from above' },
   mirageh: { at: 2, ds: -100, why: 'the loop under the balloons' },
   stormfront: { at: 4, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge knot with a strider beyond' },
-  coralcove: { at: 9.8, view: 'orbit', yaw: -1, pitch: 0.2, dist: 120, why: 'the lagoon and the air show' },
-  lagoonloop: { at: 5.2, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'breach', why: 'the whale breaching over the lagoon road' },
-  boardwalk: { at: 25.35, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the boardwalk bridge crossing' },
-  seastacks: { at: 9.95, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'freighter', why: 'the freighter closing the channel' },
-  tidalcaves: { at: 30.5, view: 'orbit', yaw: 0.9, pitch: 0.5, dist: 150, why: 'the crossing over the surf' },
-  volcanoisle: { at: 4.4, ds: -170, hazard: 'bombs', why: 'the volcano throwing lava bombs' },
+  coralcove: { at: 105, view: 'orbit', yaw: -1, pitch: 0.2, dist: 120, why: 'the lagoon and the air show' },
+  lagoonloop: { at: 7.6, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'breach', why: 'the whale breaching over the lagoon road' },
+  boardwalk: { at: 35.54, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the boardwalk bridge crossing' },
+  seastacks: { at: 152.8, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'freighter', why: 'the freighter closing the channel' },
+  tidalcaves: { at: 120.99, view: 'orbit', yaw: 0.9, pitch: 0.5, dist: 150, why: 'the crossing over the surf' },
+  volcanoisle: { at: 37.5, ds: -170, hazard: 'bombs', why: 'the volcano throwing lava bombs' },
   snowfield: { at: 11.14, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'herd', why: 'the mammoth herd crossing' },
   frozenharbor: { at: 111.75, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'icebreaker', why: 'the icebreaker crossing the road' },
   glacier: { at: 13.1, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'calving', why: 'the calving glacier slab' },
@@ -255,7 +255,9 @@ async function outline(page) {
 /** Every track the game ships, read from the viewer's track picker. */
 async function trackIds(page) {
   await page.goto(`http://localhost:${PORT}/track-viewer.html?pause=1`);
-  return page.$$eval('select option', (os) => os.map((o) => o.value));
+  // The picker is filled by the viewer's module, which can run after the load event on a busy machine.
+  await page.waitForSelector('#viewer_track_field option', { state: 'attached' });
+  return page.$$eval('#viewer_track_field option', (os) => os.map((o) => o.value));
 }
 
 /** `--track a,b`: render only those tracks and keep every other entry of the manifest. */
