@@ -78,8 +78,11 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    Orbital Reach, opened by the Neon Cup, is the space world: steel decks hung in the void over a
    gas giant, railed or with lit open edges (go over one and you tumble away into the void), station modules and
    asteroids to fly through, gaps in the void to jump, and loops and corkscrews held in floating
-   cages rather than standing on anything. Its six tracks are three circuits (the habitat ring,
-   the refinery's dock yard, a solar farm whose array masts stand in the road) and three
+   cages rather than standing on anything. Its decks are railed through the bends and
+   open over the void only on the straights, and they rise and fall, crests coming a little
+   before the bends. Its six tracks are three circuits (the habitat ring, the refinery's dock
+   yard, a figure of eight crossing its own start straight on a bridge deck, a solar farm whose
+   array masts stand in the road) and three
    point-to-point sprints (a mine run bored through an asteroid, a moon crossing with ground,
    craters to hop and a crater to jump, and a skim low over the gas giant's cloud tops); three of
    them fork. A course can be a point-to-point sprint, and a road can fork into routes (below).

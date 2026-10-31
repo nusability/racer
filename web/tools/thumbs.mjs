@@ -74,11 +74,11 @@ const SHOTS = {
   skyway: { at: 62.64, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 200, why: 'the double loop on the ring road' },
   zenithtower: { at: 66.4, view: 'orbit', yaw: 0.5, pitch: 0.2, dist: 140, why: 'the double loop on the north flyover' },
   ringdeck: { at: 2.6, ds: -100, why: 'the loop hung in the void on the start straight' },
-  dockyard: { at: 35.685, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'arm', why: 'the docking arm swinging across the deck' },
-  hollowrock: { at: 41, view: 'orbit', yaw: 2.6, pitch: 0.3, dist: 600, why: 'the tube bored through the hollow asteroid' },
-  craterline: { at: 8.5, view: 'orbit', yaw: -1, pitch: 0.35, dist: 350, why: 'the road over the cratered moon' },
-  sunfield: { at: 8.3, ds: -40, why: 'the mast maze between the solar arrays' },
-  cloudtop: { at: 10.4, view: 'orbit', yaw: 0.8, pitch: 0.25, dist: 220, why: 'the corkscrew cage over the gas giant' },
+  dockyard: { at: 207.25, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'arm', why: 'the docking arm swinging across the deck' },
+  hollowrock: { at: 148, view: 'orbit', yaw: 2.6, pitch: 0.3, dist: 600, why: 'the tube bored through the hollow asteroid' },
+  craterline: { at: 20, view: 'orbit', yaw: -1, pitch: 0.35, dist: 350, why: 'the road over the cratered moon' },
+  sunfield: { at: 26.5, ds: -40, why: 'the mast maze between the solar arrays' },
+  cloudtop: { at: 12.3, view: 'orbit', yaw: 0.8, pitch: 0.25, dist: 220, why: 'the corkscrew cage over the gas giant' },
 };
 
 const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
