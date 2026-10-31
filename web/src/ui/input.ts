@@ -1,10 +1,13 @@
-// Player input: touch controls drawn over the race (boost, brake, steering by the chosen
-// mode), DeviceOrientation tilt, and the keyboard for desktop testing. Everything registers on
-// touch-down, and every finger is tracked on its own so steer + boost work at once.
+// Player input: touch controls drawn over the race (the throttle pad or boost and brake buttons,
+// steering by the chosen mode), DeviceOrientation tilt, and the keyboard for desktop testing.
+// Everything registers on touch-down, and every finger is tracked on its own so steer + boost
+// work at once.
 import './race.css';
 import type { PlayerInput } from '../core/types.ts';
 import type { InputSource, Settings } from '../game/types.ts';
+import { BOOST_EMPTY } from './hud.ts';
 import { h } from './kit.ts';
+import { createThrottlePad } from './throttlePad.ts';
 
 /**
  * Slide steering: metres the craft's lateral target moves per CSS pixel of finger travel at
@@ -80,12 +83,13 @@ function holdButton(id: string, cls: string, label: string, aria: string): { el:
   };
 }
 
-export function createInput(root: HTMLElement, settings: Pick<Settings, 'steering' | 'sensitivity'>): InputSource {
+export function createInput(root: HTMLElement, settings: Pick<Settings, 'steering' | 'sensitivity' | 'throttle'>): InputSource {
   const layer = h('div', 'race-ui touch');
   layer.dataset.mode = settings.steering;
   if (!hasTouch()) layer.classList.add('no-touch');
   root.append(layer);
 
+  const pad = createThrottlePad();
   const boost = holdButton('race_boost_button', 'tc-boost', 'BOOST', 'Boost');
   const brake = holdButton('race_brake_button', 'tc-brake', 'BRAKE', 'Air brake');
   const left = holdButton('race_left_button', 'tc-left', '◀', 'Steer left');
@@ -186,7 +190,8 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
 
   if (settings.steering === 'drag') layer.append(zone);
   if (settings.steering === 'buttons') layer.append(h('div', 'tc-steer', left.el, right.el));
-  layer.append(h('div', 'tc-pedals', brake.el, boost.el));
+  if (settings.throttle === 'swipe') layer.append(pad.el);
+  else layer.append(h('div', 'tc-pedals', brake.el, boost.el));
 
   // Tilt: landscape-aware so "turn the phone like a wheel" means the same in every grip.
   let tiltSteer = 0;
@@ -218,6 +223,7 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
 
   function releaseAll(): void {
     keys.clear();
+    pad.release();
     boost.release();
     brake.release();
     left.release();
@@ -257,9 +263,12 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
       return {
         steer: clamp1((settings.steering === 'tilt' ? tiltSteer : 0) + digital),
         nudge: taken,
-        boost: boost.held() || anyKey(KEYS_BOOST),
-        brake: brake.held() || anyKey(KEYS_BRAKE),
+        boost: pad.state() === 'boost' || boost.held() || anyKey(KEYS_BOOST),
+        brake: pad.state() === 'brake' || brake.held() || anyKey(KEYS_BRAKE),
       };
+    },
+    showTank(fill: number): void {
+      pad.showTankEmpty(fill <= BOOST_EMPTY);
     },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);

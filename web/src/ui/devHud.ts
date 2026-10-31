@@ -1,6 +1,7 @@
 // Dev-only entry (hud-viewer.html): the HUD fed with animated fake values and the live touch
-// controls, with a readout of what input.read() returns. ?steer=drag|tilt|buttons picks the mode.
-import type { HudView, SteeringMode } from '../game/types.ts';
+// controls, with a readout of what input.read() returns. ?steer=drag|tilt|buttons picks the mode,
+// ?throttle=swipe|buttons the boost and brake layout.
+import type { HudView, SteeringMode, ThrottleLayout } from '../game/types.ts';
 import { createHud } from './hud.ts';
 import { createInput } from './input.ts';
 import { h } from './kit.ts';
@@ -12,6 +13,8 @@ root.style.background = 'linear-gradient(180deg, #5b8fd0 0%, #f2c58c 52%, #d89a5
 const params = new URLSearchParams(location.search);
 const steering = (params.get('steer') ?? 'drag') as SteeringMode;
 if (!['drag', 'tilt', 'buttons'].includes(steering)) throw new Error(`hud-viewer: bad steer "${steering}"`);
+const throttle = (params.get('throttle') ?? 'swipe') as ThrottleLayout;
+if (!['swipe', 'buttons'].includes(throttle)) throw new Error(`hud-viewer: bad throttle "${throttle}"`);
 
 const layer = h('div', 'race-layer');
 layer.style.cssText = 'position:absolute;inset:0';
@@ -55,7 +58,7 @@ const hud = createHud(layer, () => {
   paused = !paused;
   hud.flash(paused ? 'PAUSED' : 'GO');
 });
-const input = createInput(layer, { steering, sensitivity: 1 });
+const input = createInput(layer, { steering, throttle, sensitivity: 1 });
 
 const COUNTDOWN_S = 4;
 const LAP_S = 20;
@@ -109,7 +112,8 @@ function frame(now: number): void {
     finished: false,
   };
   hud.update(view);
-  readout.textContent = `x ${craftX.toFixed(1)}m  nudgeΣ ${nudgeTotal.toFixed(1)}m  steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${steering}`;
+  input.showTank(tankFill);
+  readout.textContent = `x ${craftX.toFixed(1)}m  nudgeΣ ${nudgeTotal.toFixed(1)}m  steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${steering}/${throttle}`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

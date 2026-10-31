@@ -51,9 +51,12 @@ export interface RacePerf {
 export type RaceLauncher = (req: RaceRequest, onDone: (outcome: RaceOutcome | null, perf: RacePerf) => void) => void;
 
 export type SteeringMode = 'drag' | 'tilt' | 'buttons';
+/** Boost and brake on touch: one thumb sliding on the throttle pad, or two separate buttons. */
+export type ThrottleLayout = 'swipe' | 'buttons';
 
 export interface Settings {
   steering: SteeringMode;
+  throttle: ThrottleLayout;
   /** Steering sensitivity multiplier, 0.5..1.5. */
   sensitivity: number;
   sound: boolean;
@@ -122,5 +125,7 @@ export interface Hud {
 
 export interface InputSource {
   read(): PlayerInput;
+  /** The tank's fill each frame, 0..1, so the throttle pad can show a dry tank. */
+  showTank(fill: number): void;
   dispose(): void;
 }

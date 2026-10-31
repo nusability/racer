@@ -7,7 +7,7 @@ import { wreckCopy } from './wreckCopy.ts';
 
 /** Tank at or above this reads as full (pulses); at or below the empty mark it dims. */
 const BOOST_FULL = 0.995;
-const BOOST_EMPTY = 0.01;
+export const BOOST_EMPTY = 0.01;
 const PICKUP_PULSE_MS = 260;
 /** Hull left below this reads as damaged (orange), and below the critical mark it flashes red. */
 const HULL_LOW = 0.5;

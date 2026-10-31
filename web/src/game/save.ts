@@ -8,7 +8,7 @@ import type { UpgradeLevels } from '../data/upgrades.ts';
 import { isGraphicsLevel } from '../render/graphics.ts';
 import type { Settings } from './types.ts';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = 'mirage-racer.save';
 /** How many applied race ids are remembered to make applying an outcome idempotent. */
 export const APPLIED_RACE_MEMORY = 16;
@@ -53,7 +53,7 @@ export interface KeyValueStore {
 }
 
 export function defaultSettings(): Settings {
-  return { steering: 'drag', sensitivity: 1, sound: true, graphics: 'auto', benchmark: null };
+  return { steering: 'drag', throttle: 'swipe', sensitivity: 1, sound: true, graphics: 'auto', benchmark: null };
 }
 
 export function freshSave(): SaveData {
@@ -96,6 +96,7 @@ function validSettings(v: unknown): boolean {
   if (!isObj(v)) return false;
   return (
     (v.steering === 'drag' || v.steering === 'tilt' || v.steering === 'buttons') &&
+    (v.throttle === 'swipe' || v.throttle === 'buttons') &&
     typeof v.sensitivity === 'number' &&
     v.sensitivity >= 0.5 &&
     v.sensitivity <= 1.5 &&
@@ -195,6 +196,16 @@ function migrateV3(d: Record<string, unknown>): void {
 }
 
 /**
+ * v4 → v5 (throttle pad): boost and brake gained a layout setting. Every v4 player had the two
+ * buttons only because nothing else existed, so they get the new default, the throttle swipe;
+ * the old buttons are one tap away in Settings.
+ */
+function migrateV4(d: Record<string, unknown>): void {
+  if (isObj(d.settings)) d.settings.throttle = 'swipe';
+  d.version = 5;
+}
+
+/**
  * The 'cooling' upgrade became the 'tank' upgrade (heat was replaced by a boost tank). Levels
  * carry over so a player keeps what they paid for.
  */
@@ -216,6 +227,7 @@ export function decodeSave(raw: string | null): SaveData {
     if (parsed.version === 1) migrateV1(parsed);
     if (parsed.version === 2) migrateV2(parsed);
     if (parsed.version === 3) migrateV3(parsed);
+    if (parsed.version === 4) migrateV4(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);

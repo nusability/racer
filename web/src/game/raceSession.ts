@@ -743,6 +743,7 @@ export class RaceSession {
       countdown: this.countdown,
       finished: p.finishTime !== null,
     });
+    this.input.showTank(p.boost);
     if (this.post) {
       const up = this.track.ribbon(pv.branch).frameAt(pv.s, this.roadFrame).up;
       this.roadUp.set(up.x, up.y, up.z);

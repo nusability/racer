@@ -96,7 +96,12 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    road's end (the gas giant in space, the land elsewhere), and then the results show.
    Throttle is automatic. The craft always flies along the
    track and the player slides it sideways to where they want it (drag a thumb, or tilt, or
-   buttons), air-brakes into hairpins and boosts. Boost runs from a tank that
+   buttons), air-brakes into hairpins and boosts. On touch, boost and brake are one throttle pad
+   under the right thumb, so that thumb never leaves the glass: where it lands is neutral, slide
+   up to boost, down to brake, back to the middle or lift to fly on. A slim gauge beside the
+   thumb shows the three zones (boost cyan above, brake red below), the held one lit, and the
+   boost zone goes hollow while the tank is dry; a phone that can buzz ticks on each change.
+   Settings can swap the pad for the old separate boost and brake buttons. Boost runs from a tank that
    glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
    slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
    choices with a clear way round. Collisions matter: obstacles, walls and rivals cost hull,
@@ -166,6 +171,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | Tank fill | Start 40%; +1.5%/s passive (paused 1.5 s after use); +10% per boost cell | Dry tank resumes at 10%; cells once per racer per lap |
 | Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings; none (nor pads) in shortcuts |
 | Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
+| Throttle swipe | Enter boost / brake 5 mm from the touch-down point, let go 2.5 mm short of it; neutral trails a thumb more than 10 mm out; ~160 CSS px per inch on touch, the gauge at most 40% of the screen's height | Boost to brake is a 10 mm thumb roll; the 2.5 mm band is wider than a resting thumb's jitter, so a state never flickers |
 | Corner drift | κ·v²·0.11 m/s outward | Hairpins at full boost push you wide; braking leaves 35% |
 | Crests and dips | Grip × (1 + 0.5 × v²·vertical curvature ÷ 198 m/s²), between 0.25 and 1.5; 0.25 in the air | Over a crest a craft goes light and slides wide in a bend only when far too fast; a dip presses it on. It leaves the road only where the road falls away faster than gravity plus suction (38 + 160 m/s²): off jumps, kickers and the sharpest crests at speed (a stock starter at top speed off crests tighter than ~R115, boosting ~R175), never off ordinary rollers. AIs reckon a crest within 15% of lift-off as a launch and fly it ballistically to the landing. A stock starter holds a ~55 m bend flat out (~86 m on boost): hairpins (40–70 m, inside walled or narrow) are the brake corners |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 70% top speed and extra drag, no damage |

@@ -1,6 +1,6 @@
-// Settings: steering, sensitivity, sound, graphics. Every change saves immediately.
+// Settings: steering, throttle layout, sensitivity, sound, graphics. Every change saves immediately.
 import { graphicsLevel } from '../../game/graphics.ts';
-import type { GraphicsChoice, Settings, SteeringMode } from '../../game/types.ts';
+import type { GraphicsChoice, Settings, SteeringMode, ThrottleLayout } from '../../game/types.ts';
 import { GRAPHICS_LEVELS } from '../../render/graphicsTuning.ts';
 import { requestTiltPermission } from '../input.ts';
 import { button, h, header, panel, segmented, stepper } from '../kit.ts';
@@ -14,6 +14,11 @@ const STEERING_HELP: Record<SteeringMode, string> = {
   drag: 'Slide a thumb anywhere on the left: the craft follows it, and stays put when you lift.',
   tilt: 'Tilt the phone like a wheel; the more you tilt, the faster you slide.',
   buttons: 'Left and right buttons, bottom-left.',
+};
+
+const THROTTLE_HELP: Record<ThrottleLayout, string> = {
+  swipe: 'Keep a thumb down on the right: slide up to boost, down to brake, back to the middle (or lift) to fly on.',
+  buttons: 'Separate boost and brake buttons, bottom-right.',
 };
 
 /** Taps on the build label that open the hidden debug menu. */
@@ -67,6 +72,21 @@ export function settingsScreen(ctx: AppCtx): Screen {
   );
   showHelp();
 
+  const throttleHelp = h('p', 'note', THROTTLE_HELP[s.throttle]);
+  const throttle = segmented<ThrottleLayout>(
+    'settings_throttle',
+    'Throttle',
+    [
+      { value: 'swipe', label: 'SWIPE', sub: 'one thumb' },
+      { value: 'buttons', label: 'BUTTONS' },
+    ],
+    s.throttle,
+    (v) => {
+      save({ throttle: v });
+      throttleHelp.textContent = THROTTLE_HELP[v];
+    },
+  );
+
   const sensitivity = stepper({
     idPrefix: 'settings_sensitivity',
     label: 'SENSITIVITY',
@@ -111,7 +131,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
     h(
       'div',
       'settings__body list-scroll',
-      panel('CONTROLS', row('STEERING', steering), help, sensitivity),
+      panel('CONTROLS', row('STEERING', steering), help, row('THROTTLE', throttle), throttleHelp, sensitivity),
       panel('GAME', row('SOUND', sound), graphics, buildLabel()),
     ),
   );
