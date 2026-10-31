@@ -102,6 +102,7 @@ const CROWD = [0x2a2a32, 0x3a3a46, 0x1e2026, 0x4a3a32, 0x5a5a64, 0x2a3a4a, 0xc83
 const SKIN = [0xc89878, 0x8a5a3a, 0xe8c0a0, 0x5a3a2a, 0xb07a58];
 const AWNINGS = [0x8a2a3a, 0x2a5a4a, 0x3a3a6a, 0x9a7a2a, 0x6a2a6a, 0x2a4a7a];
 const HULL = [0xe8e8ee, 0xdcdce4, 0x1e2a3a, 0xf0ece0, 0x2a2a30];
+const BOOT = new THREE.Color(0x1a2030);
 /** Cabins: tinted glass round the decks, so the white hull reads as the boat under them. */
 const CABIN = new THREE.Color(0x3a4a5a);
 const ASPHALT = new THREE.Color(0x26282f);
@@ -379,6 +380,9 @@ function yacht(S: Side, u: number, dx: number, water: number, rng: Rng): void {
   const hull = new THREE.Color(HULL[Math.floor(rng() * HULL.length)]);
   const white = style(SURFACE.plain, { grime: 0.05 });
   S.put('box', u, x, water - 0.8, len * 0.8, YACHT_DECK + 0.8, beam, hull, white);
+  // A dark boot stripe at the waterline and a rubbing strake along the sheer.
+  S.put('box', u, x, water - 0.05, len * 0.8 + 0.1, 0.35, beam + 0.1, BOOT, white);
+  S.put('box', u, x, water + YACHT_DECK - 0.3, len * 0.8 + 0.1, 0.18, beam + 0.12, METAL, white);
   // The bow: half a dome at the hull's front end reads as a rounded prow from the road.
   S.put('dome', u + len * 0.4, x, water - 0.8, len * 0.3, 2 * (YACHT_DECK + 0.8), beam, hull, white);
   let y = water + YACHT_DECK;
@@ -389,6 +393,9 @@ function yacht(S: Side, u: number, dx: number, water: number, rng: Rng): void {
     deckLen *= 0.7;
   }
   // A sailing yacht's mast stands over the barrier, its masthead light blinking: the marina reads from the road.
+  // A lit cockpit at the stern and a radar arch over the top deck.
+  S.put('box', u - len * 0.36, x, water + YACHT_DECK, len * 0.08, 0.9, beam * 0.6, METAL, LAMP);
+  S.put('box', u - len * 0.05, x, y, 0.4, 1.6, beam * 0.5, METAL, white);
   if (rng() < MAST_SHARE) S.put('spire', u, x, y, 0.7, len * 0.9, 0.7, METAL, style(SURFACE.plain, { hue: BEACON_HUE, mode: 'flicker', trim: 'crown' }));
 }
 
@@ -402,7 +409,8 @@ function kiosk(S: Side, u: number, dx: number, rng: Rng): void {
 function fencePosts(S: Side): void {
   const cor = S.x.cor;
   for (const u of beats({ gap: [3.5, 5.5], salt: 0xfe ^ S.l.s0 ^ (S.side > 0 ? 1 : 0) }, S.l.length)) {
-    if (cor.open(S.frame(u).k, S.side)) continue;
+    const k = S.frame(u).k;
+    if (cor.open(k, S.side) || cor.shape.quay[S.side > 0 ? 1 : 0][cor.idx(k)]) continue;
     S.put('box', u, 0.4, BARRIER_H - 0.1, 0.1, FENCE_TOP - BARRIER_H + 0.1, 0.1, METAL, PLAIN);
   }
 }

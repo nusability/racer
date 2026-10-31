@@ -249,6 +249,9 @@ function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: numbe
     const ku = at(up);
     for (let q = ku - w; q <= ku + w; q++) {
       const k = ((q % n) + n) % n;
+      // A ramp that loops over itself (a cloverleaf) has both passes in the window: only the
+      // half nearer the upper pass is the bridge, the lower pass stays on the ground.
+      if (Math.abs(r.delta(up, r.samples[k].s)) > Math.abs(r.delta(low, r.samples[k].s))) continue;
       const p = r.samples[k].pos;
       const near = distanceTo(r, low, p.x, p.z);
       const half = r.samples[k].width / 2;

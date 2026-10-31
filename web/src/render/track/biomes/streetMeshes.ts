@@ -221,9 +221,11 @@ function sides(cor: Corridor, l: StreetLayout, fence: Quads, water: Quads): void
       const B = streetFrame(cor, kb, side);
       const v0 = u / FENCE_TILE;
       const v1 = (u + step) / FENCE_TILE;
-      fence.quad([A.at(FENCE_AT, BARRIER_H), B.at(FENCE_AT, BARRIER_H), B.at(FENCE_AT, FENCE_TOP), A.at(FENCE_AT, FENCE_TOP)], [v0, 0, v1, 0, v1, 1, v0, 1], WHITE);
       const i = sideIndex(side);
-      if (cor.shape.quay[i][cor.idx(ka)] && cor.shape.quay[i][cor.idx(kb)]) {
+      const quay = cor.shape.quay[i][cor.idx(ka)] === 1 && cor.shape.quay[i][cor.idx(kb)] === 1;
+      // The quay's low barrier carries no fence, so the harbour stays in view.
+      if (!quay) fence.quad([A.at(FENCE_AT, BARRIER_H), B.at(FENCE_AT, BARRIER_H), B.at(FENCE_AT, FENCE_TOP), A.at(FENCE_AT, FENCE_TOP)], [v0, 0, v1, 0, v1, 1, v0, 1], WHITE);
+      if (quay) {
         const y = -WATER_DROP;
         const pts = [A.at(QUAY, y), A.at(BASIN, y), B.at(BASIN, y), B.at(QUAY, y)];
         // Counter-clockwise from above whichever side of the road the quay is on.

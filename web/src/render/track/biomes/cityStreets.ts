@@ -125,7 +125,8 @@ export function layStreets(cor: Corridor, sections: StreetSection[], site: CityS
           skip('metro', metro + METRO_GAP / 2);
           continue;
         }
-        if (u >= nextSide) {
+        // A side street opens only where the whole mouth fits before the section ends.
+        if (u >= nextSide && length - u >= SIDE_STREET) {
           claimPath(cor, site, s0 + u + SIDE_STREET / 2, side, SIDE_STREET, SIDE_RUN);
           skip('side', u + SIDE_STREET);
           nextSide = u + range(rng, SIDE_EVERY[0], SIDE_EVERY[1]);

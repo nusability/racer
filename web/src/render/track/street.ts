@@ -15,6 +15,11 @@ import { sideIndex, type CorridorShape } from './shape.ts';
 
 /** The race barrier: concrete blocks this tall, this deep at the foot and on top, metres. */
 export const BARRIER_H = 1.1;
+/**
+ * On a quay the barrier is a low kerb of blocks with no fence over it: the harbour's water, its
+ * yachts and the far shore stay in view from the chase camera (3.3 m up). It is still the wall.
+ */
+export const QUAY_BARRIER_H = 0.55;
 const BARRIER_FOOT = 0.8;
 const BARRIER_TOP = 0.42;
 /**
@@ -28,8 +33,8 @@ export const KERB_H = 0.15;
 /** From the hard boundary to the building line: barrier and pavement, metres. */
 export const PAVEMENT = 6.5;
 /** A harbour side: the quay this wide past the boundary, the water this far under the road, metres. */
-export const QUAY = 9;
-export const WATER_DROP = 2.4;
+export const QUAY = 6;
+export const WATER_DROP = 1.1;
 /** The quay wall reaches this far under the water, so its foot never shows. */
 const QUAY_FOOT = 3;
 /**
@@ -53,6 +58,12 @@ const QUAY_STONE = 0x6c6a66;
 
 /** A street's side counts as walled under this much run-off, metres (track-check holds the same line). */
 const WALLED = 1;
+
+/**
+ * A street's barrier and the city's concrete walls stand on the same boundary; past a street's
+ * ends the wall rises from the barrier's height over this far, so the two meet without a step.
+ */
+const WALL_TAPER = 45;
 
 /** Main-loop spans of street (and which side is a harbour), as the corridor needs them. */
 export type StreetSpans = Pick<StreetSection, 'from' | 'to' | 'harbour' | 'name'>[];
@@ -83,6 +94,19 @@ export function markStreets(track: Track, sh: CorridorShape, spans: StreetSpans)
         sh.outer[i][k] = smp.width / 2 + (harbour ? BASIN : PAVEMENT);
       }
       sh.street[k] = 1;
+    }
+  }
+  // The walls either side of a street rise from the barrier's height to their own.
+  const steps = Math.ceil(WALL_TAPER / track.step);
+  for (let k = 0; k < n; k++) {
+    if (!sh.street[k]) continue;
+    for (const dir of [-1, 1]) {
+      if (sh.street[(k + dir + n) % n]) continue;
+      for (let i = 1; i <= steps; i++) {
+        const q = (k + dir * i + n) % n;
+        if (sh.street[q] || sh.canyon[q] > 0) break;
+        sh.wall[q] = Math.min(sh.wall[q], BARRIER_H + ((sh.wall[q] - BARRIER_H) * i) / steps);
+      }
     }
   }
 }
@@ -116,19 +140,20 @@ export function streetStrip(cor: Corridor, c: Chunk, ka: number, kb: number, sid
   const face = p.rock.clone().multiplyScalar(BARRIER_SHADE);
   const back = p.rock.clone().multiplyScalar(BARRIER_BACK);
   const lean = (BARRIER_FOOT - BARRIER_TOP) / 2;
+  const barrierH = quay ? QUAY_BARRIER_H : BARRIER_H;
   // Barrier: the face racers see, its top, its back down to the pavement.
   const q = (dx0: number, y0: number, dx1: number, y1: number, dir: P3, ca: THREE.Color, cb = ca) =>
     quadFacing(c.rock, A.at(dx0, y0), B.at(dx0, y0), B.at(dx1, y1), A.at(dx1, y1), dir, ca, ca, cb, cb);
-  q(0, 0, lean, BARRIER_H, inward, face);
-  q(lean, BARRIER_H, lean + BARRIER_TOP, BARRIER_H, up, face);
-  q(lean + BARRIER_TOP, BARRIER_H, BARRIER_FOOT, KERB_H, outward, back);
+  q(0, 0, lean, barrierH, inward, face);
+  q(lean, barrierH, lean + BARRIER_TOP, barrierH, up, face);
+  q(lean + BARRIER_TOP, barrierH, BARRIER_FOOT, KERB_H, outward, back);
   // Livery: painted blocks on the face, accent and white by the beat the segment falls in.
   const s = ((ka + kb) / 2) * cor.ribbon.step;
   const on = beatIndex(LIVERY, cor.ribbon.length, s) % 2 === 0;
   const t0 = LIVERY_BAND[0];
   const t1 = LIVERY_BAND[1];
   const lift = -0.04;
-  quadFacing(cor.glow, A.at(lean * t0 + lift, BARRIER_H * t0), B.at(lean * t0 + lift, BARRIER_H * t0), B.at(lean * t1 + lift, BARRIER_H * t1), A.at(lean * t1 + lift, BARRIER_H * t1), inward, on ? p.accent : p.white);
+  quadFacing(cor.glow, A.at(lean * t0 + lift, barrierH * t0), B.at(lean * t0 + lift, barrierH * t0), B.at(lean * t1 + lift, barrierH * t1), A.at(lean * t1 + lift, barrierH * t1), inward, on ? p.accent : p.white);
   const pave = new THREE.Color(quay ? QUAY_STONE : PAVEMENT_TONE);
   const reach = quay ? QUAY : PAVEMENT;
   quadFacing(c.sand, A.at(BARRIER_FOOT, KERB_H), B.at(BARRIER_FOOT, KERB_H), B.at(reach, KERB_H), A.at(reach, KERB_H), up, pave);

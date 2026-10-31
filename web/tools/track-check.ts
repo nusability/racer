@@ -484,8 +484,11 @@ function checkVoid(t: Track, def: TrackDef, warn: string[]) {
 // both sides; the street is at ground level, under buildings that come right to the pavement; and
 // with a tunnel block, the metro and footbridges overhead, nothing may throw a racer into the air.
 
-/** A street runs at most this far above the lap's lowest road (the city floor sits a fixed step under it), metres. */
-const STREET_LEVEL = 4;
+/**
+ * A street runs at most this far above the lap's lowest road, metres: it may climb a hill (the
+ * city's ground eases up to meet it), but higher is a flyover, not a street.
+ */
+const STREET_LEVEL = 16;
 /** A street's side counts as walled under this much run-off, metres. */
 const STREET_WALLED = 1;
 
@@ -509,7 +512,7 @@ function checkStreets(t: Track, def: TrackDef, warn: string[]) {
       const smp = t.samples[(k0 + q) % t.samples.length];
       const what = smp.gap ? 'a chasm' : smp.magnet ? 'a loop or corkscrew' : Number.isFinite(smp.ceiling) ? 'a tunnel' : smp.dropL || smp.dropR ? 'an open drop' : smp.pos.y - low > STREET_LEVEL ? `${fmt(smp.pos.y - low)}m up` : null;
       if (what) {
-        warn.push(`${label}: runs over ${what} at s=${fmt(smp.s)}: a street is a road at ground level`);
+        warn.push(`${label}: runs over ${what} at s=${fmt(smp.s)}: a street is a road on the ground, a hill at most`);
         break;
       }
       if (!junction(smp.s) && (smp.edgeL - smp.width / 2 >= STREET_WALLED || smp.edgeR - smp.width / 2 >= STREET_WALLED)) {
