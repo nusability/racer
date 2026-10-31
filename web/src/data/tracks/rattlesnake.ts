@@ -236,7 +236,7 @@ export const rattlesnake: TrackDef = {
       features: [
         // Scree down the snake's spine, round the pillar.
         { kind: 'pillar', at: 3.5, lateral: 3, radius: 1.8 },
-        { kind: 'rough', from: 2.4, to: 5.3, amount: 0.7 },
+        { kind: 'rough', from: 2.8, to: 5.0, amount: 0.7 },
       ],
     },
   ],

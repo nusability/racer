@@ -322,7 +322,7 @@ export const auroracrown: TrackDef = {
       features: [
         // Broken crown ice, open to the drop on the outside at the top.
         { kind: 'slick', from: 2.0, to: 8.0, grip: 0.55 },
-        { kind: 'rough', from: 2.4, to: 7.6, amount: 0.75 },
+        { kind: 'rough', from: 3.4, to: 6.6, amount: 0.9 },
 
         { kind: 'drop', from: 4.4, to: 5.6, side: -1 },
 

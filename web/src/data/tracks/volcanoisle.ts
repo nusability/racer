@@ -334,7 +334,7 @@ export const volcanoisle: TrackDef = {
       features: [
         // The leap lands on broken basalt.
         { kind: 'jump', at: 2.5, rampLength: 60, rampHeight: 4, gapLength: 40 },
-        { kind: 'rough', from: 3.6, to: 4.6, amount: 0.6 },
+        { kind: 'rough', from: 3.8, to: 4.4, amount: 1 },
       ],
     },
   ],

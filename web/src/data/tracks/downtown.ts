@@ -279,7 +279,7 @@ export const downtown: TrackDef = {
       ],
       features: [
         // Broken paving and kerbs down through the shuttered arcade.
-        { kind: 'rough', from: 6, to: 26, amount: 0.85 },
+        { kind: 'rough', from: 6, to: 26, amount: 0.5 },
       ],
     },
   ],

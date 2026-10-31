@@ -84,8 +84,11 @@ import {
   AI_TARGET_TIME,
   AI_WALL_MARGIN,
   AI_WALL_BERTH_LO,
+  AI_JUNCTION_EDGE_TIME,
+  AI_JUNCTION_EDGE_GAP,
   AI_BEND_SETTLED,
   AI_LAUNCH_MARGIN,
+  AI_CREST_LOOKBACK,
   GRAVITY,
   AIR_RESPONSE_FACTOR,
   AIR_STEER_FACTOR,
@@ -542,10 +545,12 @@ export class AiDriver {
         if (!choice.take) continue;
       }
       // Keep to that side, a wall's margin in from the edge (before the junction opens the edge
-      // is often the divider wall, lining the inside of the bends the shortcut skips), then
-      // cross onto the branch.
+      // is often the divider wall, lining the inside of the bends the shortcut skips), right up
+      // to it only for the last AI_JUNCTION_EDGE_TIME: the junction is short, and from further
+      // in the craft is still crossing when it closes. Then cross onto the branch.
       const half = track.widthAt(st.s) / 2;
-      return { x: b.side * (crossNow ? half + b.def.width / 2 : half - RACER_HALF_WIDTH - AI_WALL_MARGIN), crossing: inJunction };
+      const margin = ahead > v * AI_JUNCTION_EDGE_TIME ? AI_WALL_MARGIN : AI_JUNCTION_EDGE_GAP;
+      return { x: b.side * (crossNow ? half + b.def.width / 2 : half - RACER_HALF_WIDTH - margin), crossing: inJunction };
     }
     return { x: line, crossing: false };
   }
@@ -757,6 +762,8 @@ function sharpVcurve(ribbon: Ribbon, k: number): number {
 
 /** Iterations of the bisection for a bend's limit: far finer than a m/s. */
 const BEND_LIMIT_ITERATIONS = 24;
+/** The slowest a bend's limit is searched down to, m/s: walking pace, where nothing flies or drifts. */
+const BEND_LIMIT_FLOOR = 10;
 
 /**
  * Per-sample corner limits for a driver whose steer cancels drift up to `rate` m/s (`budget`
@@ -790,6 +797,9 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
     let air = false;
     let alt = 0;
     let vy = 0;
+    // Settled only after an excursion; with none begun, a crest or bend just ahead may still
+    // start one (later samples' own chases cover what lies further on).
+    let moved = false;
     for (let d = 0; d < n; d++) {
       const j = ribbon.closed ? (k + d) % n : k + d;
       if (j >= n) break;
@@ -814,15 +824,19 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
       hull += (target - hull) * Math.min(1, (w / 2) * dt);
       room = Math.min(room, lane(j));
       if (hull > room * roomShare) return false;
-      if (target <= 0 && hull < AI_BEND_SETTLED) return true;
+      if (target > 0 || air) moved = true;
+      if (target <= 0 && hull < AI_BEND_SETTLED && !air && (moved || d * ribbon.step >= AI_CREST_LOOKBACK)) return true;
     }
     return true;
   };
   const entry = sustained.map((limit, k) => {
     if (!Number.isFinite(limit) || limit >= fastest) return limit;
     if (fits(k, fastest)) return fastest;
-    let lo = limit;
-    let hi = fastest;
+    // The sustained limit holds the bend on the road; thrown off a crest into it, the craft may
+    // fly wide even below that: then the limit is the speed that keeps it from launching wide.
+    const holds = fits(k, limit);
+    let lo = holds ? limit : BEND_LIMIT_FLOOR;
+    let hi = holds ? fastest : limit;
     for (let i = 0; i < BEND_LIMIT_ITERATIONS; i++) {
       const mid = (lo + hi) / 2;
       if (fits(k, mid)) lo = mid;

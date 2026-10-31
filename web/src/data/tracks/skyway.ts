@@ -278,7 +278,7 @@ export const skyway: TrackDef = {
       ],
       features: [
         // A maintenance ramp under the gantries, its plates buckled.
-        { kind: 'rough', from: 6, to: 35, amount: 0.9 },
+        { kind: 'rough', from: 6, to: 35, amount: 0.41 },
       ],
     },
   ],

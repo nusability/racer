@@ -206,7 +206,7 @@ export const devilsteeth: TrackDef = {
         { kind: 'pillar', at: 2.7, lateral: -4, radius: 2 },
         { kind: 'pillar', at: 2.95, lateral: 4, radius: 2 },
         { kind: 'pillar', at: 3.2, lateral: -3.5, radius: 2 },
-        { kind: 'rough', from: 3.3, to: 4.85, amount: 1 },
+        { kind: 'rough', from: 3.1, to: 4.85, amount: 1 },
       ],
     },
   ],

@@ -573,6 +573,13 @@ export const AI_SHORTCUT_HI = 0.8;
 /** The AI decides on a shortcut and lines up for it this many seconds before its entry. */
 export const AI_SHORTCUT_LOOK_TIME = 2;
 /**
+ * Lined up for a branch, the AI moves out to AI_JUNCTION_EDGE_GAP metres off the road edge for
+ * the last this many seconds before the junction (until then AI_WALL_MARGIN): the junction is
+ * BRANCH_JUNCTION_LENGTH long, a third of a second at boost, too short to cross from further in.
+ */
+export const AI_JUNCTION_EDGE_TIME = 0.5;
+export const AI_JUNCTION_EDGE_GAP = 0.5;
+/**
  * An AI skips a shortcut, and takes a fork's gentlest route, once its hull damage reaches
  * this: rookies gamble on a battered hull (and can wreck in the rough), aces keep a margin
  * for a flat-out mistake.

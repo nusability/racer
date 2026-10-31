@@ -306,7 +306,7 @@ export const snowfield: TrackDef = {
       features: [
         // Pressure ridges across the frozen lake.
         { kind: 'slick', from: 1.5, to: 6.5, grip: 0.6 },
-        { kind: 'rough', from: 1.5, to: 6.5, amount: 0.7 },
+        { kind: 'rough', from: 1.5, to: 6.5, amount: 0.5 },
       ],
     },
   ],

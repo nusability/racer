@@ -282,7 +282,7 @@ export const coralcove: TrackDef = {
       ],
       features: [
         // Dead coral rubble, coral heads to thread, then a squeeze.
-        { kind: 'rough', from: 2.5, to: 3.8, amount: 0.55 },
+        { kind: 'rough', from: 2.7, to: 3.5, amount: 0.9 },
         { kind: 'boulders', from: 4.7, to: 5.2, count: 4, radius: 1.4 },
         { kind: 'narrow', from: 5.25, to: 5.8, width: 18 },
       ],

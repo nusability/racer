@@ -227,9 +227,9 @@ export const sunpan: TrackDef = {
       ],
       features: [
         // Broken salt crust either side of the kicker, then a squeeze: lift or pay in hull.
-        { kind: 'rough', from: 2.9, to: 4.0, amount: 1 },
+        { kind: 'rough', from: 2.9, to: 4.0, amount: 0.92 },
         { kind: 'kicker', at: 4.5, length: 40, height: 2 },
-        { kind: 'rough', from: 5.0, to: 5.6, amount: 1 },
+        { kind: 'rough', from: 5.0, to: 5.6, amount: 0.92 },
         { kind: 'narrow', from: 6.0, to: 7.0, width: 18 },
       ],
     },

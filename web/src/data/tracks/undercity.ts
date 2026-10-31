@@ -283,7 +283,7 @@ export const undercity: TrackDef = {
       ],
       features: [
         // A potholed works ramp straight up to the viaduct.
-        { kind: 'rough', from: 7, to: 33, amount: 0.9 },
+        { kind: 'rough', from: 7, to: 25, amount: 0.43 },
       ],
     },
   ],

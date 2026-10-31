@@ -247,7 +247,7 @@ export const mirageh: TrackDef = {
         // A crumbling ledge with nothing either side: every jolt is toward an open edge.
         { kind: 'drop', from: 1.6, to: 4.4, side: 1 },
         { kind: 'walls', from: 1.6, to: 4.4, side: -1 },
-        { kind: 'rough', from: 2, to: 4, amount: 0.75 },
+        { kind: 'rough', from: 2.4, to: 3.6, amount: 1 },
       ],
     },
   ],

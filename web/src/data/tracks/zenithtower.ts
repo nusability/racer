@@ -290,7 +290,7 @@ export const zenithtower: TrackDef = {
       ],
       features: [
         // Across an unfinished skybridge: open joints and loose deck plates.
-        { kind: 'rough', from: 8, to: 31, amount: 0.9 },
+        { kind: 'rough', from: 8, to: 26, amount: 0.5 },
       ],
     },
   ],
