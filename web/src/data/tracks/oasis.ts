@@ -209,9 +209,9 @@ export const oasis: TrackDef = {
         { x: 1771, z: 346, y: 2 },
         { x: 1840, z: 322, y: 3 },
         { x: 1869, z: 284, y: 3 },
-        { x: 1893, z: 236, y: 4 },
-        { x: 1906, z: 183, y: 4 },
-        { x: 1910, z: 128, y: 5 },
+        { x: 1888, z: 231, y: 4 },
+        { x: 1900, z: 177, y: 4 },
+        { x: 1909, z: 126, y: 5 },
       ],
       features: [
         // Rubble of the old market before the arch.

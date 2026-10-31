@@ -88,6 +88,10 @@ import {
   AI_JUNCTION_EDGE_GAP,
   AI_BEND_SETTLED,
   AI_LAUNCH_MARGIN,
+  AI_RUNOFF_ROOM,
+  LAUNCH_LEDGE_SPEED,
+  LATERAL_SPEED_MAX,
+  SLICK_DAMPING_FLOOR,
   AI_CREST_LOOKBACK,
   GRAVITY,
   AIR_RESPONSE_FACTOR,
@@ -330,6 +334,9 @@ export class AiDriver {
 
     // 4. Steer the target onto where it should be, cancelling the corner drift.
     const grip = ribbon.gripAt(st.s) * roadLoad(st.speed, ribbon.vcurveAt(st.s), veh.physics);
+    // The bend's limit counts on drifting wide; with a rival alongside out there that room is
+    // its, so a driver that looks brakes (braking leaves CORNER_PULL_BRAKE of the drift).
+    if (mirrors && !brake && !st.airborne && this.crowdedOutside(st, ribbon, field, cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, false, grip), steerRate(stats))) brake = true;
     const pull = cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, brake, grip);
     const rate = steerRate(stats);
     let shift = (target - veh.targetX) / AI_TARGET_TIME;
@@ -725,6 +732,25 @@ export class AiDriver {
     return shift;
   }
 
+  /**
+   * Drifting wide (the bend's pull past what the steer cancels) toward a rival alongside on the
+   * outside, within AI_SIDE_CLOSE_TIME of closing the gap at the drift's excess.
+   */
+  private crowdedOutside(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], pull: number, rate: number): boolean {
+    const excess = Math.abs(pull) - rate;
+    if (excess <= 0) return false;
+    const out = Math.sign(pull);
+    for (const r of field) {
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || r.fall !== null) continue;
+      if (Math.abs(ribbon.delta(st.s, r.s)) >= RACER_LENGTH * AI_ASIDE_ALONG) continue;
+      const dx = (r.x - st.x) * out;
+      if (dx <= 0) continue;
+      const gap = Math.max(0, dx - 2 * RACER_HALF_WIDTH);
+      if (gap < excess * AI_SIDE_CLOSE_TIME + AI_ASIDE_GAP) return true;
+    }
+    return false;
+  }
+
   /** Racers on the same ribbon we are catching, placed where we would meet them. */
   private addRacerBlockers(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], out: Blocker[]) {
     for (const r of field) {
@@ -748,6 +774,18 @@ export class AiDriver {
     if (this.lapse > 0) this.lapse -= dt;
     else if (this.rng() < AI_MISTAKE_RATE * (1 - this.skill) ** 2 * dt) this.lapse = AI_MISTAKE_DURATION;
   }
+}
+
+/**
+ * Whether a craft at speed v leaves the road over a sample, as Vehicle reckons it (with
+ * AI_LAUNCH_MARGIN to spare): where the smoothed curvature says the road falls away faster than
+ * lift-off, or at a ledge. The road's elevation runs straight between samples, so crossing one
+ * its slope kinks by `sharp` × the sample step all at once, dropping the road's vertical speed
+ * by v times that within a step: past LAUNCH_LEDGE_SPEED over what lift-off follows, it flies.
+ */
+function launches(v: number, vcurve: number, sharp: number, step: number, ph: Physics): boolean {
+  const share = 1 - AI_LAUNCH_MARGIN;
+  return v * v * vcurve <= -ph.liftOff * share || v * sharp * step <= -(LAUNCH_LEDGE_SPEED + ph.liftOff * SIM_DT) * share;
 }
 
 /**
@@ -782,7 +820,15 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
   const n = ribbon.samples.length;
   const crest = ribbon.samples.map((_, k) => crestGripAt(ribbon, k));
   const sustained = ribbon.samples.map((p, k) => cornerLimit(Math.abs(p.curvature), budget * p.grip, crest[k], ph));
-  const lane = (k: number) => Math.max(0, ribbon.samples[k].width / 2 - RACER_HALF_WIDTH - AI_WALL_MARGIN);
+  // Room toward the outside of a bend (the side the drift pushes to, against the curvature):
+  // the lane, and a share of any sand run-off beyond it (slow, harmless); none past an open edge.
+  const lane = (k: number, sign: number) => {
+    const p = ribbon.samples[k];
+    const half = p.width / 2;
+    const outLeft = sign > 0;
+    const runoff = (outLeft ? p.dropL : p.dropR) ? 0 : (outLeft ? p.edgeL : p.edgeR) - half;
+    return Math.max(0, half - RACER_HALF_WIDTH - AI_WALL_MARGIN + runoff * AI_RUNOFF_ROOM);
+  };
   const response = LATERAL_RESPONSE * (stats.handling / HANDLING_REF);
   // The widest the hull is carried out entering at sample k at speed v, against the room there.
   const fits = (k: number, v: number) => {
@@ -790,7 +836,8 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
     const dt = ribbon.step / v;
     let target = 0;
     let hull = 0;
-    let room = lane(k);
+    let hullV = 0;
+    let room = lane(k, sign);
     // A crest the road falls away from faster than the craft can follow throws it (reckoned
     // with a margin: a little more speed or a bump and it goes): from there it flies on
     // ballistically, rising with the road's climb at the lip, until it meets the road again.
@@ -808,7 +855,7 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
         vy -= GRAVITY * dt;
         alt += vy * dt;
         if (alt <= p.pos.y) air = false;
-      } else if (v * v * Math.min(p.vcurve, sharpVcurve(ribbon, j)) <= -ph.liftOff * (1 - AI_LAUNCH_MARGIN)) {
+      } else if (launches(v, p.vcurve, sharpVcurve(ribbon, j), ribbon.step, ph)) {
         air = true;
         alt = p.pos.y;
         vy = p.slope * v;
@@ -819,13 +866,16 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
       // Bending the other way the drift helps reel it in: count only this bend's own push.
       const pull = Math.sign(p.curvature) === sign ? (v * v * Math.abs(p.curvature)) / (budget * p.grip * load) : 0;
       target = Math.max(0, target + (pull - steer) * rate * dt);
-      const w = air ? response * AIR_RESPONSE_FACTOR : response * Math.sqrt(Math.min(1, p.grip * load));
-      // The hull trails a critically damped chase by about 2/ω.
-      hull += (target - hull) * Math.min(1, (w / 2) * dt);
-      room = Math.min(room, lane(j));
+      // The hull chases the target as in Vehicle: a damped spring, slow to start in the air.
+      const w = air ? response * AIR_RESPONSE_FACTOR * Math.sqrt(p.grip) : response * Math.sqrt(Math.min(1, p.grip * load));
+      const zeta = !air && p.grip * load < 1 ? Math.max(SLICK_DAMPING_FLOOR, p.grip * load) : 1;
+      const maxLat = LATERAL_SPEED_MAX * (stats.handling / HANDLING_REF);
+      hullV = clamp(hullV + (w * w * (target - hull) - 2 * zeta * w * hullV) * dt, -maxLat, maxLat);
+      hull += hullV * dt;
+      room = Math.min(room, lane(j, sign));
       if (hull > room * roomShare) return false;
       if (target > 0 || air) moved = true;
-      if (target <= 0 && hull < AI_BEND_SETTLED && !air && (moved || d * ribbon.step >= AI_CREST_LOOKBACK)) return true;
+      if (target <= 0 && Math.abs(hull) < AI_BEND_SETTLED && Math.abs(hullV) < AI_BEND_SETTLED && !air && (moved || d * ribbon.step >= AI_CREST_LOOKBACK)) return true;
     }
     return true;
   };

@@ -465,13 +465,18 @@ export const AI_DRIFT_ROOM_HI = 1;
  * as throwing it: a little more speed or a bump on the way puts it in the air from just short.
  */
 export const AI_LAUNCH_MARGIN = 0.15;
-/** A bend's drift counts as reeled back in once the hull is this close to the line again, metres. */
+/**
+ * Share of the sand run-off beyond a bend's outside edge an AI counts as room for the drift
+ * (see AI_DRIFT_ROOM_*): sand is slow, never a wreck. Past an open edge there is none.
+ */
+export const AI_RUNOFF_ROOM = 0.5;
+/** A bend's drift counts as reeled back in once the hull is within this of the line (metres) and moving across slower than this (m/s). */
 export const AI_BEND_SETTLED = 0.5;
 /** Braking reaction delay, seconds of travel lost before the AI starts braking. */
 export const AI_BRAKE_REACTION_LO = 0.35;
 export const AI_BRAKE_REACTION_HI = 0.05;
 /** Straight needed before the AI boosts, as a multiple of the braking distance it needs. */
-export const AI_BOOST_CAUTION_LO = 8;
+export const AI_BOOST_CAUTION_LO = 3;
 export const AI_BOOST_CAUTION_HI = 1;
 /** The AI only spends tank on a straight at least this many seconds long: skill saves it. */
 export const AI_BOOST_MIN_RUN_LO = 0;

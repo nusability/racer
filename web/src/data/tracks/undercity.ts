@@ -238,15 +238,11 @@ export const undercity: TrackDef = {
       kind: 'shortcut',
       name: 'Service Ramp',
       side: 1,
-      from: 71,
+      from: 71.65,
       to: 93,
       width: 20,
       runoff: 0,
       points: [
-        { x: 1174, z: -2463, y: 8.0 },
-        { x: 1202, z: -2463, y: 8.7 },
-        { x: 1231, z: -2463, y: 9.4 },
-        { x: 1259, z: -2463, y: 10.1 },
         { x: 1287, z: -2463, y: 10.8 },
         { x: 1316, z: -2463, y: 11.6 },
         { x: 1344, z: -2463, y: 12.3 },
@@ -283,7 +279,7 @@ export const undercity: TrackDef = {
       ],
       features: [
         // A potholed works ramp straight up to the viaduct.
-        { kind: 'rough', from: 7, to: 25, amount: 0.43 },
+        { kind: 'rough', from: 3, to: 21, amount: 0.43 },
       ],
     },
   ],
