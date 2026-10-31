@@ -119,25 +119,35 @@ function poseFalling(s: PoseSnapshot, obj: THREE.Object3D) {
 const fallEuler = new THREE.Euler();
 
 function poseOnRibbon(track: Ribbon, s: PoseSnapshot, obj: THREE.Object3D) {
-  track.toWorld(s.s, s.x, s.y + POSE_VISUAL_HOVER, p, frame);
+  // The sim's roll already includes the road bank, which the banked frame applies.
+  poseRibbonAt(track, s.s, s.x, s.y, s.yaw, posePitch(track, s.s, s.vy, s.speed), s.roll - track.bankAt(s.s), obj);
+}
+
+/** The nose's pitch the pose shows: from vertical motion relative to the road, clamped. */
+export function posePitch(track: Ribbon, s: number, vy: number, speed: number): number {
+  const relVy = vy - speed * track.slopeAt(s);
+  return Math.max(-POSE_MAX_PITCH, Math.min(POSE_MAX_PITCH, Math.atan2(relVy, Math.max(1, speed))));
+}
+
+/**
+ * Places a craft on a ribbon from its pose in road terms: heading off the tangent (`yaw`), the
+ * nose's `pitch`, and its roll over the road's own bank (`relRoll`). A live racer and a
+ * time-trial ghost both pose through here, so a ghost sits exactly where its run flew.
+ */
+export function poseRibbonAt(track: Ribbon, s: number, x: number, y: number, yaw: number, pitch: number, relRoll: number, obj: THREE.Object3D) {
+  track.toWorld(s, x, y + POSE_VISUAL_HOVER, p, frame);
   obj.position.set(p.x, p.y, p.z);
   t.set(frame.tangent.x, frame.tangent.y, frame.tangent.z);
   rgt.set(frame.right.x, frame.right.y, frame.right.z);
   u.set(frame.up.x, frame.up.y, frame.up.z);
 
-  // Heading relative to the track, then pitch from vertical motion relative to the road.
-  const cy = Math.cos(s.yaw);
-  const sy = Math.sin(s.yaw);
-  fwd.copy(t).multiplyScalar(cy).addScaledVector(rgt, sy);
-  const relVy = s.vy - s.speed * track.slopeAt(s.s);
-  const pitch = Math.max(-POSE_MAX_PITCH, Math.min(POSE_MAX_PITCH, Math.atan2(relVy, Math.max(1, s.speed))));
+  fwd.copy(t).multiplyScalar(Math.cos(yaw)).addScaledVector(rgt, Math.sin(yaw));
   fwd.multiplyScalar(Math.cos(pitch)).addScaledVector(u, Math.sin(pitch)).normalize();
   right.crossVectors(fwd, u).normalize();
   up.crossVectors(right, fwd).normalize();
   // Model space: +X right, +Y up, −Z forward.
   basis.makeBasis(right, up, fwd.negate());
   obj.quaternion.setFromRotationMatrix(basis);
-  // The sim's roll already includes the road bank, which the banked frame applied above.
-  rollQ.setFromAxisAngle(zAxis, -(s.roll - track.bankAt(s.s)));
+  rollQ.setFromAxisAngle(zAxis, -relRoll);
   obj.quaternion.multiply(rollQ);
 }

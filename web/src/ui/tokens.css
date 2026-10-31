@@ -13,6 +13,8 @@
   --orange-lo: #8a3200;
   --red: #ff4a2e;
   --cyan: #3cf2ff;
+  /* Ahead of the time-trial ghost (red, --red, is behind it). */
+  --green: #5cff8a;
   --gold: #ffcf4a;
   --radius: 14px;
   --tap: 52px;

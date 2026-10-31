@@ -1,4 +1,4 @@
-// Main menu: four big tiles. The selected racer is named so the player knows what they'll fly.
+// Main menu: the three modes over the garage and settings. The selected racer is named so the player knows what they'll fly.
 import { racerById } from '../../data/racers.ts';
 import { WORLDS } from '../../data/worlds.ts';
 import { button, creditsChip, h } from '../kit.ts';
@@ -28,6 +28,14 @@ export function mainMenuScreen(ctx: AppCtx): Screen {
       aria: 'Quick race',
       big: true,
       onTap: () => ctx.go({ screen: 'quick' }),
+    }),
+    button({
+      id: 'menu_trial_button',
+      label: 'TIME TRIAL',
+      sub: 'Alone against your ghost',
+      aria: 'Time trial',
+      big: true,
+      onTap: () => ctx.go({ screen: 'trial' }),
     }),
     button({
       id: 'menu_garage_button',

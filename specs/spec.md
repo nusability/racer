@@ -48,8 +48,8 @@ racers and upgrades, and a championship of three cups gives the series a goal.
 
 ## Core Game Loop
 
-1. **Pick a race**: the next race of a championship cup, or a quick race on any track of an
-   open world. Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian, Orbital Reach; more to come) has six to
+1. **Pick a race**: the next race of a championship cup, a quick race on any track of an
+   open world, or a time trial on any of those tracks (below). Each world (Mirage Desert, Coral Coast, Frostline, Neon Meridian, Orbital Reach; more to come) has six to
    eight tracks and three cups, rookie → pro → elite. Winning a world's rookie cup opens the
    next world. Every world mixes track archetypes: a forgiving rookie loop, a technical track
    of switchbacks, a speed track whose long straights (up to 1.5 km, as every layout's) run into braking zones, and a gimmick track (vertical loop,
@@ -123,6 +123,25 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    The craft disintegrates in slow motion where it hits, the camera riding with the tumbling
    debris until it comes to rest (or, lost in the void, watching it fall away), then the
    results show a DNF.
+   **Time Trial** is the third mode beside Championship and Quick Race, on the same world and
+   track picker, with the selected glider. The player flies alone: no rivals and nothing that
+   depends on them, but the track's own hazards run as in a race, since they are part of the
+   lap. A circuit is a standing start, then flying laps one after another until the player
+   leaves (pause → quit, or the 60-lap cap); every lap counts and the best one is the best. A
+   sprint is one run from the grid. A restart button on the HUD (or R) puts the run back on
+   the grid at once, mid-lap or after it. The ghost is the player's own best lap (or run) on
+   that track, whatever the glider: a see-through tinted copy of the glider it was set with,
+   with no collision, flying the recorded line (its poses, never its inputs, so it stays true
+   when the physics tuning changes). The HUD shows the lap time, a live delta to the ghost
+   measured at the same point of the course (green ahead, red behind), the split delta at each
+   of four equal sector lines, the best lap and the last lap. After each lap (or the run) a
+   panel shows its time, the delta to the best, the four sector times against the ghost's,
+   and, in debug mode only, the physics tuning it was flown with, each value marked where it
+   differs from the ghost's. A new best replaces the ghost at once. A trial pays no credits
+   and touches nothing in the career: each track keeps only its best ghost (with its time,
+   glider, upgrades, physics tuning, build and date), on the device apart from the career
+   save, and a ghost that can't be read is dropped with a warning. Each trial run that set a
+   lap is kept in the race logs the debug menu exports, with its lap times and physics tuning.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one
    tap to the next race). Spend them in the garage on new racers and upgrades. Some gliders
    are sold only once their world opens (Neon Meridian brings two above the Halo Comet); the
@@ -177,6 +196,8 @@ world. Winning a world's elite cup makes you that world's champion.
 | Glider prices | 0 / 8k / 15k / 24k / 32k / 40k; Neon Meridian's two: 95k / 145k, on sale once the city opens (shown locked before) | Upgrade costs scale with glider class. A decent player (sim) buys the Halo Comet after 60 races, the first city glider with the Neon Cup's winnings (108) and the second with the Zenith Crown's (132); the Orbis Gyre's upgrade set is then the long tail, finished with Orbital Reach's winnings during its Supernova Trophy (race 160 of 164, ~102k spare after every cup) |
 | World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6, Orbital Reach 5.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won. Orbital Reach (decent player, sim): ~4.4k a race in the Apogee Cup, ~8.6k in the Perihelion Cup, ~11.0k in the Supernova Trophy; it opens with the Neon Cup (race 108) |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
+| Time-trial ghost | Poses at 10 Hz, interpolated; distance 1/8 m, position 1/16 m, angles 0.35° | ~65 bytes per second stored: a circuit lap 3.5–4.7 KB, a sprint run ~6 KB (trial-check) |
+| Time-trial splits | 4 equal sectors per lap (or run), as the sprint HUD counts them | Split delta shown 2.5 s; a circuit lap's panel 6 s; the ghost hides within 4 m ahead of the camera |
 
 ## Platforms & Scope
 

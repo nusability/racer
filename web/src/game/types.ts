@@ -3,6 +3,7 @@
 
 import type { PlayerInput, RaceEntrant, RaceEvent, RaceResultRow, RacerVisual } from '../core/types.ts';
 import type { GraphicsLevel } from '../render/graphicsTuning.ts';
+import type { UpgradeLevels } from '../data/upgrades.ts';
 
 /** Why a racer was wrecked out of the race. */
 export type CrashReason = Extract<RaceEvent, { type: 'crash' }>['reason'];
@@ -14,7 +15,8 @@ export interface WreckInfo {
   cause: string | null;
 }
 
-export type RaceMode = 'championship' | 'quick';
+/** A time trial ('timeTrial') races alone against a ghost and never pays: it has no outcome for the career. */
+export type RaceMode = 'championship' | 'quick' | 'timeTrial';
 
 export interface RaceRequest {
   /** Unique per race attempt slot; the career pays each id at most once. */
@@ -25,6 +27,8 @@ export interface RaceRequest {
   seed: number;
   /** The player's entrant is included (isPlayer: true). Grid order = array order, last = back. */
   entrants: RaceEntrant[];
+  /** Time trial only: the glider's upgrade levels, recorded with its ghost. */
+  upgrades?: UpgradeLevels;
   /** Championship only. */
   cupId?: string;
   raceIndex?: number;

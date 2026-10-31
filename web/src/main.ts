@@ -52,7 +52,7 @@ const launchRace: RaceLauncher = (req, onDone) => {
   showroom.hide();
   applyPixelRatio();
   session = new RaceSession(
-    { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage), store: window.localStorage },
+    { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage), store: window.localStorage, ghosts: window.localStorage },
     req,
     (outcome, perf) => {
       session = null;
@@ -74,17 +74,18 @@ enableOffline();
 
 const graphicsDeps = { gpu: gpuName(renderer.getContext()), benchmark: runBenchmark };
 const devTrack = new URLSearchParams(location.search).get('devtrack');
-if (devTrack === null) startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, graphics: graphicsDeps, start: { screen: 'title' } });
+if (devTrack === null) startApp({ root, launchRace, showroom: showroomApi, audio, store: window.localStorage, ghosts: window.localStorage, graphics: graphicsDeps, start: { screen: 'title' } });
 else {
   // `?devtrack=<id>` (the debug menu's DEV TRACKS) opens Quick Race on a synthetic track (ui/devTracks.ts), with
-  // a career of its own so test races never pay into the real save.
+  // a career of its own so test races never pay into the real save. Ghosts stay in the one store
+  // the race writes them to: a dev track's id is its own, so they never mix with a real track's.
   const devStore = {
     getItem: (key: string) => window.localStorage.getItem(`devtrack:${key}`),
     setItem: (key: string, value: string) => window.localStorage.setItem(`devtrack:${key}`, value),
   };
   void import('./ui/devTracks.ts').then(({ loadDevTrack }) => {
     const worldId = loadDevTrack(devTrack);
-    startApp({ root, launchRace, showroom: showroomApi, audio, store: devStore, graphics: graphicsDeps, start: { screen: 'quick', worldId, trackId: devTrack } });
+    startApp({ root, launchRace, showroom: showroomApi, audio, store: devStore, ghosts: window.localStorage, graphics: graphicsDeps, start: { screen: 'quick', worldId, trackId: devTrack } });
   });
 }
 

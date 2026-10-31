@@ -31,6 +31,8 @@ import { createInput } from '../ui/input.ts';
 import { createMinimap, type Minimap } from '../ui/minimap.ts';
 import { saveTelemetry, TelemetryRecorder } from './telemetry.ts';
 import type { KeyValueStore } from './save.ts';
+import type { GhostStorage } from './ghostStore.ts';
+import { TrialSession } from './trialSession.ts';
 import { loadDebugFlags } from '../ui/debugFlags.ts';
 import { createPerfOverlay, type PerfOverlay } from '../ui/perfOverlay.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
@@ -72,6 +74,8 @@ export interface SessionContext {
   settings: Settings;
   /** The app's store, for device-level debug flags (the same object startApp got). */
   store: KeyValueStore;
+  /** Where a time trial keeps each track's best ghost. */
+  ghosts: GhostStorage;
 }
 
 interface RacerView {
@@ -189,6 +193,8 @@ export class RaceSession {
   private readonly toneMappingBefore: { mapping: THREE.ToneMapping; exposure: number };
   private readonly roadFrame = makeFrame();
   private readonly roadUp = new THREE.Vector3();
+  /** A time trial's ghost, splits and HUD; null in a race against the field. */
+  private readonly trial: TrialSession | null;
 
   constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null, perf: RacePerf) => void) {
     this.ctx = ctx;
@@ -280,7 +286,23 @@ export class RaceSession {
     this.minimap = createMinimap(this.hudRoot, this.track);
     this.perf = loadDebugFlags(ctx.store).perfOverlay ? createPerfOverlay(this.hudRoot) : null;
     this.dotColors = request.entrants.map((e) => `#${racerById(e.racerId).visual.primary.toString(16).padStart(6, '0')}`);
+    this.trial = request.mode === 'timeTrial' ? this.createTrial() : null;
+    if (this.trial) this.hudRoot.classList.add('race-layer--trial');
     document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  private createTrial(): TrialSession {
+    const player = this.request.entrants[this.playerIndex()];
+    return new TrialSession({
+      track: this.track,
+      scene: this.scene,
+      hudRoot: this.hudRoot,
+      ghosts: this.ctx.ghosts,
+      setup: { glider: player.racerId, upgrades: this.request.upgrades ?? fail('a time trial request carries the glider\'s upgrades'), physics: { ...this.race.config.physics }, build: __BUILD__ },
+      debug: loadDebugFlags(this.ctx.store).enabled,
+      restart: () => this.restart(),
+      exit: () => this.finish(null),
+    });
   }
 
   /** Each start (and restart) races with the owner's physics tuning as it stands then. */
@@ -334,7 +356,9 @@ export class RaceSession {
 
   private restart() {
     this.resume();
+    this.saveTrialLog();
     this.race = this.newRace();
+    this.trial?.restart({ ...this.race.config.physics });
     this.telemetry = new TelemetryRecorder(this.request, this.ctx.settings, this.race.config.physics, __BUILD__);
     this.acc = 0;
     this.finishedFor = 0;
@@ -360,10 +384,23 @@ export class RaceSession {
   private finish(outcome: RaceOutcome | null) {
     if (this.done) return;
     this.done = true;
-    // A quit race isn't worth a log: there is no outcome to explain.
-    if (outcome) saveTelemetry(this.telemetry.finish(outcome));
+    // A quit race isn't worth a log: there is no outcome to explain. A trial is only ever left
+    // (it pays nothing and has no outcome), and logs each run that set a time.
+    if (this.trial) this.saveTrialLog();
+    else if (outcome) saveTelemetry(this.telemetry.finish(outcome));
     this.dispose();
     this.onDone(outcome, { sustainedSlow: this.slowWatch.sustainedSlow });
+  }
+
+  /** The run's log, once it has a lap: the race as it stands, with its lap times and physics. */
+  private saveTrialLog() {
+    if (!this.trial || this.trial.lapsDone === 0) return;
+    saveTelemetry(this.telemetry.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck }, this.trial.telemetry()));
+  }
+
+  /** A trial's run ended: the scene plays on behind its panel until RESTART or EXIT. */
+  private endTrial(): void {
+    this.trial?.end(this.playerWreck !== null);
   }
 
   /** Advance and draw one display frame. */
@@ -382,8 +419,11 @@ export class RaceSession {
         }
         this.ctx.audio.setTimeScale(scale);
         if (this.wreckFor >= SESSION_WRECK_LINGER) {
-          this.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck });
-          return;
+          if (this.trial) this.endTrial();
+          else {
+            this.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck });
+            return;
+          }
         }
       }
       this.clock += dt;
@@ -395,6 +435,7 @@ export class RaceSession {
         this.acc -= SIM_DT;
         const events = this.race.step(input);
         this.telemetry.step(this.race, input, events);
+        this.trial?.step(this.race, events);
         // A nudge is a displacement, not a rate: it must land on exactly one step.
         input.nudge = 0;
         this.syncSnapshots(false);
@@ -404,8 +445,11 @@ export class RaceSession {
         this.finishedFor += dt;
         // A sprint's results wait for the player to have taken in the view from its end.
         if (this.finishedFor >= SESSION_FINISH_LINGER && (this.vista === null || this.vista.shown >= SESSION_VISTA_LINGER)) {
-          this.finish({ request: this.request, results: this.race.results(), playerWreck: null });
-          return;
+          if (this.trial) this.endTrial();
+          else {
+            this.finish({ request: this.request, results: this.race.results(), playerWreck: null });
+            return;
+          }
         }
       }
     }
@@ -524,7 +568,8 @@ export class RaceSession {
       case 'lap':
         // Each lap the player may collect every cell again.
         if (ev.id === pid) this.trackScene.resetCells();
-        if (ev.id === pid && ev.lap < this.request.laps) {
+        // A trial's own HUD times each lap, and its lap cap is no final lap to announce.
+        if (ev.id === pid && ev.lap < this.request.laps && !this.trial) {
           audio.oneShot('lap');
           this.hud.flash(ev.lap === this.request.laps - 1 ? 'FINAL LAP' : `LAP ${ev.lap + 1}`);
         }
@@ -532,7 +577,8 @@ export class RaceSession {
       case 'finish':
         if (ev.id === pid) {
           audio.oneShot('finish');
-          this.hud.flash(ordinal(ev.place));
+          // Alone, first place says nothing: the trial's panel shows the time instead.
+          if (!this.trial) this.hud.flash(ordinal(ev.place));
         }
         return;
       case 'launch':
@@ -635,6 +681,7 @@ export class RaceSession {
       }
     });
 
+    this.trial?.draw(alpha, this.cam.camera);
     const p = this.player();
     const top = this.request.entrants[pi].stats.topSpeed;
     const speedFrac = p.speed / top;
@@ -737,6 +784,7 @@ export class RaceSession {
     this.input.dispose();
     this.minimap.dispose();
     this.perf?.dispose();
+    this.trial?.dispose();
     this.hud.dispose();
     this.hudRoot.remove();
     this.speedLines.dispose();
@@ -751,6 +799,10 @@ export class RaceSession {
     this.ctx.renderer.toneMapping = this.toneMappingBefore.mapping;
     this.ctx.renderer.toneMappingExposure = this.toneMappingBefore.exposure;
   }
+}
+
+function fail(why: string): never {
+  throw new Error(`raceSession: ${why}`);
 }
 
 function ordinal(n: number): string {

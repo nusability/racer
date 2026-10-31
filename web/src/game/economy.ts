@@ -12,7 +12,8 @@ import { WORLDS } from '../data/worlds.ts';
 import type { RaceMode } from './types.ts';
 
 export interface PayoutInput {
-  mode: RaceMode;
+  /** A time trial pays nothing, so it never reaches the payout. */
+  mode: Exclude<RaceMode, 'timeTrial'>;
   /** 1-based finishing place. */
   place: number;
   /**

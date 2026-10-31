@@ -15,6 +15,7 @@ import { PLAYER_NAME, championshipGrid, fieldEdge, playerEntrant, quickRaceGrid 
 import { APPLIED_RACE_MEMORY, freshSave, loadSave, writeSave } from './save.ts';
 import type { KeyValueStore, SaveData } from './save.ts';
 import type { RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
+import { TRIAL_CIRCUIT_LAPS, TRIAL_SEED } from './trialTuning.ts';
 
 export const MIN_QUICK_LAPS = 1;
 export const MAX_QUICK_LAPS = 5;
@@ -267,11 +268,31 @@ export class Career {
     };
   }
 
+  /**
+   * A time trial on the track with the selected glider, alone. It never takes a race id from
+   * the career (nothing is paid or recorded in the save); its one seed per track keeps every
+   * run on the same rough-ground jolts.
+   */
+  timeTrialRequest(trackId: string): RaceRequest {
+    const track = trackById(trackId);
+    if (!this.isWorldUnlocked(worldOfTrack(track.id).id)) throw new Error(`Time trial: track "${trackId}" is in a locked world`);
+    return {
+      raceId: `trial-${track.id}`,
+      mode: 'timeTrial',
+      trackId: track.id,
+      laps: track.course === 'sprint' ? track.laps : TRIAL_CIRCUIT_LAPS,
+      seed: TRIAL_SEED,
+      entrants: [this.player()],
+      upgrades: { ...this.save.upgrades[this.save.selectedRacer] },
+    };
+  }
+
   // --- Earning ------------------------------------------------------------------
 
   /** The one earn path. Idempotent per race id. */
   applyOutcome(outcome: RaceOutcome): RaceReport {
     const req = outcome.request;
+    if (req.mode === 'timeTrial') throw new Error(`Race ${req.raceId}: a time trial pays nothing and has no outcome to apply`);
     const cached = this.reports.get(req.raceId);
     if (cached) return cached;
     if (this.save.appliedRaceIds.includes(req.raceId)) throw new Error(`Race ${req.raceId} was already applied`);

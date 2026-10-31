@@ -92,6 +92,7 @@ const showroom: ShowroomApi = {
 const viewerStore = {
   getItem: (key: string) => window.localStorage.getItem(`menu-viewer:${key}`),
   setItem: (key: string, value: string) => window.localStorage.setItem(`menu-viewer:${key}`, value),
+  removeItem: (key: string) => window.localStorage.removeItem(`menu-viewer:${key}`),
 };
 
 /** The viewer has no game canvas; a throwaway context names the GPU the benchmark is recorded against. */
@@ -103,4 +104,4 @@ function probeGpu(): string {
   return name;
 }
 
-startApp({ root, launchRace, showroom, audio: new GameAudio(), store: viewerStore, graphics: { gpu: probeGpu(), benchmark: runBenchmark }, start: { screen: 'title' } });
+startApp({ root, launchRace, showroom, audio: new GameAudio(), store: viewerStore, ghosts: viewerStore, graphics: { gpu: probeGpu(), benchmark: runBenchmark }, start: { screen: 'title' } });

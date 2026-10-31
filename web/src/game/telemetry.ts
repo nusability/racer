@@ -6,6 +6,7 @@ import type { Race } from '../core/race.ts';
 import type { CourseKind, PhysicsTuning, PlayerInput, RaceEvent, RaceResultRow, RacerStats } from '../core/types.ts';
 import { trackById } from '../data/tracks/index.ts';
 import type { RaceOutcome, RaceRequest, Settings } from './types.ts';
+import type { TrialTelemetry } from './trialSession.ts';
 import { SIM_DT } from '../data/tuning.ts';
 import {
   TELEMETRY_KEEP,
@@ -74,6 +75,8 @@ export interface RaceTelemetry {
   events: TelemetryEvent[];
   results: RaceResultRow[];
   wreck: RaceOutcome['playerWreck'];
+  /** A time-trial run's lap times, the physics it was flown with and the ghost it chased. */
+  trial?: TrialTelemetry;
 }
 
 /** Events worth a line in the log (per-step noise like scrapes is summarised instead). */
@@ -179,7 +182,7 @@ export class TelemetryRecorder {
     this.frameTimes.push(dt);
   }
 
-  finish(outcome: RaceOutcome): RaceTelemetry {
+  finish(outcome: RaceOutcome, trial?: TrialTelemetry): RaceTelemetry {
     const sorted = [...this.frameTimes].sort((a, b) => b - a);
     const worst = sorted.slice(0, Math.max(1, Math.floor(sorted.length * TELEMETRY_WORST_FRAMES)));
     const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
@@ -217,6 +220,7 @@ export class TelemetryRecorder {
       ],
       results: outcome.results,
       wreck: outcome.playerWreck,
+      ...(trial ? { trial } : {}),
     };
   }
 }
@@ -287,8 +291,9 @@ export function telemetryToText(t: RaceTelemetry): string {
   return JSON.stringify(t);
 }
 
-export function telemetrySummary(t: RaceTelemetry): { track: string; when: string; place: number | null; dnf: boolean; time: number | null } {
+export function telemetrySummary(t: RaceTelemetry): { track: string; when: string; place: number | null; dnf: boolean; time: number | null; trial: { laps: number; best: number | null } | null } {
   const me = t.results.find((r) => r.isPlayer);
   if (!me) throw new Error('telemetry: log without the player row');
-  return { track: t.track, when: t.at, place: me.dnf ? null : me.place, dnf: me.dnf, time: me.time };
+  const trial = t.trial ? { laps: t.trial.laps.length, best: t.trial.best } : null;
+  return { track: t.track, when: t.at, place: me.dnf ? null : me.place, dnf: me.dnf, time: me.time, trial };
 }

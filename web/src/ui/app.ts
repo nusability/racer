@@ -4,6 +4,7 @@ import './styles.css';
 import type { GameAudio } from '../audio/audio.ts';
 import { Career } from '../game/career.ts';
 import { graphicsLevel, steppedDown } from '../game/graphics.ts';
+import type { GhostStorage } from '../game/ghostStore.ts';
 import type { KeyValueStore } from '../game/save.ts';
 import type { RaceLauncher, RacePerf, RaceRequest, ShowroomApi } from '../game/types.ts';
 import { GraphicsAuto, type GraphicsDeps } from './graphicsAuto.ts';
@@ -12,7 +13,7 @@ import { championshipScreen, cupScreen, worldScreen } from './screens/championsh
 import type { AppCtx, Nav, Screen } from './screens/context.ts';
 import { garageScreen } from './screens/garage.ts';
 import { mainMenuScreen } from './screens/mainMenu.ts';
-import { quickRaceScreen } from './screens/quickRace.ts';
+import { quickRaceScreen, timeTrialScreen } from './screens/quickRace.ts';
 import { resultsScreen } from './screens/results.ts';
 import { settingsScreen } from './screens/settings.ts';
 import { debugScreen } from './screens/debug.ts';
@@ -28,6 +29,8 @@ export interface AppDeps {
    * their fake races can never pay into the real save.
    */
   store: KeyValueStore;
+  /** Where the time-trial ghosts are kept (dev pages pass their own, as with `store`). */
+  ghosts: GhostStorage;
   /** The automatic graphics level's benchmark and the GPU it is recorded against. */
   graphics: GraphicsDeps;
   /** The first screen: the title, unless a dev entry opens straight onto another. */
@@ -48,6 +51,8 @@ function build(ctx: AppCtx, nav: Nav): Screen {
       return cupScreen(ctx, nav.cupId);
     case 'quick':
       return quickRaceScreen(ctx, nav.worldId, nav.trackId, nav.laps);
+    case 'trial':
+      return timeTrialScreen(ctx, nav.worldId, nav.trackId);
     case 'garage':
       return garageScreen(ctx, nav.racerId);
     case 'settings':
@@ -97,7 +102,8 @@ export function startApp(deps: AppDeps): void {
     deps.launchRace(req, (outcome, perf) => {
       racing = false;
       shell.hidden = false;
-      if (outcome === null) go(back);
+      // A time trial ends back at its picker: it has nothing for the career to apply.
+      if (outcome === null || req.mode === 'timeTrial') go(back);
       else go({ screen: 'results', report: career.applyOutcome(outcome) });
       safetyNet(perf);
     });
@@ -118,7 +124,7 @@ export function startApp(deps: AppDeps): void {
     t.say(`Graphics set to ${level} for a smoother race`, true);
   }
 
-  const ctx: AppCtx = { career, store: deps.store, audio: deps.audio, showroom: deps.showroom, graphics, go, race };
+  const ctx: AppCtx = { career, store: deps.store, ghosts: deps.ghosts, audio: deps.audio, showroom: deps.showroom, graphics, go, race };
   go(deps.start);
   // While the title waits for its tap: the measurement draws on a canvas that is never shown.
   graphics.ensure();

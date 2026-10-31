@@ -269,7 +269,8 @@ export function debugScreen(ctx: AppCtx): Screen {
     const logs = loadTelemetry();
     const label = (t: RaceTelemetry) => {
       const s = telemetrySummary(t);
-      return `${s.track} · ${s.dnf ? 'DNF' : `P${s.place}`} · ${formatTime(s.time)} · ${new Date(s.when).toLocaleString()}`;
+      const how = s.trial ? `TRIAL ${s.trial.laps} lap${s.trial.laps === 1 ? '' : 's'} · best ${formatTime(s.trial.best)}` : `${s.dnf ? 'DNF' : `P${s.place}`} · ${formatTime(s.time)}`;
+      return `${s.track} · ${how} · ${new Date(s.when).toLocaleString()}`;
     };
     const copy = async (text: string, what: string) => say((await copyText(text, root)) === 'copied' ? `${what} copied` : `${what} shown to copy`);
     const rows = logs.map((t, i) =>

@@ -9,8 +9,9 @@ just do a quick race).
 - **Play the prototype**: GitHub Pages (published from `web/` by `.github/workflows/pages.yml`).
 - **Stage**: `prototype` (see `specs/spec.md`). Work is tracked on Stori project `MIRA`.
 - **Run locally**: `cd web && npm install && npm run dev`, then open the printed URL on a phone
-  on the same network. Headless checks: `npm run sim` and
-  `node --experimental-strip-types tools/track-check.ts`.
+  on the same network. Headless checks: `npm run sim`,
+  `node --experimental-strip-types tools/track-check.ts` and (the time trial's ghost and splits)
+  `node --experimental-strip-types tools/trial-check.ts`.
 
 Built from `game-template`: prototyped on the web, then built as native iOS and Android apps
 in parallel. Spec-driven with [Spec Kit](https://github.com/github/spec-kit) in single-spec
