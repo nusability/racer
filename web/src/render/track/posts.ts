@@ -3,14 +3,13 @@ import { FlatBuilder, type P3 } from './builder.ts';
 import type { Boundary, Scatter } from './corridor.ts';
 import { quadFacing, type Paint } from './paint.ts';
 import type { CourseEnvelope } from './clearance.ts';
+import { RIDGE_FENCE_BAND } from '../../data/tuning.ts';
 
 // Boundary pylons along the run-off lips and lamp posts along the walls: hundreds of them,
 // two instanced meshes each (lit body, unlit light), whatever the lap length.
 
 const PYLON_HEIGHT = 4.5;
 const PYLON_TIP = 1;
-/** Energy fence between pylons: band height above the lip crest. */
-const FENCE_Y: [number, number] = [2.2, 2.9];
 const LAMP_HEIGHT = 10;
 const LAMP_ARM = 3.5;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -87,7 +86,7 @@ export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, g
   const pylons = settle(env, [pylon, tip], scatter.pylons, (p) => p.out, (p) => p.out);
   const lamps = settle(env, [lampPost, lampHead], scatter.lights, (l) => l.inward, (l) => ({ x: -l.inward.x, y: 0, z: -l.inward.z }));
   if (boundary === 'fence') {
-    // Energy fence: a glowing band between neighbouring pylons on the same lip.
+    // Energy fence: a glowing band between neighbouring pylons on the same lip, as tall over the crest as the core's boundary there.
     const accent = paint.accent;
     for (let i = 0; i + 1 < pylons.length; i++) {
       for (let j = i + 1; j < Math.min(pylons.length, i + 4); j++) {
@@ -95,8 +94,8 @@ export function buildPosts(scatter: Scatter, paint: Paint, boundary: Boundary, g
         const b = pylons[j];
         if (a.view !== b.view || a.side !== b.side || Math.hypot(a.p.x - b.p.x, a.p.z - b.p.z) > 60) continue;
         const q = (p: P3, y: number): P3 => ({ x: p.x, y: p.y + y, z: p.z });
-        quadFacing(glow, q(a.p, FENCE_Y[0]), q(b.p, FENCE_Y[0]), q(b.p, FENCE_Y[1]), q(a.p, FENCE_Y[1]), { x: -a.out.x, y: 0, z: -a.out.z }, accent);
-        quadFacing(glow, q(a.p, FENCE_Y[0]), q(b.p, FENCE_Y[0]), q(b.p, FENCE_Y[1]), q(a.p, FENCE_Y[1]), a.out, accent);
+        quadFacing(glow, q(a.p, RIDGE_FENCE_BAND[0]), q(b.p, RIDGE_FENCE_BAND[0]), q(b.p, RIDGE_FENCE_BAND[1]), q(a.p, RIDGE_FENCE_BAND[1]), { x: -a.out.x, y: 0, z: -a.out.z }, accent);
+        quadFacing(glow, q(a.p, RIDGE_FENCE_BAND[0]), q(b.p, RIDGE_FENCE_BAND[0]), q(b.p, RIDGE_FENCE_BAND[1]), q(a.p, RIDGE_FENCE_BAND[1]), a.out, accent);
         break;
       }
     }

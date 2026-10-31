@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { FlatBuilder, P3 } from './builder.ts';
 import { KERB_BLOCK, LIT_EDGE_BLOCKS } from './config.ts';
 import type { Chunk, Corridor } from './corridor.ts';
-import { DROP_DEPTH } from '../../data/tuning.ts';
+import { DROP_DEPTH, RAIL_HEIGHT } from '../../data/tuning.ts';
 import { quadFacing, rockQuad } from './paint.ts';
 import { beatIndex } from './rhythm.ts';
 
@@ -12,8 +12,7 @@ import { beatIndex } from './rhythm.ts';
 // loop or a corkscrew close underneath into rings, joined by stringers into one floating cage
 // held by thruster pods, and a bridge deck hangs from its own structure without piers.
 
-/** Guard rail height and thickness at the hard boundary of a deck. */
-const RAIL_HEIGHT = 1.3;
+/** Guard rail thickness at the hard boundary of a deck (its height is the core's: a craft collides with it up to there). */
 const RAIL_WIDTH = 0.5;
 /** Depth of the deck structure under the road surface. */
 const DECK_DEPTH = 1.6;

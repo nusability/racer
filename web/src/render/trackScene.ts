@@ -19,7 +19,7 @@ import { DRAWS_OWN_BARRIER, placeLandmarks, updateLandmarks } from './track/land
 import { auditClearance, type ClearanceFinding } from './track/clearance.ts';
 import { makePaint } from './track/paint.ts';
 import { buildPosts } from './track/posts.ts';
-import { hangInVoid, ribbonViews } from './track/shape.ts';
+import { ribbonViews } from './track/shape.ts';
 import { buildTerrain } from './track/terrain.ts';
 import { boostTexture, roadTexture, signTexture } from './track/textures.ts';
 import { deckGlowTexture } from './track/deckTexture.ts';
@@ -88,7 +88,8 @@ export function buildTrackScene(track: Track, quality: Quality, look: ActiveLook
   const kit = biomeKit(scenery, def.palette, { ao, sea: look?.sea ? look.look.sea : null });
   const paint = makePaint(def.palette, kit.masonry);
   const views = ribbonViews(track, scenery.biome === 'beach' ? scenery.lagoons : [], scenery.biome === 'city' ? scenery.streets : []);
-  if (!kit.terrain) for (const v of views) hangInVoid(v.shape);
+  // With no ground to stand on every road is a deck: the core lays its rails over the void (core/walls.ts).
+  if (kit.terrain === (track.below === 'void')) throw new Error(`Track ${def.id}: its world ${kit.terrain ? 'has' : 'has no'} ground, but what lies below it is ${track.below}`);
   const ground = new Ground(views, kit.ground, def.seed);
   // Landmarks first: they level the ground the corridor and terrain then read.
   const landmarks = placeLandmarks(track, scenery, ground, quality);

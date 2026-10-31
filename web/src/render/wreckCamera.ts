@@ -165,8 +165,8 @@ export class WreckCamera {
     if (covered) y = Math.min(y, smp.ceiling - CAM_CEILING_MARGIN);
     const minX = ribbon.minXAt(s);
     const maxX = ribbon.maxXAt(s);
-    // A wall holds the camera up to its height, or all the way up inside a tunnel.
-    const walled = (side: -1 | 1) => !ribbon.dropAt(s, side) && (covered || y < smp.wallHeight);
+    // A wall holds the camera up to its top (inside a tunnel, its ceiling).
+    const walled = (side: -1 | 1) => y < (side < 0 ? smp.wallL : smp.wallR);
     if (x < minX + CAM_WALL_MARGIN && walled(-1)) x = minX + CAM_WALL_MARGIN;
     if (x > maxX - CAM_WALL_MARGIN && walled(1)) x = maxX - CAM_WALL_MARGIN;
     const up = ribbon.frameAt(s, this.frame).up;

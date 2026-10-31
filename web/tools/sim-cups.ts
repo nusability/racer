@@ -3,7 +3,7 @@
 // measured rather than argued.
 
 import { PHYSICS_AS_TUNED } from '../src/core/handling.ts';
-import { TRACKS } from '../src/data/tracks/index.ts';
+import { TRACKS, courseBounds } from '../src/data/tracks/index.ts';
 import { CUPS, CUP_POINTS, PLAYER_ENTRANT_ID, type CupDef } from '../src/data/championships.ts';
 import { noUpgrades, type UpgradeLevels } from '../src/data/upgrades.ts';
 import { championshipGrid, playerEntrant } from '../src/game/opponents.ts';
@@ -212,7 +212,7 @@ export function studyCup(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
   const byTrack = cup.trackIds.map((trackId) => {
     const def = TRACKS.find((t) => t.id === trackId);
     if (!def) throw new Error(`${cup.id}: unknown track ${trackId}`);
-    const track = new Track(def);
+    const track = new Track(def, courseBounds(def.id));
     return { trackId, runs: Array.from({ length: STUDY_RUNS }, (_, k) => raceCup(cup, track, STUDY_SEED + k, bot, racerId, levels)) };
   });
   const all = byTrack.flatMap((t) => t.runs);

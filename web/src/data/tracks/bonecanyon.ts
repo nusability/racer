@@ -221,6 +221,8 @@ export const bonecanyon: TrackDef = {
       features: [
         // The leap lands on a field of broken bone and rock.
         { kind: 'jump', at: 2.2, rampLength: 40, rampHeight: 2, gapLength: 35 },
+        // Its flight at full boost rises over plain walls: these stand taller, so it comes down in the leap.
+        { kind: 'walls', from: 2.09, to: 4.31, height: 12 },
         { kind: 'rough', from: 3, to: 4.4, amount: 1 },
       ],
     },

@@ -64,9 +64,11 @@ export type TrackFeature =
   | { kind: 'repairCells'; at: TrackParam; lateral: number; count: number; spacing: number }
   /**
    * Hard walls at the road edge (no sand run-off) on one side or both (side omitted).
-   * Canyons and tunnels already imply walls on both sides.
+   * Canyons and tunnels already imply walls on both sides. `height`, metres over the road,
+   * stands them taller than WALL_LOW (eased in and out like a canyon's): beside a jump's flight,
+   * so a craft in the air can't clear them (a wall stops a craft only as high as it stands).
    */
-  | { kind: 'walls'; from: TrackParam; to: TrackParam; side?: -1 | 1 }
+  | { kind: 'walls'; from: TrackParam; to: TrackParam; side?: -1 | 1; height?: number }
   /** Run-off override: drivable sand beyond the road edge, metres, on one side or both. */
   | { kind: 'runoff'; from: TrackParam; to: TrackParam; amount: number; side?: -1 | 1 }
   /**
@@ -171,6 +173,30 @@ export type CourseKind = 'circuit' | 'sprint';
  */
 export type FloorKind = 'ground' | 'water' | 'void';
 
+/** What marks the hard boundary at the outside of a sand run-off: a dune lip, a rock lip, or a lip with an energy fence. */
+export type BoundaryStyle = 'dune' | 'rock' | 'fence';
+
+/**
+ * What stands at the course's hard boundary beyond its own features, as its world draws it (from
+ * the track's scenery, data/tracks): the walls' heights follow from it (src/core/walls.ts).
+ */
+export interface CourseBounds {
+  style: BoundaryStyle;
+  /** City street sections of the main road: the race barrier on the kerb is the wall, a low kerb on a harbour side. */
+  streets: { from: TrackParam; to: TrackParam; harbour?: -1 | 1 }[];
+  /** Stretches of the main road whose run-off is lagoon water, bounded by a line of buoys. */
+  lagoons: { from: TrackParam; to: TrackParam }[];
+}
+
+/**
+ * What stands at one side's hard boundary (src/core/walls.ts): 'drop' an open edge (nothing),
+ * 'chasm' the side of a jump's chasm (nothing: the crack runs on), 'tunnel' a bore's wall up to
+ * its ceiling, 'rail' a deck's guard rail, 'barrier' a city street's barrier and debris fence,
+ * 'quay' a harbour quay's low kerb, 'ridge' the lip past a sand run-off, 'buoys' the buoy line
+ * past lagoon water, 'wall' a rock or concrete wall (a canyon where tall).
+ */
+export type BoundKind = 'drop' | 'chasm' | 'tunnel' | 'rail' | 'barrier' | 'quay' | 'ridge' | 'buoys' | 'wall';
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -265,8 +291,29 @@ export interface TrackSample {
   gap: boolean;
   /** Ceiling height above the road, Infinity when open sky. */
   ceiling: number;
-  /** Visual canyon wall height, 0 when none (low berm). */
+  /** The authored canyon wall height, 0 when none (see walls for what stands). */
   wallHeight: number;
+  /**
+   * The rock or concrete wall a walled side stands here, metres: at least WALL_LOW, the canyon's
+   * height eased in and out at its ends, down to a street's fence top just past a street's ends.
+   */
+  walls: number;
+  /** What stands at the left and right hard boundary (see BoundKind). */
+  boundL: BoundKind;
+  boundR: BoundKind;
+  /**
+   * The top of what stands there over the road, metres: a craft below it collides with it, one
+   * in the air at or above it passes over. 0 where nothing stands.
+   */
+  wallL: number;
+  wallR: number;
+  /**
+   * The road stands in the air on a deck (rails, underside): loops, corkscrews, the upper
+   * stretch of a bridge crossing, and every road in the void outside a tunnel.
+   */
+  deck: boolean;
+  /** The upper stretch of a bridge crossing (the ground follows what runs underneath). */
+  bridge: boolean;
   /**
    * Hard boundary distance from the centreline on the left and right (both positive, both ≥
    * width/2). Between the road edge and the boundary is drivable sand.

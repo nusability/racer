@@ -235,6 +235,8 @@ export const glasssea: TrackDef = {
         // Shattered glass before the leap over the widest crack, and a squeeze after it.
         { kind: 'rough', from: 2.5, to: 3.05, amount: 1 },
         { kind: 'jump', at: 3.1, rampLength: 40, rampHeight: 2, gapLength: 35 },
+        // Its flight at full boost rises over plain walls: these stand taller, so it comes down in the gullet.
+        { kind: 'walls', from: 2.94, to: 6.22, height: 12 },
         { kind: 'narrow', from: 4.8, to: 6.6, width: 18 },
         { kind: 'rough', from: 4.8, to: 6.4, amount: 1 },
       ],

@@ -241,6 +241,8 @@ export const glacier: TrackDef = {
     { kind: 'boostPad', at: 135.62, lateral: 0 },
     { kind: 'repairCells', at: 63.56, lateral: 10, count: 3, spacing: 28 },
     { kind: 'jump', at: 132.64, rampLength: 70, rampHeight: 4, gapLength: 45 },
+    // Its flight at full boost rises over the divider wall to the shortcut: it stands taller there.
+    { kind: 'walls', from: 132.07, to: 137.44, side: 1, height: 15 },
     { kind: 'kicker', at: 60.09, length: 40, height: 2.5 },
     { kind: 'slick', from: 141.14, to: 178.86, grip: 0.5 },
     {

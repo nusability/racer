@@ -1,18 +1,9 @@
 import type { Branch, Ribbon, Track } from '../../core/track.ts';
 import type { LoopSpan } from '../../core/courseShapes.ts';
 import type { TrackFeature, TrackParam } from '../../core/types.ts';
-import { BRANCH_JUNCTION_LENGTH } from '../../data/tuning.ts';
-import {
-  CANYON_MIN_HEIGHT,
-  CANYON_OUTER,
-  CHASM_SIDE,
-  RIDGE_OUTER,
-  RUNOFF_MIN,
-  TUNNEL_ROCK_WIDTH,
-  WALL_LOW,
-  WALL_OUTER,
-  WALL_TAPER,
-} from './config.ts';
+import { BRANCH_JUNCTION_LENGTH, CROSSING_WINDOW } from '../../data/tuning.ts';
+import { nearest } from '../../core/walls.ts';
+import { CANYON_MIN_HEIGHT, CANYON_OUTER, CHASM_SIDE, RIDGE_OUTER, RUNOFF_MIN, TUNNEL_ROCK_WIDTH, WALL_OUTER } from './config.ts';
 import { smoothstep } from './noise.ts';
 import { markStreets, type StreetSpans } from './street.ts';
 
@@ -30,7 +21,7 @@ export interface RibbonView {
  * Arrays indexed [side][k] use side 0 = left, 1 = right.
  */
 export interface CorridorShape {
-  /** Visual wall height above the road edge where walled: canyon walls tapered at their ends. */
+  /** The rock or concrete wall a walled side stands, metres over the road edge (the core's TrackSample.walls). */
   wall: Float32Array;
   /** 0 = low rock wall, 1 = full canyon cross-section. */
   canyon: Float32Array;
@@ -48,7 +39,7 @@ export interface CorridorShape {
   rz: Float32Array;
   /** The side is an open drop: a sheer face falls away from the road edge, nothing stands there. */
   drop: [Uint8Array, Uint8Array];
-  /** Loops and corkscrews: the road leaves the ground, so it gets guard rails and a deck. */
+  /** Loops and corkscrews: the road is held on, whatever its attitude. */
   magnet: Uint8Array;
   /** Inside a vertical loop (the road is lifted off its baseline). */
   loop: Uint8Array;
@@ -61,7 +52,8 @@ export interface CorridorShape {
   gz: Float32Array;
   /**
    * The road stands in the air on a deck (rails, underside, piers) instead of on the ground:
-   * loops, corkscrews and the upper stretch of a bridge crossing.
+   * loops, corkscrews, the upper stretch of a bridge crossing, a road in the void (the core's
+   * TrackSample.deck, whose rails it collides with).
    */
   deck: Uint8Array;
   /** Upper stretch of a bridge: the ground ignores it and follows what runs underneath. */
@@ -126,17 +118,7 @@ export function ribbonViews(track: Track, water: WaterSpans, streets: StreetSpan
 
 export function corridorShape(r: Ribbon): CorridorShape {
   const n = r.samples.length;
-  const wall = new Float32Array(n);
-  for (let k = 0; k < n; k++) wall[k] = r.samples[k].wallHeight;
-  // Taper both ends with a forward and a backward pass (twice round when the ribbon loops).
-  const taper = WALL_TAPER * r.step;
-  if (r.closed) {
-    for (let q = 1; q <= 2 * n; q++) wall[q % n] = Math.max(wall[q % n], wall[(q - 1) % n] - taper);
-    for (let q = 2 * n; q >= 1; q--) wall[(q - 1) % n] = Math.max(wall[(q - 1) % n], wall[q % n] - taper);
-  } else {
-    for (let k = 1; k < n; k++) wall[k] = Math.max(wall[k], wall[k - 1] - taper);
-    for (let k = n - 2; k >= 0; k--) wall[k] = Math.max(wall[k], wall[k + 1] - taper);
-  }
+  const wall = Float32Array.from(r.samples, (p) => p.walls);
   const canyon = new Float32Array(n);
   const tunnel = new Uint8Array(n);
   const run: [Float32Array, Float32Array] = [new Float32Array(n), new Float32Array(n)];
@@ -165,7 +147,6 @@ export function corridorShape(r: Ribbon): CorridorShape {
     const smp = r.samples[k];
     const half = smp.width / 2;
     canyon[k] = smoothstep((wall[k] - CANYON_MIN_HEIGHT) / CANYON_RAMP);
-    wall[k] = Math.max(WALL_LOW, wall[k]);
     tunnel[k] = Number.isFinite(smp.ceiling) ? 1 : 0;
     run[0][k] = smp.edgeL - half;
     run[1][k] = smp.edgeR - half;
@@ -197,72 +178,26 @@ export function corridorShape(r: Ribbon): CorridorShape {
       rz[k] = smp.tangent.x / t;
     }
   }
-  const deck = Uint8Array.from(magnet);
-  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge: new Uint8Array(n), junction: new Uint8Array(n), sink: new Float32Array(n), street: new Uint8Array(n), quay: [new Uint8Array(n), new Uint8Array(n)] };
+  const deck = Uint8Array.from(r.samples, (p) => (p.deck ? 1 : 0));
+  const bridge = Uint8Array.from(r.samples, (p) => (p.bridge ? 1 : 0));
+  return { wall, canyon, tunnel, run, outer, water, open, rx, rz, drop, magnet, loop, gx, gy, gz, deck, bridge, junction: new Uint8Array(n), sink: new Float32Array(n), street: new Uint8Array(n), quay: [new Uint8Array(n), new Uint8Array(n)] };
 }
 
-/** A course without ground under it: every sample outside a tunnel stands on a deck. */
-export function hangInVoid(sh: CorridorShape): void {
-  for (let k = 0; k < sh.deck.length; k++) if (!sh.tunnel[k]) sh.deck[k] = 1;
-}
-
-/** Samples of the other stretch searched either side of a crossing, metres of s. */
-const CROSS_WINDOW = 420;
-/** The bridge deck runs on this far past the lower corridor's reach. */
-const BRIDGE_MARGIN = 90;
 /** A flat X opens the boundary dressing this far past the other road's hard boundary. */
 const JUNCTION_MARGIN = 30;
 /** The lower road of a flat X sits this far down, under the other road's surface. */
 const JUNCTION_SINK = 0.06;
 
-/** Horizontal distance from (x, z) to the centreline of `r` near s0, and that sample. */
-function distanceTo(r: Ribbon, s0: number, x: number, z: number): { d: number; k: number } {
-  const n = r.samples.length;
-  const c = Math.round(r.wrap(s0) / r.step);
-  const w = Math.round(CROSS_WINDOW / r.step);
-  let best = Infinity;
-  let bk = c;
-  for (let q = c - w; q <= c + w; q++) {
-    const k = ((q % n) + n) % n;
-    const p = r.samples[k].pos;
-    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
-    if (d < best) {
-      best = d;
-      bk = k;
-    }
-  }
-  return { d: Math.sqrt(best), k: bk };
-}
-
 /**
- * A declared crossing of the main loop with itself. A bridge turns the upper stretch into a
- * deck for as long as it is over the lower corridor; a flat X opens both corridors into one
- * junction and tucks the second road a hair under the first.
+ * A declared flat crossing of the main loop with itself (a bridge's deck is the core's,
+ * core/walls.ts): it opens both corridors into one junction and tucks the second road a hair
+ * under the first.
  */
 function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: number; style: 'bridge' | 'flat' }) {
+  if (c.style === 'bridge') return;
   const n = r.samples.length;
   const at = (s: number) => Math.round(r.wrap(s) / r.step) % n;
-  const w = Math.round(CROSS_WINDOW / r.step);
-  const reachOf = (k: number) => Math.max(sh.outer[0][k], sh.outer[1][k]);
-  if (c.style === 'bridge') {
-    const [up, low] = r.samples[at(c.s)].pos.y >= r.samples[at(c.other)].pos.y ? [c.s, c.other] : [c.other, c.s];
-    const ku = at(up);
-    for (let q = ku - w; q <= ku + w; q++) {
-      const k = ((q % n) + n) % n;
-      // A ramp that loops over itself (a cloverleaf) has both passes in the window: only the
-      // half nearer the upper pass is the bridge, the lower pass stays on the ground.
-      if (Math.abs(r.delta(up, r.samples[k].s)) > Math.abs(r.delta(low, r.samples[k].s))) continue;
-      const p = r.samples[k].pos;
-      const near = distanceTo(r, low, p.x, p.z);
-      const half = r.samples[k].width / 2;
-      // A loop or corkscrew is a deck already, and a loop's ground is its own baseline.
-      if (near.d < reachOf(near.k) + half + BRIDGE_MARGIN && !sh.magnet[k]) {
-        sh.deck[k] = 1;
-        sh.bridge[k] = 1;
-      }
-    }
-    return;
-  }
+  const w = Math.round(CROSSING_WINDOW / r.step);
   for (const [mine, other, sinkIt] of [
     [c.s, c.other, false],
     [c.other, c.s, true],
@@ -271,7 +206,7 @@ function markCrossing(r: Ribbon, sh: CorridorShape, c: { s: number; other: numbe
     for (let q = km - w; q <= km + w; q++) {
       const k = ((q % n) + n) % n;
       const p = r.samples[k].pos;
-      const near = distanceTo(r, other, p.x, p.z);
+      const near = nearest(r, other, p.x, p.z);
       const o = r.samples[near.k];
       const otherEdge = Math.max(o.edgeL, o.edgeR);
       if (near.d < otherEdge + r.samples[k].width / 2 + JUNCTION_MARGIN) sh.junction[k] = 1;

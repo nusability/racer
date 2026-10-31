@@ -6,7 +6,9 @@ import type {
   Arch,
   BoostCell,
   BoostPad,
+  BoundKind,
   BranchDef,
+  CourseBounds,
   CourseKind,
   FloorKind,
   Jump,
@@ -20,6 +22,7 @@ import type {
 import { catmullRom, cross, makeFrame, normalize, smoothstep, vec3, type Frame } from './geom.ts';
 import { layLoops, shapeCourse, type LoopSpan } from './courseShapes.ts';
 import { compileHazards, type CourseHazard } from './hazards.ts';
+import { buildWalls } from './walls.ts';
 import { mulberry32, range } from './rng.ts';
 import {
   AI_ROUTE_OBSTACLE_METRES,
@@ -60,6 +63,8 @@ export interface RibbonSpec {
   runoff: number;
   /** What lies below it (see FloorKind): a branch has its main road's. */
   floor: FloorKind;
+  /** What its world stands at the hard boundary (see CourseBounds): a branch has its main road's style and no streets or lagoons. */
+  bounds: CourseBounds;
   points: TrackControlPoint[];
   features: TrackFeature[];
 }
@@ -76,6 +81,8 @@ interface EdgeOverride {
    * ('out'), so run-off narrows gradually instead of stepping into a wall.
    */
   fade?: 'in' | 'out';
+  /** The side opens onto the other road here (a junction): that road's far wall bounds both. */
+  opens?: boolean;
 }
 
 export class Ribbon {
@@ -97,6 +104,8 @@ export class Ribbon {
   /** Scheduled hazards on this ribbon (see core/hazards.ts). */
   readonly hazards: CourseHazard[];
   readonly jumps: Jump[] = [];
+  /** s of each kicker's top, where it throws a craft. */
+  readonly kickers: number[] = [];
   /** Vertical loops, in s along the finished road (see layLoops). */
   readonly loops: LoopSpan[];
   /** Authored arc length at each control point (for a closed loop, plus the full length at the end). */
@@ -219,10 +228,12 @@ export class Ribbon {
     const gap = new Array<boolean>(ns).fill(false);
     const ceiling = new Array<number>(ns).fill(Infinity);
     const wallHeight = new Array<number>(ns).fill(0);
+    // Walls a 'walls' feature stands taller on one side (left, right), 0 where none.
+    const raised: [number[], number[]] = [new Array<number>(ns).fill(0), new Array<number>(ns).fill(0)];
     const runL = new Array<number>(ns).fill(spec.runoff);
     const runR = new Array<number>(ns).fill(spec.runoff);
     const rng = mulberry32(spec.seed);
-    for (const f of spec.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight, runL, runR);
+    for (const f of spec.features) this.applyShape(f, elev, width, gap, ceiling, wallHeight, runL, runR, raised);
     for (let k = 0; k < ns; k++) pos[k].y = elev[k];
     const shape = shapeCourse({ paramToS: (u) => this.paramToS(u), forRange: (a, b, fn) => this.forRange(a, b, fn) }, spec.features, this.loops, ns, runL, runR);
     const edgeL = width.map((w, k) => w / 2 + runL[k]);
@@ -303,6 +314,14 @@ export class Ribbon {
         gap: gap[k],
         ceiling: ceiling[k],
         wallHeight: wallHeight[k],
+        // Filled in by buildWalls once the crossings are known.
+        walls: 0,
+        boundL: 'wall',
+        boundR: 'wall',
+        wallL: 0,
+        wallR: 0,
+        deck: false,
+        bridge: false,
         edgeL: edgeL[k],
         edgeR: edgeR[k],
         dropL: shape.dropL[k],
@@ -321,6 +340,9 @@ export class Ribbon {
     for (const f of spec.features) {
       if (f.kind === 'crossing') this.crossings.push({ s: this.paramToS(f.at), other: this.paramToS(f.other), style: f.style });
     }
+    const opens: [boolean[], boolean[]] = [new Array<boolean>(ns).fill(false), new Array<boolean>(ns).fill(false)];
+    for (const o of edgeOverrides) if (o.opens) this.forRange(o.s0, o.s1, (k) => (opens[o.side < 0 ? 0 : 1][k] = true));
+    buildWalls({ closed: this.closed, step: this.step, below: this.below, samples: this.samples, crossings: this.crossings, paramToS: (u) => this.paramToS(u), delta: (a, b) => this.delta(a, b), wrap: (x) => this.wrap(x), forRange: (a, b, fn) => this.forRange(a, b, fn) }, spec.bounds, opens, raised);
     this.obstacles.sort((a, b) => a.s - b.s);
     this.buckets = Array.from({ length: Math.ceil(this.length / OBSTACLE_BUCKET) }, () => []);
     for (const o of this.obstacles) {
@@ -501,6 +523,16 @@ export class Ribbon {
     const smp = this.sampleAt(s);
     return side < 0 ? smp.dropL : smp.dropR;
   }
+  /** What stands at the hard boundary on that side (−1 left, 1 right; see BoundKind). */
+  boundAt(s: number, side: -1 | 1): BoundKind {
+    const smp = this.sampleAt(s);
+    return side < 0 ? smp.boundL : smp.boundR;
+  }
+  /** The top of what stands at the hard boundary on that side, metres over the road: a craft in the air at or above it passes over. */
+  wallTopAt(s: number, side: -1 | 1): number {
+    const smp = this.sampleAt(s);
+    return side < 0 ? smp.wallL : smp.wallR;
+  }
   /** Height of what a racer falling here meets (see TrackSample.floor); -Infinity over the void. */
   floorAt(s: number): number {
     return this.sampleAt(s).floor;
@@ -622,6 +654,7 @@ export class Ribbon {
     wallHeight: number[],
     runL: number[],
     runR: number[],
+    raised: [number[], number[]],
   ) {
     const sides = (side: -1 | 1 | undefined, fn: (arr: number[]) => void) => {
       if (side !== 1) fn(runL);
@@ -642,6 +675,7 @@ export class Ribbon {
         const s0 = this.paramToS(f.at);
         const back = f.length * KICKER_BACK_FRACTION;
         this.forRange(s0, this.wrap(s0 + f.length), (k, t) => (elev[k] += f.height * t * t));
+        this.kickers.push(this.wrap(s0 + f.length));
         this.forRange(this.wrap(s0 + f.length), this.wrap(s0 + f.length + back), (k, t) => {
           elev[k] += f.height * (1 - smoothstep(t));
         });
@@ -673,7 +707,13 @@ export class Ribbon {
         break;
       }
       case 'walls': {
-        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => sides(f.side, (arr) => (arr[k] = 0)));
+        const height = f.height;
+        this.forRange(this.paramToS(f.from), this.paramToS(f.to), (k) => {
+          sides(f.side, (arr) => (arr[k] = 0));
+          if (height === undefined) return;
+          if (f.side !== 1) raised[0][k] = Math.max(raised[0][k], height);
+          if (f.side !== -1) raised[1][k] = Math.max(raised[1][k], height);
+        });
         break;
       }
       case 'runoff': {
@@ -813,11 +853,12 @@ export class Track extends Ribbon {
   readonly branches: Branch[];
   readonly forks: Fork[];
 
-  constructor(def: TrackDef) {
+  /** `bounds`: what the track's world stands at its hard boundary (data/tracks/index.ts courseBounds). */
+  constructor(def: TrackDef, bounds: CourseBounds) {
     validateCourse(def);
     // The main road's edge on a branch's side opens up at the junctions so racers can move
     // across, and closes into a divider wall between them.
-    const probe = new Ribbon(mainSpec(def));
+    const probe = new Ribbon(mainSpec(def, bounds));
     const overrides: EdgeOverride[] = [];
     for (const b of def.branches) {
       const entryS = probe.paramToS(b.from);
@@ -830,17 +871,17 @@ export class Track extends Ribbon {
       }
       const fadeIn = Math.max(0, entryS - BRANCH_EDGE_FADE);
       overrides.push({ s0: fadeIn, s1: entryS, side: b.side, extra: b.width, fade: 'in' });
-      overrides.push({ s0: entryS, s1: entryS + BRANCH_JUNCTION_LENGTH, side: b.side, extra: b.width });
+      overrides.push({ s0: entryS, s1: entryS + BRANCH_JUNCTION_LENGTH, side: b.side, extra: b.width, opens: true });
       overrides.push({ s0: entryS + BRANCH_JUNCTION_LENGTH, s1: exitS - BRANCH_JUNCTION_LENGTH, side: b.side, extra: 0 });
-      overrides.push({ s0: exitS - BRANCH_JUNCTION_LENGTH, s1: exitS, side: b.side, extra: b.width });
+      overrides.push({ s0: exitS - BRANCH_JUNCTION_LENGTH, s1: exitS, side: b.side, extra: b.width, opens: true });
       overrides.push({ s0: exitS, s1: Math.min(probe.length, exitS + BRANCH_EDGE_FADE), side: b.side, extra: b.width, fade: 'out' });
     }
-    super(mainSpec(def), overrides);
+    super(mainSpec(def, bounds), overrides);
     this.def = def;
     this.course = def.course;
     this.startS = def.course === 'circuit' ? 0 : this.paramToS(0);
     this.raceLength = def.course === 'circuit' ? this.length : this.paramToS(def.points.length - 1) - this.startS;
-    this.branches = def.branches.map((b, index) => buildBranch(this, b, index));
+    this.branches = def.branches.map((b, index) => buildBranch(this, b, index, bounds));
     this.forks = buildForks(this);
   }
 
@@ -883,8 +924,8 @@ function validateCourse(def: TrackDef) {
   }
 }
 
-function mainSpec(def: TrackDef): RibbonSpec {
-  const base = { id: def.id, seed: def.seed, width: def.width, runoff: def.runoff, floor: def.floor, features: def.features };
+function mainSpec(def: TrackDef, bounds: CourseBounds): RibbonSpec {
+  const base = { id: def.id, seed: def.seed, width: def.width, runoff: def.runoff, floor: def.floor, bounds, features: def.features };
   if (def.course === 'circuit') return { ...base, closed: true, paramOffset: 0, points: def.points };
   const p = def.points;
   const n = p.length;
@@ -933,7 +974,7 @@ function ribbonDifficulty(r: Ribbon, s0: number, s1: number): number {
   return rough + things * AI_ROUTE_OBSTACLE_METRES;
 }
 
-function buildBranch(main: Track, b: BranchDef, index: number): Branch {
+function buildBranch(main: Track, b: BranchDef, index: number, bounds: CourseBounds): Branch {
   const entryS = main.paramToS(b.from);
   const exitS = main.paramToS(b.to);
   const offset = (s: number) => b.side * (main.widthAt(s) / 2 + b.width / 2);
@@ -956,6 +997,7 @@ function buildBranch(main: Track, b: BranchDef, index: number): Branch {
     width: b.width,
     runoff: b.runoff,
     floor: main.def.floor,
+    bounds: { style: bounds.style, streets: [], lagoons: [] },
     points,
     features: b.features,
   };
@@ -965,8 +1007,8 @@ function buildBranch(main: Track, b: BranchDef, index: number): Branch {
   const endJ = ribbonProbe.paramToS(1);
   const startExitJ = ribbonProbe.paramToS(points.length - 2);
   const ribbon = new Ribbon(spec, [
-      { s0: 0, s1: endJ, side: towardMain, extra: main.widthAt(entryS) },
-      { s0: startExitJ, s1: ribbonProbe.length, side: towardMain, extra: main.widthAt(exitS) },
+      { s0: 0, s1: endJ, side: towardMain, extra: main.widthAt(entryS), opens: true },
+      { s0: startExitJ, s1: ribbonProbe.length, side: towardMain, extra: main.widthAt(exitS), opens: true },
   ]);
   return { index, def: b, ribbon, side: b.side, fork: null, entryS, exitS, junctionOffset: offset(entryS) };
 }

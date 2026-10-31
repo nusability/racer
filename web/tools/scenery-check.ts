@@ -8,7 +8,7 @@
 //   npm run scenery -- sunpan,oasis  only these
 //   npm run scenery -- --high        one detail level only (--low / --high)
 import './headless-canvas.ts';
-import { TRACKS, trackById } from '../src/data/tracks/index.ts';
+import { TRACKS, courseBounds, trackById } from '../src/data/tracks/index.ts';
 import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { Track } from '../src/core/track.ts';
 import { buildTrackScene } from '../src/render/trackScene.ts';
@@ -36,7 +36,7 @@ if (only && defs.length !== only.length) throw new Error(`scenery-check: no trac
 
 let total = 0;
 for (const def of defs) {
-  const track = new Track(def);
+  const track = new Track(def, courseBounds(def.id));
   const counts: string[] = [];
   const lines: string[] = [];
   for (const q of qualities) {

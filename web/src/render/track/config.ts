@@ -51,24 +51,22 @@ export function atmosphere(quality: Quality, biome: BiomeId): Atmosphere {
 // --- Corridor ---
 /** Every n-th sample becomes a cross-section station for walls and shoulders. */
 export const STATION_STRIDE = { low: 3, high: 2 } as const;
-/** Run-off narrower than this is treated as a wall at the road edge. */
-export const RUNOFF_MIN = 2;
-/** The boundary at the far side of the run-off: a rising lip, its height and how far it runs. */
-export const RIDGE_HEIGHT = 3.2;
+/**
+ * What stands at the boundary and how tall is the core's, so a craft collides with what is drawn
+ * (core/walls.ts): run-off narrower than RUNOFF_MIN is a wall at the road edge, a lip's crest
+ * stands RIDGE_HEIGHT, a plain wall WALL_LOW, a canyon from CANYON_MIN_HEIGHT.
+ */
+export { CANYON_MIN_HEIGHT, RIDGE_HEIGHT, RUNOFF_MIN, WALL_LOW } from '../../data/tuning.ts';
+/** How far out the run-off's lip rises to its crest, metres. */
 export const RIDGE_RISE = 7;
 /** Reach of the run-off side past the hard boundary (lip, back slope and sand shoulder). */
 export const RIDGE_OUTER = 46;
-/** Walled sides that are not canyons: a low rock wall this tall, reaching this far out. */
-export const WALL_LOW = 5;
+/** Walled sides that are not canyons: the low rock wall reaches this far out. */
 export const WALL_OUTER = 40;
 /** Lateral reach of a canyon cross-section (wall, rim plateau and back slope). */
 export const CANYON_OUTER = 95;
 /** Width of the flat rim on top of a canyon wall. */
 export const CANYON_RIM = 32;
-/** A canyon wall rises/falls this many metres per metre at its ends, so it never pops up. */
-export const WALL_TAPER = 0.9;
-/** Walls taller than this are drawn as full canyon cross-sections. */
-export const CANYON_MIN_HEIGHT = 7;
 /** Mesa rock around a tunnel: lateral reach past the road edge and rise over the ceiling. */
 export const TUNNEL_ROCK_WIDTH = 75;
 export const TUNNEL_ROCK_ABOVE = 34;

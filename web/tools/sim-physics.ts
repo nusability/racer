@@ -13,7 +13,7 @@ import { cornerLimit, steerRate } from '../src/core/handling.ts';
 import { BOUNDARY_RESTITUTION, CORNER_PULL, DROP_DEPTH, GRIP_REF, GRAVITY, HANDLING_REF, LATERAL_RESPONSE, RACER_HALF_WIDTH, SIM_DT, TARGET_OVERREACH, VOID_LOST_DEPTH } from '../src/data/tuning.ts';
 import type { FloorKind, PlayerInput, RaceEntrant, RaceEvent, TrackDef } from '../src/core/types.ts';
 import { layoutCharacter } from './layout-character.ts';
-import { WIDE_JUMP_AT, WIDE_JUMP_RAMP, WIDE_JUMP_TAKEOFF, simDraftOval, simLayout, simWideJump } from './sim-test-track.ts';
+import { SIM_BOUNDS, WIDE_JUMP_AT, WIDE_JUMP_RAMP, WIDE_JUMP_TAKEOFF, simDraftOval, simLayout, simWideJump } from './sim-test-track.ts';
 
 type Fail = (msg: string) => void;
 
@@ -30,7 +30,7 @@ function starter() {
 
 /** The draft oval with its first straight given extra features and a floor. */
 function oval(id: string, floor: FloorKind, features: TrackDef['features'], y = 0): Track {
-  return new Track({ ...simDraftOval, id, floor, points: simDraftOval.points.map((p) => ({ ...p, y })), features });
+  return new Track({ ...simDraftOval, id, floor, points: simDraftOval.points.map((p) => ({ ...p, y })), features }, SIM_BOUNDS);
 }
 
 // --- Air steering: a pod in the air lines up its landing, it can't swerve ---------------------
@@ -163,7 +163,7 @@ const WIDE_TARGET_X = 12;
 const WIDE_START_BACK = 1;
 
 function wideJumpCheck(fail: Fail) {
-  const track = new Track(simWideJump);
+  const track = new Track(simWideJump, SIM_BOUNDS);
   const lip = track.paramToS(WIDE_JUMP_AT) + WIDE_JUMP_RAMP;
   if (!(WIDE_TARGET_X > WIDE_JUMP_TAKEOFF / 2 && WIDE_TARGET_X < track.widthAt(lip + WIDE_JUMP_RAMP * 2) / 2)) throw new Error('wide jump check: its target is not between the lip\'s edge and the landing\'s');
   const stats = starter();
@@ -210,7 +210,7 @@ const ARMOUR_TOLERANCE = 0.05;
  * (as close as it may get) and a sideways speed that the chase toward it leaves at exactly vn.
  */
 function wallHit(vn: number, armor: number): number {
-  const track = new Track(simDraftOval);
+  const track = new Track(simDraftOval, SIM_BOUNDS);
   const stats = { ...starter(), armor };
   const lineX = track.maxXAt(CHECK_S) - RACER_HALF_WIDTH;
   const v = new Vehicle('wall', stats, track, CHECK_S, lineX - vn * SIM_DT * 0.5, 0, SEED, AS_TUNED);
@@ -228,7 +228,7 @@ function wallHit(vn: number, armor: number): number {
 
 /** Hull lost holding a stock starter against the wall for a second at top speed (no impact). */
 function grindSecond(): number {
-  const track = new Track(simDraftOval);
+  const track = new Track(simDraftOval, SIM_BOUNDS);
   const stats = starter();
   const v = new Vehicle('grind', stats, track, CHECK_S, track.maxXAt(CHECK_S) - RACER_HALF_WIDTH, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
@@ -242,7 +242,7 @@ function grindSecond(): number {
 
 /** Hull each of two stock starters loses touching side by side, closing at `closing` m/s. */
 function racerHit(closing: number): number {
-  const track = new Track(simDraftOval);
+  const track = new Track(simDraftOval, SIM_BOUNDS);
   const stats = starter();
   const entrant = (i: number): RaceEntrant => ({ id: `r${i}`, name: `r${i}`, racerId: STARTER, stats, isPlayer: false, skill: 1 });
   const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps: 1, seed: SEED, entrants: [entrant(0), entrant(1)] });
@@ -315,8 +315,8 @@ function driftFrom(track: Track, s: number): number {
 }
 
 function crestCheck(fail: Fail) {
-  const flat = new Track(simDraftOval);
-  const rolling = new Track({ ...simDraftOval, id: 'simroll', features: [{ kind: 'dunes', from: ROLL_FROM, to: ROLL_TO, amplitude: ROLL_AMPLITUDE, wavelength: ROLL_WAVELENGTH }] });
+  const flat = new Track(simDraftOval, SIM_BOUNDS);
+  const rolling = new Track({ ...simDraftOval, id: 'simroll', features: [{ kind: 'dunes', from: ROLL_FROM, to: ROLL_TO, amplitude: ROLL_AMPLITUDE, wavelength: ROLL_WAVELENGTH }] }, SIM_BOUNDS);
   // The sharpest crest and the deepest dip in the middle of the rolling turn.
   const mid = rolling.samples.filter((p) => p.s > rolling.paramToS(4.6) && p.s < rolling.paramToS(5.4));
   const crest = mid.reduce((a, b) => (b.vcurve < a.vcurve ? b : a));
@@ -337,11 +337,86 @@ function crestCheck(fail: Fail) {
 
 /** The layout character report finds what the authoring helpers laid: a chicane and a crest before a bend. */
 function layoutCheck(fail: Fail) {
-  const track = new Track(simLayout);
+  const track = new Track(simLayout, SIM_BOUNDS);
   const c = layoutCharacter(track, track.raceLength, false);
   console.log(`\nlayout character (simlayout): ${c.chicanes} chicane(s), ${c.crestsBeforeCorners} crest(s) before a bend, ${c.brakeZones} brake zone(s), elevation ${c.elevationRange.toFixed(0)} m`);
   if (c.chicanes < 1) fail('layout: the authored chicane is not counted');
   if (c.crestsBeforeCorners < 1) fail('layout: the authored crest before the far turn is not counted');
+}
+
+// --- Walls stand only as tall as they are drawn ----------------------------------------------
+
+/** The straight the wall checks run on (params of the draft oval's first straight), walled or a street. */
+const WALL_FROM = 1;
+const WALL_TO = 3;
+/** Sideways speed toward the right-hand wall the craft is set going at, m/s, steering hard into it. */
+const WALL_APPROACH_VX = 12;
+/** Set going this far inside the wall's line, metres. */
+const WALL_APPROACH_GAP = 2;
+/** Above the top by this much it clears the wall before gravity brings it down to the top, metres; this far below it, it hits. */
+const WALL_OVER = 3;
+const WALL_UNDER = 1;
+/** A wreck counts as on the wall's top (or the ground beyond) within this, metres: one step of fall and a little. */
+const WALL_WRECK_TOLERANCE = 1;
+
+interface WallRun {
+  /** It touched the wall (a scrape or a hit). */
+  touched: boolean;
+  reason: CrashReason | null;
+  /** Height over the road it wrecked at, and how far past the boundary it was then, metres. */
+  wreckHeight: number;
+  wreckBeyond: number;
+}
+
+/** A stock starter in the air beside the right-hand boundary at `height` over the road, steering hard into it, until it wrecks or 3 s pass. */
+function flyAtWall(track: Track, height: number): WallRun {
+  const stats = starter();
+  const s0 = track.paramToS((WALL_FROM + WALL_TO) / 2);
+  const v = new Vehicle('wall', stats, track, s0, track.maxXAt(s0) - RACER_HALF_WIDTH - WALL_APPROACH_GAP, 0, SEED, AS_TUNED);
+  const st = v.state;
+  st.speed = stats.topSpeed;
+  st.vx = WALL_APPROACH_VX;
+  v.targetX = track.maxXAt(s0);
+  v.grounded = false;
+  v.alt = track.elevationAt(s0) + height;
+  let touched = false;
+  for (let t = 0; t < 3 && st.crashed <= 0; t += SIM_DT) {
+    const events: RaceEvent[] = [];
+    v.step({ ...IDLE, steer: 1 }, track, [], t, events);
+    touched ||= events.some((e) => e.type === 'scrape');
+  }
+  const crashes = v.drive.crashes;
+  const reason = (Object.keys(crashes) as CrashReason[]).find((k) => crashes[k] > 0) ?? null;
+  return { touched, reason, wreckHeight: v.alt - track.elevationAt(st.s), wreckBeyond: st.x - track.maxXAt(st.s) };
+}
+
+/**
+ * A wall stops a craft only up to its top: one launched high beside it passes over and comes
+ * down beyond it (on a wall's own top, or the street past a barrier: a wreck either way), one
+ * below its top scrapes it as on the road. Run on a walled straight and a city street.
+ */
+function wallHeightCheck(fail: Fail) {
+  const walled = oval('simwall', 'ground', [{ kind: 'walls', from: WALL_FROM, to: WALL_TO }]);
+  const street = new Track({ ...simDraftOval, id: 'simstreet', features: [{ kind: 'walls', from: WALL_FROM, to: WALL_TO }] }, { ...SIM_BOUNDS, streets: [{ from: WALL_FROM, to: WALL_TO }] });
+  const parts: string[] = [];
+  for (const [name, track, kind, landsOn] of [
+    ['walled straight', walled, 'wall', 'top'],
+    ['street', street, 'barrier', 'ground'],
+  ] as const) {
+    const s0 = track.paramToS((WALL_FROM + WALL_TO) / 2);
+    const top = track.wallTopAt(s0, 1);
+    if (track.boundAt(s0, 1) !== kind) throw new Error(`wall check: the ${name}'s right side is ${track.boundAt(s0, 1)}, not ${kind}`);
+    const over = flyAtWall(track, top + WALL_OVER);
+    const under = flyAtWall(track, top - WALL_UNDER);
+    const wreckAt = landsOn === 'top' ? top : 0;
+    parts.push(`${name} (${kind}, ${top.toFixed(1)} m): from ${(top + WALL_OVER).toFixed(1)} m ${over.touched ? 'touched it' : 'passed over'}, ${over.reason ?? 'no wreck'} ${over.wreckBeyond.toFixed(1)} m beyond at ${over.wreckHeight.toFixed(1)} m; from ${(top - WALL_UNDER).toFixed(1)} m ${under.touched ? 'scraped' : 'did not touch'}${under.reason ? `, ${under.reason}` : ''}`);
+    if (over.touched) fail(`walls: a craft ${WALL_OVER} m over the ${name}'s ${top.toFixed(1)} m ${kind} still touched it`);
+    if (over.reason !== 'offEdge' || over.wreckBeyond <= 0) fail(`walls: over the ${name}'s ${kind} the craft did not come down beyond it (${over.reason ?? 'no wreck'}, ${over.wreckBeyond.toFixed(1)} m beyond)`);
+    else if (Math.abs(over.wreckHeight - wreckAt) > WALL_WRECK_TOLERANCE) fail(`walls: beyond the ${name}'s ${kind} the craft wrecked ${over.wreckHeight.toFixed(1)} m up, not on the ${landsOn} (${wreckAt.toFixed(1)} m)`);
+    if (!under.touched || under.reason !== null) fail(`walls: a craft ${WALL_UNDER} m under the ${name}'s ${kind} top did not just scrape it (${under.touched ? 'touched' : 'no contact'}, ${under.reason ?? 'no wreck'})`);
+  }
+  console.log(`
+walls (stock starter in the air, steering hard into the right-hand boundary): ${parts.join('; ')}`);
 }
 
 export function physicsChecks(fail: Fail) {
@@ -351,4 +426,5 @@ export function physicsChecks(fail: Fail) {
   fallCheck(fail);
   wideJumpCheck(fail);
   fragilityCheck(fail);
+  wallHeightCheck(fail);
 }

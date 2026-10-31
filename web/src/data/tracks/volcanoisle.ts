@@ -247,7 +247,8 @@ export const volcanoisle: TrackDef = {
     { kind: 'boostCells', at: 174.85, lateral: 12, count: 1, spacing: 30 },
     { kind: 'boostCells', at: 175.6, lateral: -12, count: 1, spacing: 30 },
     { kind: 'boostPad', at: 0.48, lateral: 0 },
-    { kind: 'kicker', at: 101.45, length: 40, height: 2.5 },
+    // Low: the road falls away under its flight, which at full boost would otherwise carry a craft out over the lip.
+    { kind: 'kicker', at: 101.45, length: 40, height: 1 },
     // The cliff road up the flank: an open drop to the sea on the left, under the lava bombs.
     { kind: 'drop', from: 20.6, to: 38.7, side: -1 },
     {
@@ -309,6 +310,9 @@ export const volcanoisle: TrackDef = {
         { x: 1599, z: -1130, y: 76 },
       ],
       features: [
+        // A racer still flying off the main road's crest at the junction meets the bend before the
+        // tube: its walls stand above that flight, as the tube's mouth does.
+        { kind: 'walls', from: 1, to: 2.2, height: 24 },
         // Cooled lava crust out of the tube, then fallen blocks.
         { kind: 'tunnel', from: 2.2, to: 3.6, ceiling: 11 },
         { kind: 'pillar', at: 2.9, lateral: 4, radius: 1.8 },

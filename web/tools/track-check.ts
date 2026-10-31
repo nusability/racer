@@ -5,7 +5,7 @@
 // speed, and that city street sections are walled roads at ground level. Exit code 1 when any
 // check warns.
 import { PHYSICS_AS_TUNED } from '../src/core/handling.ts';
-import { TRACKS, sceneryById, trackById } from '../src/data/tracks/index.ts';
+import { TRACKS, courseBounds, sceneryById, trackById } from '../src/data/tracks/index.ts';
 import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
 import { GANTRY_RHYTHM, LIT_EDGE_BLOCKS, SEA_LEVEL, TUNNEL_RIBS } from '../src/render/track/config.ts';
@@ -14,6 +14,7 @@ import { Ribbon, Track, type Branch, type Fork } from '../src/core/track.ts';
 import { loopCrownRadius, type LoopSpan } from '../src/core/courseShapes.ts';
 import { Race } from '../src/core/race.ts';
 import { LAYOUT_TARGETS, layoutCharacter, missedTargets, type LayoutCharacter } from './layout-character.ts';
+import { wallFlights } from './wall-flights.ts';
 import { AiDriver, type AiOptions } from '../src/core/ai.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
@@ -82,6 +83,14 @@ const ADJACENT_S = 700;
 const HEAD_ROOM = 3;
 /** How far below the far edge of a chasm a racer can arrive and still scramble on, metres. */
 const LANDING_TOLERANCE = 1;
+/**
+ * A wall stops a craft only as high as it stands (core/walls.ts), so no jump or kicker may send a
+ * racer over one: flown at PLANNED_TOP_SPEED from anywhere across the lip, lining up its landing
+ * with this share of the stick held toward one side, it must stay under the top of whatever stands
+ * there until it is back on the road. Over a lagoon's buoys (nothing stands) it must not reach the
+ * boundary at all.
+ */
+const WALL_FLIGHT_STICK = 0.5;
 /** Integration step of the flight check, metres along s. */
 const FLIGHT_STEP = 1;
 /** Nothing solid within this after a landing or a kicker touchdown. */
@@ -285,6 +294,10 @@ function checkRibbon(t: Ribbon, features: TrackFeature[], pointCount: number, la
       if (t.isGap(s)) w(`${f.kind} @${f.at} in a chasm`);
       if (f.lateral < t.minXAt(s) || f.lateral > t.maxXAt(s)) w(`${f.kind} @${f.at} outside the course`);
     }
+  }
+  for (const f of wallFlights(t, PLANNED_TOP_SPEED, WALL_FLIGHT_STICK)) {
+    if (f.launch === 'crest') continue;
+    w(`${f.launch} off s=${fmt(f.launchS)} (@${uAt(f.launchS).toFixed(2)}) at ${PLANNED_TOP_SPEED} m/s flies over the ${f.side < 0 ? 'left' : 'right'} ${f.kind} (${f.top.toFixed(1)} m) at ${f.height.toFixed(1)} m, s=${fmt(f.s)}`);
   }
   for (const [s0, len, what] of clearZones) {
     for (const o of t.obstacles) {
@@ -841,7 +854,7 @@ function checkRouteClearance(t: Track, warn: string[]) {
 
 function check(def: TrackDef): string[] {
   const warn: string[] = [];
-  const t = new Track(def);
+  const t = new Track(def, courseBounds(def.id));
   // The start (and a sprint's finish) want a straight either side of the line.
   const raceLines = def.course === 'circuit' ? [0] : [t.startS, t.startS + t.raceLength];
   const lineR = Math.min(...raceLines.map((s) => minRadiusBetween(t, t.wrap(s - 100), 300)));

@@ -13,7 +13,7 @@
 //   and slides wide in a bend, a dip presses it on. 'dunes' make rollers; a crest a little before
 //   a bend is the brake-or-slide moment; past a crest's lift-off speed the craft flies.
 // - Below the course: `floor` (ground, water or void) is what a fall off an open edge meets.
-import type { TrackDef } from '../../core/types.ts';
+import type { CourseBounds, TrackDef } from '../../core/types.ts';
 import type { TrackScenery } from './scenery.ts';
 import { registerDevTrackWorld } from '../worlds.ts';
 import { sunpan, sunpanScenery } from './sunpan.ts';
@@ -105,6 +105,16 @@ export function trackById(id: string): TrackDef {
   const t = TRACKS.find((x) => x.id === id) ?? DEV_TRACKS.get(id)?.def;
   if (!t) throw new Error(`Unknown track id "${id}"`);
   return t;
+}
+
+/** What the track's world stands at its hard boundary, for the course's walls (core/walls.ts). */
+export function courseBounds(id: string): CourseBounds {
+  const s = sceneryById(id);
+  return {
+    style: s.boundary,
+    streets: s.biome === 'city' ? s.streets.map((x) => ({ from: x.from, to: x.to, harbour: x.harbour })) : [],
+    lagoons: s.biome === 'beach' ? s.lagoons : [],
+  };
 }
 
 export function sceneryById(id: string): TrackScenery {

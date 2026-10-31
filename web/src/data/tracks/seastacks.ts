@@ -220,7 +220,8 @@ export const seastacks: TrackDef = {
     { kind: 'kicker', at: 68, length: 40, height: 2.5 },
     { kind: 'boostPad', at: 116.2, lateral: 0 },
     // The two tide channels.
-    { kind: 'jump', at: 117.48, rampLength: 70, rampHeight: 5, gapLength: 50 },
+    // A lower ramp: its flight at full boost into the bend would otherwise carry a craft past the lagoon's buoys.
+    { kind: 'jump', at: 117.48, rampLength: 70, rampHeight: 4, gapLength: 50 },
     { kind: 'jump', at: 128.3, rampLength: 70, rampHeight: 5, gapLength: 55 },
     { kind: 'boostPad', at: 117.08, lateral: 0 },
     { kind: 'boostPad', at: 117.12, lateral: 0 },

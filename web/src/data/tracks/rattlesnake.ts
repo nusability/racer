@@ -192,6 +192,8 @@ export const rattlesnake: TrackDef = {
     { kind: 'boostPad', at: 65.74, lateral: 0 },
     { kind: 'runoff', from: 66, to: 69.4, amount: 28, side: -1 },
     { kind: 'kicker', at: 73.6, length: 40, height: 2.5 },
+    // Its flight at full boost rises over the divider wall to the shortcut: it stands taller there.
+    { kind: 'walls', from: 73.44, to: 76.9, side: 1, height: 15 },
     { kind: 'repairCells', at: 74.2, lateral: -18, count: 3, spacing: 30 },
     // Fang Gulch: down between rock walls under the bucket wheel, over a blind crest into the esses.
     { kind: 'canyon', from: 84.5, to: 89.5, wallHeight: 42 },

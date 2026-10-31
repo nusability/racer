@@ -277,7 +277,8 @@ export const snowfield: TrackDef = {
     { kind: 'boostPad', at: 166.19, lateral: 0 },
     { kind: 'boostPad', at: 166.41, lateral: 0 },
     { kind: 'kicker', at: 70.5, length: 40, height: 2 },
-    { kind: 'kicker', at: 156.94, length: 40, height: 2.5 },
+    // Low enough that its flight at full boost, drifting toward the run-off, comes down before the lip: a wall stops a craft only as high as it stands.
+    { kind: 'kicker', at: 156.94, length: 40, height: 1.75 },
     { kind: 'repairCells', at: 196.81, lateral: 18, count: 3, spacing: 30 },
     // The frostback herd plods out of the snow on the left, across the road at an elephant's
     // amble (about 5 m/s, 7 at most) to the far run-off, turns, and plods home again.

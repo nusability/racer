@@ -218,11 +218,11 @@ export class Vehicle {
     const air = airborne ? this.physics.airSteer : 1;
     const drift = cornerPull(this.stats, curvature, st.speed, brake, grip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
     this.targetX += (st.steer * steerRate(this.stats) * air + drift) * dt + input.nudge * air;
-    // Past a wall the target overreaches a little (pushing grinds); past an open edge, far
-    // enough that holding the steer drives you off it.
-    const reachL = ribbon.dropAt(sOld, -1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
-    const reachR = ribbon.dropAt(sOld, 1) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH;
-    this.targetX = clamp(this.targetX, ribbon.minXAt(sOld) + reachL, ribbon.maxXAt(sOld) - reachR);
+    // Past a wall the target overreaches a little (pushing grinds); past an open edge, or a wall
+    // whose top the craft is over in the air, far enough that holding the steer takes you over.
+    const height = this.alt - ribbon.elevationAt(sOld);
+    const reach = (side: -1 | 1) => (this.passes(ribbon, sOld, side, height) ? -DROP_OVERREACH : RACER_HALF_WIDTH - TARGET_OVERREACH);
+    this.targetX = clamp(this.targetX, ribbon.minXAt(sOld) + reach(-1), ribbon.maxXAt(sOld) - reach(1));
 
     // x chases the target with a cap on sideways speed: critically damped with full grip,
     // looser and overshooting on a slick surface or a crest.
@@ -328,9 +328,19 @@ export class Vehicle {
   }
 
   /**
-   * Walls scrape speed and wear the hull (more at a hard angle). Past an open edge there is
-   * nothing to push back: the racer is beside the road in the air (see vertical). Coming up to
-   * a wall from out there, it meets the wall's end: a wreck. Returns true on a wreck.
+   * Nothing at the boundary on that side stops the craft at `height` over the road: an open
+   * edge, or (in the air) a wall it is at or above the top of. A wall stops a craft only as high
+   * as it stands, so one flying high beside it is never steered by it.
+   */
+  private passes(ribbon: Ribbon, s: number, side: -1 | 1, height: number): boolean {
+    return ribbon.dropAt(s, side) || (!this.grounded && height >= ribbon.wallTopAt(s, side));
+  }
+
+  /**
+   * Walls scrape speed and wear the hull (more at a hard angle). Past an open edge, or over the
+   * top of a wall in the air, there is nothing to push back: the racer is beside the road in the
+   * air (see vertical). Coming back in below a wall's top from out there, it meets the wall's
+   * face: a wreck. Returns true on a wreck.
    */
   private boundaries(ribbon: Ribbon, events: RaceEvent[]): boolean {
     const st = this.state;
@@ -344,12 +354,16 @@ export class Vehicle {
       return false;
     }
     const side: -1 | 1 = st.x > hi ? 1 : -1;
-    if (ribbon.dropAt(st.s, side)) {
+    const beyond = st.x > maxX || st.x < minX;
+    if (this.passes(ribbon, st.s, side, this.alt - ribbon.elevationAt(st.s))) {
       // Once its centre is past the edge, the road is no longer under it.
-      this.outside = st.x > maxX || st.x < minX ? side : 0;
+      this.outside = beyond ? side : 0;
       return false;
     }
     if (this.outside === side) {
+      // Still out past the boundary, below what stands there now: over a wall's own top or
+      // beside a barrier, which vertical settles. Back inside its line, it hits the face.
+      if (beyond) return false;
       this.crash('offEdge', events);
       return true;
     }
@@ -457,7 +471,15 @@ export class Vehicle {
       st.vy -= GRAVITY * dt;
       this.alt += st.vy * dt;
       if (this.outside !== 0) {
-        // Beside the road with nothing under it: once below the road it is falling free.
+        // Beside the road: past a wall (or a tunnel's rock) it is over solid rock or concrete as
+        // high as the wall stands, and coming down onto it is a wreck. Anywhere else nothing is
+        // under it until below the road, where it is falling free (to the street or ground beyond
+        // a barrier, rail or lip, down a cliff, into the void).
+        const bound = ribbon.boundAt(s, this.outside);
+        if ((bound === 'wall' || bound === 'tunnel') && this.alt < surface + ribbon.wallTopAt(s, this.outside)) {
+          this.crash('offEdge', events);
+          return;
+        }
         if (this.alt <= surface) this.beginFall(ribbon);
         return;
       }

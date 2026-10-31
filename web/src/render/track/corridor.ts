@@ -8,7 +8,6 @@ import {
   KERB_BLOCK,
   LIGHT_SPACING,
   PYLON_SPACING,
-  RIDGE_HEIGHT,
   RIDGE_OUTER,
   RIDGE_RISE,
   ROAD_TEXTURE_LENGTH,
@@ -25,6 +24,7 @@ import { sideIndex, type RibbonView } from './shape.ts';
 import { portal, tunnelStrip } from './tunnel.ts';
 import { buildSupports, deckStrip, dropFace } from './deck.ts';
 import { streetStrip } from './street.ts';
+import { RIDGE_HEIGHT, RIDGE_ROCK_SCALE } from '../../data/tuning.ts';
 import type { AoLook } from '../look/lookTuning.ts';
 
 /** Road vertex shade inside tunnels: the bore is lit by its strips, not the sun. */
@@ -356,7 +356,8 @@ export class Corridor {
     const lumpy = this.paint.masonry === 'sandstone' ? 1 : 0;
     const n = (i: number) => this.noise(s / 21 + i * 3.7, side * 9 + i) * 0.8 * lumpy;
     const rock = this.boundary === 'rock';
-    const h = RIDGE_HEIGHT * (rock ? 1.3 : 1) + n(0);
+    // The crest stands the core's ridge height (core/walls.ts); the sandstone's lumps are dressing.
+    const h = RIDGE_HEIGHT * (rock ? RIDGE_ROCK_SCALE : 1) + n(0);
     const g5 = this.groundAt(kk, side, outer * 0.6, foot.y);
     const g6 = this.groundAt(kk, side, outer, foot.y);
     const dx = [0, RIDGE_RISE * 0.4, RIDGE_RISE, RIDGE_RISE + 5 + n(1), RIDGE_RISE + 14, outer * 0.6, outer];
@@ -377,7 +378,9 @@ export class Corridor {
 
   /** Walled side: a rock wall at the road edge, growing into a full canyon where tall. */
   private wallProfile(kk: number, side: number): Profile {
-    const h = this.shape.wall[kk];
+    // As tall as a craft collides with it (core/walls.ts): a 'walls' feature may stand one side taller.
+    const smp = this.ribbon.samples[kk];
+    const h = side < 0 ? smp.wallL : smp.wallR;
     const c = this.shape.canyon[kk];
     const s = kk * this.ribbon.step;
     const foot = this.banked(kk, side * this.edge(kk, side), 0);

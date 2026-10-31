@@ -7,7 +7,7 @@ import { makeFrame, Track } from '../core/track.ts';
 import type { HazardDef, PlayerInput, RaceEvent, RacerState, RacerStyle } from '../core/types.ts';
 import { emptyDebris, type WreckKind } from '../render/racerWreck.ts';
 import { racerById } from '../data/racers.ts';
-import { sceneryById, trackById } from '../data/tracks/index.ts';
+import { courseBounds, sceneryById, trackById } from '../data/tracks/index.ts';
 import { worldOfTrack } from '../data/worlds.ts';
 import { atmosphere } from '../render/track/config.ts';
 import { SIM_DT } from '../data/tuning.ts';
@@ -202,7 +202,7 @@ export class RaceSession {
     this.request = request;
     this.onDone = onDone;
     const def = trackById(request.trackId);
-    this.track = new Track(def);
+    this.track = new Track(def, courseBounds(def.id));
     this.race = this.newRace();
     this.telemetry = new TelemetryRecorder(request, ctx.settings, this.race.config.physics, __BUILD__);
 

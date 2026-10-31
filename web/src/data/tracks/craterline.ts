@@ -469,7 +469,8 @@ export const craterline: TrackDef = {
     // Crater hops: long, floating flights off the rims, then a rim into the first right-hander and
     // the esses.
     { kind: 'kicker', at: 16.8, length: 60, height: 4 },
-    { kind: 'kicker', at: 23.466, length: 60, height: 4 },
+    // Low enough that its flight at full boost, drifting toward the run-off, comes down before the lip: a wall stops a craft only as high as it stands.
+    { kind: 'kicker', at: 23.466, length: 60, height: 3.2 },
     { kind: 'boostCells', at: 39.267, lateral: -10, count: 4, spacing: 26 },
     { kind: 'boostCells', at: 48.87, lateral: 8, count: 3, spacing: 26 },
     // The Rim Road (the main way through the fork): up and over the crater rims, its crater side an

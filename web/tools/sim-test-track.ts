@@ -4,8 +4,11 @@
 // corkscrew, an open drop edge, a slick patch, repair cells, one of each hazard, and a
 // shortcut branch with its own boulders and cells. The figure-8 has a flat crossing.
 
-import type { TrackDef } from '../src/core/types.ts';
+import type { CourseBounds, TrackDef } from '../src/core/types.ts';
 import { chicane, withProfile } from '../src/data/tracks/authoring.ts';
+
+/** What stands at the synthetic tracks' boundary: the dev tracks' plain desert (ui/devTracks.ts), dune lips and no streets or lagoons. */
+export const SIM_BOUNDS: CourseBounds = { style: 'dune', streets: [], lagoons: [] };
 
 export const simTestTrack: TrackDef = {
   id: 'simtest',

@@ -829,8 +829,7 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
   };
   const response = LATERAL_RESPONSE * (stats.handling / HANDLING_REF);
   // The widest the hull is carried out entering at sample k at speed v, against the room there.
-  const fits = (k: number, v: number) => {
-    const sign = Math.sign(ribbon.samples[k].curvature);
+  const fitsToward = (k: number, v: number, sign: number) => {
     const dt = ribbon.step / v;
     let target = 0;
     let hull = 0;
@@ -877,14 +876,24 @@ function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: numb
     }
     return true;
   };
+  // A sample that is no bend at full speed (a straight, or a bend held flat out) may still be a
+  // crest that throws the craft into a bend beyond it, which way it turns: reckoned both ways.
+  // Walls hold a craft only as high as they stand, so a flight wide over one is a wreck.
+  const fits = (k: number, v: number) => {
+    const sign = Math.sign(ribbon.samples[k].curvature);
+    return sustained[k] < fastest && sign !== 0 ? fitsToward(k, v, sign) : fitsToward(k, v, 1) && fitsToward(k, v, -1);
+  };
   const entry = sustained.map((limit, k) => {
-    if (!Number.isFinite(limit) || limit >= fastest) return limit;
-    if (fits(k, fastest)) return fastest;
+    const bend = Number.isFinite(limit) && limit < fastest;
+    const p = ribbon.samples[k];
+    if (!bend && !launches(fastest, p.vcurve, sharpVcurve(ribbon, k), ribbon.step, ph)) return limit;
+    if (fits(k, fastest)) return bend ? fastest : limit;
     // The sustained limit holds the bend on the road; thrown off a crest into it, the craft may
     // fly wide even below that: then the limit is the speed that keeps it from launching wide.
-    const holds = fits(k, limit);
-    let lo = holds ? limit : BEND_LIMIT_FLOOR;
-    let hi = holds ? fastest : limit;
+    const top = bend ? limit : fastest;
+    const holds = bend && fits(k, top);
+    let lo = holds ? top : BEND_LIMIT_FLOOR;
+    let hi = holds ? fastest : top;
     for (let i = 0; i < BEND_LIMIT_ITERATIONS; i++) {
       const mid = (lo + hi) / 2;
       if (fits(k, mid)) lo = mid;

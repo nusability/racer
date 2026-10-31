@@ -397,7 +397,8 @@ const shanty: Build = (k) => {
     const margin = onX(f) ? k.p.w / 2 - w / 2 : k.p.d / 2 - d / 2;
     const out = Math.min(range(k.rng, 3, 9), margin - 0.2);
     if (out < 2) continue;
-    const bw = range(k.rng, 6, 12);
+    // No wider than the wall it clings to: an overhang past an off-centre wall's end could leave the plot.
+    const bw = Math.min(range(k.rng, 6, 12), onX(f) ? d : w);
     const bh = Math.min(range(k.rng, 4, 9), H * 0.3);
     if (H - bh - 1 < 4) continue;
     const y = k.y(range(k.rng, 4, H - bh - 1));

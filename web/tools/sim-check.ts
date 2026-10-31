@@ -1,6 +1,6 @@
 // Runs full headless races on every track (plus synthetic test courses) and prints how they
-// went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, or a
-// racer pinned against a wall; on a sprint also on more than a tenth of its racers failing to
+// went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, a racer
+// pinned against a wall, or a rival flying out over one; on a sprint also on more than a tenth of its racers failing to
 // finish over several seeds, wrong placings, a racer reaching the run-out's end, a fork whose
 // field all took one way, or a finisher the run-out's force field does not take in and ease to a
 // still rest of its own.
@@ -13,7 +13,7 @@
 
 import { PHYSICS_AS_TUNED, resolvePhysics } from '../src/core/handling.ts';
 const AS_TUNED = resolvePhysics(PHYSICS_AS_TUNED);
-import { TRACKS } from '../src/data/tracks/index.ts';
+import { TRACKS, courseBounds } from '../src/data/tracks/index.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
@@ -24,7 +24,7 @@ import { minJumpSpeed } from '../src/core/jumps.ts';
 import { currentTopSpeed } from '../src/core/handling.ts';
 import { BRAKE_DECEL, DRAFT_FULL, DRAFT_TOP_SPEED, RACER_HALF_WIDTH, RACER_LENGTH, SIM_DT, SPRINT_FIELD_DEPTH } from '../src/data/tuning.ts';
 import type { PlayerInput, RaceEntrant, RaceEvent, RacerDef, TrackDef } from '../src/core/types.ts';
-import { simDraftOval, simFigure8, simSprint, simTestTrack } from './sim-test-track.ts';
+import { SIM_BOUNDS, simDraftOval, simFigure8, simSprint, simTestTrack } from './sim-test-track.ts';
 import { allCupStudies } from './sim-cups.ts';
 import { physicsChecks } from './sim-physics.ts';
 
@@ -77,6 +77,8 @@ interface RunResult {
   viaMain: Traversal[];
   /** Per racer: the furthest main-road s it reached. */
   maxMainS: number[];
+  /** Every time a racer went out over a wall in the air (not off an open edge), as "id@s". */
+  overWalls: string[];
 }
 
 type Driver = (race: Race) => PlayerInput;
@@ -94,6 +96,8 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
   const boostTime = race.racers.map(() => 0);
   const cells = race.racers.map(() => 0);
   const maxMainS = race.racers.map((r) => r.s);
+  const overWalls: string[] = [];
+  const outside = race.racers.map(() => false);
   let steps = 0;
   while (race.phase !== 'finished') {
     const stepEvents: RaceEvent[] = race.step(player === null ? IDLE : player(race));
@@ -125,6 +129,13 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       prevS[i] = r.s;
       prevBranch[i] = r.branch;
       if (r.branch < 0) maxMainS[i] = Math.max(maxMainS[i], r.s);
+      // Out past the boundary in the air, other than off an open edge or beside a chasm: over a wall (or a lagoon's buoys).
+      const rb = track.ribbon(r.branch);
+      const side = r.x < 0 ? -1 : 1;
+      const bound = rb.boundAt(r.s, side);
+      const out = r.crashed <= 0 && r.fall === null && r.airborne && (r.x > rb.maxXAt(r.s) || r.x < rb.minXAt(r.s));
+      if (out && !outside[i] && bound !== 'drop' && bound !== 'chasm') overWalls.push(`${r.id}@${r.s.toFixed(0)} over ${bound}`);
+      outside[i] = out;
     });
     if (++steps > maxSteps) {
       const stuck = race.racers.filter((r) => r.finishTime === null && r.crashed <= 0).map((r) => `${r.id}@lap${r.lap} s=${r.s.toFixed(0)} b=${r.branch}`);
@@ -132,7 +143,7 @@ function run(track: Track, laps: number, seed: number, field: RaceEntrant[], pla
       break;
     }
   }
-  return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain, maxMainS };
+  return { race, boostTime, cells, fingerprint: JSON.stringify(race.racers), events, viaBranch, viaMain, maxMainS, overWalls };
 }
 
 /** Below this share of top speed a wall-hugging racer counts as pinned. */
@@ -272,7 +283,7 @@ function sprintCheck(track: Track, runs: RunResult[]) {
 const defs: TrackDef[] = [simTestTrack, simFigure8, simSprint, ...TRACKS];
 for (const def of defs) {
   if (only.length > 0 && !only.includes(def.id)) continue;
-  const track = new Track(def);
+  const track = new Track(def, TRACKS.includes(def) ? courseBounds(def.id) : SIM_BOUNDS);
   const jumps = [track, ...track.branches.map((b) => b.ribbon)].flatMap((rb) => rb.jumps.map((j) => `${minJumpSpeed(rb, j).toFixed(0)}`));
   const shortcuts = track.branches.filter((b) => b.fork === null).length;
   const distance = def.course === 'sprint' ? `${track.raceLength.toFixed(0)} m sprint` : `${track.length.toFixed(0)} m x ${def.laps} laps`;
@@ -283,6 +294,8 @@ for (const def of defs) {
   const field = Array.from({ length: FIELD }, (_, i) => entrant(i, RACERS[i % RACERS.length], spread(i, FIELD, SKILL_LO, SKILL_HI), false));
   const a = run(track, def.laps, SEED, field, null);
   report(track, a);
+  // A wall stops a craft only as high as it stands: no rival's line may carry it over one.
+  if (a.overWalls.length > 0) fail(`${def.id}: rivals flew out over a wall: ${a.overWalls.join(', ')}`);
   const b = run(track, def.laps, SEED, field, null);
   if (a.fingerprint !== b.fingerprint) fail(`${def.id}: two runs with the same seed diverged`);
   if (def.course === 'sprint') {
@@ -353,7 +366,7 @@ function draftRun(track: Track, gap: number, x: number, pullOutAt: number | null
 }
 
 function slipstreamCheck() {
-  const track = new Track(simDraftOval);
+  const track = new Track(simDraftOval, SIM_BOUNDS);
   const tucked = draftRun(track, DRAFT_CHECK_GAP, 0, null);
   const aside = draftRun(track, DRAFT_CHECK_GAP, DRAFT_CHECK_ASIDE, null);
   const far = draftRun(track, DRAFT_CHECK_FAR_GAP, 0, null);
@@ -423,7 +436,7 @@ function roughCheck() {
     ...simDraftOval,
     id: 'simrough',
     features: [...simDraftOval.features, { kind: 'rough', from: ROUGH_CHECK_FROM, to: ROUGH_CHECK_TO, amount: 1 }],
-  });
+  }, SIM_BOUNDS);
   const fast = roughRun(track, 'fast', 1);
   const again = roughRun(track, 'fast', 1);
   const boost = roughRun(track, 'boost', 1);
@@ -462,7 +475,7 @@ const FIELD_REST_DRIFT = 0.01;
 const FIELD_SPEED_NOISE = 1e-9;
 
 function forceFieldCheck(racerId: string, level: number) {
-  const track = new Track(simSprint);
+  const track = new Track(simSprint, SIM_BOUNDS);
   const def = racerById(racerId);
   const ups = { engine: level, thrusters: level, steering: level, tank: level, armor: level };
   const field: RaceEntrant[] = Array.from({ length: FIELD }, (_, i) => ({ ...entrant(i, def, spread(i, FIELD, SKILL_LO, SKILL_HI), false), stats: effectiveStats(def, ups) }));

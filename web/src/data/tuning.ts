@@ -52,6 +52,50 @@ export const DEFAULT_NARROW_BLEND = 40;
 /** Obstacle lookup bucket size along s, metres. */
 export const OBSTACLE_BUCKET = 50;
 
+// --- Walls (src/core/walls.ts): what stands at each side's hard boundary, and how tall ---
+// One set of heights for the renderer that draws them and the simulation a craft collides
+// with: a wall stops a craft only up to its top, and one in the air above it passes over.
+/** Run-off narrower than this is a wall at the road edge, metres (no sand strip, no lip). */
+export const RUNOFF_MIN = 2;
+/** A walled side with no canyon is a low rock or concrete wall this tall, metres. */
+export const WALL_LOW = 5;
+/** A canyon wall rises and falls this many metres per metre at its ends, so it never pops up. */
+export const WALL_TAPER = 0.9;
+/** Walls taller than this are drawn as full canyon cross-sections (a rim plateau on top). */
+export const CANYON_MIN_HEIGHT = 7;
+/** The rising lip at the far side of a sand run-off: its crest's height over the road, metres. */
+export const RIDGE_HEIGHT = 3.2;
+/** A world whose boundary style is rock heaps its lips this much higher than sand. */
+export const RIDGE_ROCK_SCALE = 1.3;
+/** A fence-style boundary's energy band between the lip's pylons, metres over the crest (bottom, top). */
+export const RIDGE_FENCE_BAND: readonly [number, number] = [2.2, 2.9];
+/** A city street's race barrier on the kerb: concrete blocks this tall, metres. */
+export const BARRIER_H = 1.1;
+/**
+ * The debris fence over the barrier: its top over the road, metres. The street's low things (a
+ * single-storey shopfront, a crowd, a kiosk) may stand up to it even where a sightline caps the
+ * buildings: the fence in front of them already stands that tall.
+ */
+export const FENCE_TOP = 4.4;
+/**
+ * On a harbour quay the barrier is a low kerb of blocks with no fence over it: the harbour's
+ * water, its yachts and the far shore stay in view from the chase camera (3.3 m up). It is still
+ * the wall, as tall as it is.
+ */
+export const QUAY_BARRIER_H = 0.55;
+/** Past a street's ends the city's concrete wall rises from the debris fence's top over this far, metres, so the two meet without a step. */
+export const STREET_WALL_TAPER = 45;
+/** Guard rail on a deck's walled side (loops, corkscrews, bridges, decks in the void), metres. */
+export const RAIL_HEIGHT = 1.3;
+/**
+ * The upper road of a bridge crossing is a deck while its centreline is within this far of the
+ * lower road's hard boundary (plus its own half width), metres: past the lower corridor's walls
+ * (40 m of structure) and 90 m on, so it comes back to the ground clear of them.
+ */
+export const BRIDGE_DECK_REACH = 130;
+/** Samples of the other stretch searched either side of a crossing, metres of s. */
+export const CROSSING_WINDOW = 420;
+
 // --- Simulation (src/core) ---
 /** Fixed simulation step, seconds. */
 export const SIM_DT = 1 / 120;

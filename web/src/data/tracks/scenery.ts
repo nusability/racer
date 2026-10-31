@@ -1,13 +1,15 @@
-import type { TrackParam } from '../../core/types.ts';
+import type { BoundaryStyle, TrackParam } from '../../core/types.ts';
 import type { LandmarkKind } from '../../render/landmarks/types.ts';
 
 // Presentation-only dressing for a track: what stands around the course, never on it. The
-// simulation never reads this, so it can change without touching race behaviour.
+// simulation never reads this, so it can change without touching race behaviour, except what
+// stands at the hard boundary (the boundary style, city streets and lagoons): those are the
+// course's walls, as tall for a craft as they are drawn (courseBounds, core/walls.ts).
 
 export type ScatterKind = 'rocks' | 'cacti' | 'bones' | 'shards';
 
-/** What marks the hard boundary at the outside of the run-off (water run-off gets buoys). */
-export type BoundaryStyle = 'dune' | 'rock' | 'fence';
+/** What marks the hard boundary at the outside of the run-off (water run-off gets buoys); its heights are the core's (core/walls.ts). */
+export type { BoundaryStyle } from '../../core/types.ts';
 
 interface SceneryBase {
   boundary: BoundaryStyle;

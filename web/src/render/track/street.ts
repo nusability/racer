@@ -13,21 +13,15 @@ import { sideIndex, type CorridorShape } from './shape.ts';
 // a harbour basin. The city dressing (biomes/cityStreets.ts) puts the buildings, furniture,
 // debris fence and markings on it.
 
-/** The race barrier: concrete blocks this tall, this deep at the foot and on top, metres. */
-export const BARRIER_H = 1.1;
 /**
- * On a quay the barrier is a low kerb of blocks with no fence over it: the harbour's water, its
- * yachts and the far shore stay in view from the chase camera (3.3 m up). It is still the wall.
+ * The race barrier's height, the debris fence's top over it and a quay's low kerb are the core's
+ * (data/tuning.ts): a craft collides with them up to the height drawn (core/walls.ts).
  */
-export const QUAY_BARRIER_H = 0.55;
+import { BARRIER_H, QUAY_BARRIER_H } from '../../data/tuning.ts';
+export { BARRIER_H, FENCE_TOP, QUAY_BARRIER_H } from '../../data/tuning.ts';
+/** The barrier's depth at the foot and on top, metres. */
 const BARRIER_FOOT = 0.8;
 const BARRIER_TOP = 0.42;
-/**
- * The debris fence's top over the road, metres. The street's low things (a single-storey
- * shopfront, a crowd, a kiosk) may stand up to it even where a sightline caps the buildings: the
- * fence in front of them already stands that tall.
- */
-export const FENCE_TOP = 4.4;
 /** The pavement's top over the road, metres: a kerb's rise. */
 export const KERB_H = 0.15;
 /** From the hard boundary to the building line: barrier and pavement, metres. */
@@ -59,19 +53,14 @@ const QUAY_STONE = 0x6c6a66;
 /** A street's side counts as walled under this much run-off, metres (track-check holds the same line). */
 const WALLED = 1;
 
-/**
- * A street's barrier and the city's concrete walls stand on the same boundary; past a street's
- * ends the wall rises from the barrier's height over this far, so the two meet without a step.
- */
-const WALL_TAPER = 45;
-
 /** Main-loop spans of street (and which side is a harbour), as the corridor needs them. */
 export type StreetSpans = Pick<StreetSection, 'from' | 'to' | 'harbour' | 'name'>[];
 
 /**
  * Marks the street sections on the main loop's shape and pulls the corridor's reach in to the
- * building line (or out over the basin), so the city builds right up to the pavement. Throws when
- * a section is not a ground-level walled road: the barriers there are the track's walls.
+ * building line (or out over the basin), so the city builds right up to the pavement (the walls
+ * past a street's ends ease down to its barrier in the core, core/walls.ts). Throws when a
+ * section is not a ground-level walled road: the barriers there are the track's walls.
  */
 export function markStreets(track: Track, sh: CorridorShape, spans: StreetSpans): void {
   const n = track.samples.length;
@@ -94,19 +83,6 @@ export function markStreets(track: Track, sh: CorridorShape, spans: StreetSpans)
         sh.outer[i][k] = smp.width / 2 + (harbour ? BASIN : PAVEMENT);
       }
       sh.street[k] = 1;
-    }
-  }
-  // The walls either side of a street rise from the barrier's height to their own.
-  const steps = Math.ceil(WALL_TAPER / track.step);
-  for (let k = 0; k < n; k++) {
-    if (!sh.street[k]) continue;
-    for (const dir of [-1, 1]) {
-      if (sh.street[(k + dir + n) % n]) continue;
-      for (let i = 1; i <= steps; i++) {
-        const q = (k + dir * i + n) % n;
-        if (sh.street[q] || sh.canyon[q] > 0) break;
-        sh.wall[q] = Math.min(sh.wall[q], BARRIER_H + ((sh.wall[q] - BARRIER_H) * i) / steps);
-      }
     }
   }
 }

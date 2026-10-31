@@ -9,7 +9,7 @@ import { Race } from '../src/core/race.ts';
 import { Track } from '../src/core/track.ts';
 import { AiDriver, driverSeed } from '../src/core/ai.ts';
 import type { RaceEvent, RacerState, TrackDef } from '../src/core/types.ts';
-import { TRACKS, trackById } from '../src/data/tracks/index.ts';
+import { TRACKS, courseBounds, trackById } from '../src/data/tracks/index.ts';
 import { noUpgrades } from '../src/data/upgrades.ts';
 import { playerEntrant } from '../src/game/opponents.ts';
 import { GhostClock, ghostPoseAt, ribbonS, type GhostPose, type GhostRun } from '../src/game/ghost.ts';
@@ -74,7 +74,7 @@ interface Flown {
 
 /** Flies `laps` laps of a time trial with the AI on the player's glider. */
 function fly(def: TrackDef, store: MapStore, laps: number): Flown {
-  const track = new Track(def);
+  const track = new Track(def, courseBounds(def.id));
   const entrant = playerEntrant(STARTER, noUpgrades());
   const race = new Race(track, { laps, seed: TRIAL_SEED, entrants: [entrant], physics: PHYSICS_AS_TUNED });
   const trial = new TrialRun(track, store, { glider: STARTER, upgrades: noUpgrades(), physics: { ...PHYSICS_AS_TUNED }, build: 'check' });
@@ -112,7 +112,7 @@ const angleGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), 
 
 /** The stored ghost of lap `lap` (0-based) holds the true poses, and its clock reads time by distance. */
 function checkGhost(def: TrackDef, store: MapStore, flown: Flown, lapStarts: number[], lap: number): void {
-  const track = new Track(def);
+  const track = new Track(def, courseBounds(def.id));
   const rec = loadGhost(store, def.id);
   check(rec !== null, `${def.id}: a ghost is stored`);
   if (!rec) return;
