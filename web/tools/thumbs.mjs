@@ -47,14 +47,14 @@ const EXPLORE_SPOTS = 12;
  * when a track's layout changes.
  */
 const SHOTS = {
-  sunpan: { at: 8.5, ds: -170, hazard: 'liftoff', why: 'the spaceport ship lifting off over the road' },
-  rattlesnake: { at: 31.4, x: -60, view: 'orbit', yaw: 0.3, pitch: 0.75, dist: 330, hazard: 'ore', hazardAt: 2.8, why: 'Fang Gulch and the switchbacks from above' },
-  oasis: { at: 19.4, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge crossing by the fair' },
-  bonecanyon: { at: 11, ds: -90, hazard: 'neck', why: 'the sand beast rearing over the road' },
-  glasssea: { at: 5, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'beast', why: 'the sand beast arch at dusk' },
-  devilsteeth: { at: 6.3, x: 60, view: 'orbit', yaw: -0.3, pitch: 0.75, dist: 330, hazard: 'spill', hazardAt: 2.8, why: 'the hairpins from above' },
+  sunpan: { at: 55, ds: -170, hazard: 'liftoff', why: 'the spaceport ship lifting off over the road' },
+  rattlesnake: { at: 83.5, x: -60, view: 'orbit', yaw: 0.3, pitch: 0.75, dist: 330, hazard: 'ore', hazardAt: 2.8, why: 'Fang Gulch from above' },
+  oasis: { at: 65, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge crossing by the fair' },
+  bonecanyon: { at: 61.3, ds: -90, hazard: 'neck', why: 'the sand beast rearing over the road' },
+  glasssea: { at: 6.5, ds: -20, view: 'orbit', yaw: -0.6, pitch: 0.3, dist: 110, hazard: 'beast', why: 'the sand beast arch at dusk' },
+  devilsteeth: { at: 20.2, x: 60, view: 'orbit', yaw: -0.3, pitch: 0.75, dist: 330, hazard: 'spill', hazardAt: 2.8, why: 'the digger past the Jaw from above' },
   mirageh: { at: 2, ds: -100, why: 'the loop under the balloons' },
-  stormfront: { at: 4.02, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge knot with a strider beyond' },
+  stormfront: { at: 4, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the bridge knot with a strider beyond' },
   coralcove: { at: 9.8, view: 'orbit', yaw: -1, pitch: 0.2, dist: 120, why: 'the lagoon and the air show' },
   lagoonloop: { at: 5.2, ds: -20, view: 'orbit', yaw: 0.6, pitch: 0.3, dist: 110, hazard: 'breach', why: 'the whale breaching over the lagoon road' },
   boardwalk: { at: 25.35, view: 'orbit', yaw: -0.9, pitch: 0.5, dist: 150, why: 'the boardwalk bridge crossing' },
