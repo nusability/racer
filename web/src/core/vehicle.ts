@@ -5,7 +5,7 @@
 
 import type { BoostCell, FieldHold, Obstacle, PlayerInput, RaceEvent, RacerState, RacerStats, Vec3 } from './types.ts';
 import { gustAt } from './hazards.ts';
-import { cornerPull, currentTopSpeed, impactWear, roadLoad, roughOverspeed, roughWear, steerRate } from './handling.ts';
+import { cornerPull, currentTopSpeed, impactWear, liftsOff, roadLoad, roughOverspeed, roughWear, steerRate, type Physics } from './handling.ts';
 import { mulberry32, type Rng } from './rng.ts';
 import { makeFrame, type Ribbon } from './track.ts';
 import {
@@ -26,6 +26,9 @@ import {
   BOUNDARY_GRIND_SPEED,
   BOUNDARY_IMPACT_SPEED,
   BOUNDARY_GRIND_DAMAGE,
+  WALL_CORNER_SCRUB_FLOOR,
+  WALL_CORNER_WEAR,
+  WALL_CORNER_WEAR_REF,
   BOUNDARY_RESTITUTION,
   BOUNDARY_SPEED_LOSS,
   BRAKE_DECEL,
@@ -41,9 +44,9 @@ import {
   FALL_PROJECT_WINDOW,
   FRENET_MIN_DENOM,
   GRAVITY,
+  LAUNCH_LEDGE_SPEED,
   GUST_DRIFT,
   HANDLING_REF,
-  HOVER_SUCTION,
   IMPACT_INTENSITY_SPEED,
   LANDING_STEP_TOLERANCE,
   LAND_DAMAGE,
@@ -97,6 +100,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 export class Vehicle {
   readonly state: RacerState;
   readonly stats: RacerStats;
+  /** The race's physics (see resolvePhysics): the AI driving this craft reckons with the same. */
+  readonly physics: Physics;
   readonly drive: DriveStats;
   /** Where across the ribbon the racer wants to be; x chases it. */
   targetX: number;
@@ -143,8 +148,9 @@ export class Vehicle {
   /** The racer's own seeded stream for what the ground does to it (rough-ground jolts). */
   private readonly rng: Rng;
 
-  constructor(id: string, stats: RacerStats, ribbon: Ribbon, s: number, x: number, distance: number, seed: number) {
+  constructor(id: string, stats: RacerStats, ribbon: Ribbon, s: number, x: number, distance: number, seed: number, physics: Physics) {
     this.stats = stats;
+    this.physics = physics;
     this.rng = mulberry32(seed);
     this.state = {
       id,
@@ -209,7 +215,7 @@ export class Vehicle {
     // Grip goes with how hard the road presses the craft on: light over a crest, heavy in a dip,
     // next to nothing in the air.
     const surfaceGrip = ribbon.gripAt(sOld);
-    const grip = surfaceGrip * (airborne ? CREST_GRIP_MIN : roadLoad(st.speed, ribbon.vcurveAt(sOld)));
+    const grip = surfaceGrip * (airborne ? CREST_GRIP_MIN : roadLoad(st.speed, ribbon.vcurveAt(sOld), this.physics));
     // In the air the pilot moves its target only a little, by key or by drag alike.
     const air = airborne ? AIR_STEER_FACTOR : 1;
     const drift = cornerPull(this.stats, curvature, st.speed, brake, grip) + gustAt(ribbon.hazards, sOld, time) * GUST_DRIFT;
@@ -368,6 +374,16 @@ export class Vehicle {
       st.speed = Math.max(top * BOUNDARY_GRIND_SPEED, st.speed - grind * SIM_DT);
     }
     this.damage(BOUNDARY_GRIND_DAMAGE * (st.speed / this.stats.topSpeed) * SIM_DT);
+    // Against the outside wall of a bend, the wall is what holds the craft on it: friction on
+    // that hold (v²·κ) scrubs speed and wears the hull, so riding the wall round a corner too
+    // fast costs far more than braking for it would.
+    const curvature = ribbon.curvatureAt(st.s);
+    if (side === -Math.sign(curvature)) {
+      const held = st.speed * st.speed * Math.abs(curvature);
+      const floor = top * WALL_CORNER_SCRUB_FLOOR;
+      if (st.speed > floor) st.speed = Math.max(floor, st.speed - this.physics.wallFriction * held * SIM_DT);
+      this.damage(WALL_CORNER_WEAR * (held / WALL_CORNER_WEAR_REF) * SIM_DT);
+    }
     this.drive.scrapeTime += SIM_DT;
     const intensity = clamp(SCRAPE_BASE_INTENSITY + vn / IMPACT_INTENSITY_SPEED, 0, 1);
     events.push({ type: 'scrape', id: st.id, side, intensity });
@@ -423,7 +439,14 @@ export class Vehicle {
       // gravity plus hover suction can follow (crests, kickers, jump lips), or when the road
       // is no longer under us at all (driven off an open edge).
       const vSurf = (surface - ribbon.elevationAt(sOld)) / dt;
-      if (gap || this.outside !== 0 || vSurf < st.vy - (GRAVITY + HOVER_SUCTION) * dt) {
+      // It leaves the road where the road falls away under it faster than gravity and suction
+      // can follow: over a crest only where the road's smoothed vertical curvature says so too
+      // (liftsOff), since the raw elevation's kinks at every sample alone threw the craft off
+      // mild crests the grip model (and the AI reckoning with it) holds it on; at a ledge (a
+      // jump's lip) by a drop no kink makes.
+      const drop = st.vy - this.physics.liftOff * dt - vSurf;
+      const fallsAway = drop > 0 && (drop > LAUNCH_LEDGE_SPEED || liftsOff(sdot, ribbon.vcurveAt(s), this.physics));
+      if (gap || this.outside !== 0 || fallsAway) {
         this.grounded = false;
         events.push({ type: 'launch', id: st.id });
       } else {

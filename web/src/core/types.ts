@@ -425,10 +425,27 @@ export interface RaceEntrant {
   skill: number;
 }
 
+/**
+ * The owner's live physics tuning (the debug menu's PHYSICS panel), as multipliers of the tuned
+ * values in data/tuning.ts: 1 everywhere is the game as tuned. A race plays identically for the
+ * same multipliers; the headless checks race with PHYSICS_AS_TUNED.
+ */
+export interface PhysicsTuning {
+  /** Every racer's grip (less corner drift). */
+  cornerGrip: number;
+  /** How much a crest lightens a craft (CREST_LIGHTNESS). */
+  crestLightness: number;
+  /** The hover's suction onto the road: more of it, fewer and later lift-offs (HOVER_SUCTION). */
+  suction: number;
+  /** The speed a wall takes off a craft pressed into it round a bend (WALL_CORNER_FRICTION). */
+  wallScrape: number;
+}
+
 export interface RaceConfig {
   laps: number;
   seed: number;
   entrants: RaceEntrant[];
+  physics: PhysicsTuning;
 }
 
 export interface RacerState {

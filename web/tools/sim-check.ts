@@ -1,14 +1,18 @@
 // Runs full headless races on every track (plus synthetic test courses) and prints how they
 // went. Fails (non-zero exit) on NaN, a racer that never finishes, a determinism break, or a
-// racer pinned against a wall; on the synthetic sprint also on a DNF, wrong placings, a racer
-// reaching the run-out's end, a fork whose field all took one way, or a finisher the run-out's
-// force field does not take in and ease to a still rest of its own.
+// racer pinned against a wall; on a sprint also on more than a tenth of its racers failing to
+// finish over several seeds, wrong placings, a racer reaching the run-out's end, a fork whose
+// field all took one way, or a finisher the run-out's force field does not take in and ease to a
+// still rest of its own.
 //   npm run sim                 all tracks
 //   npm run sim -- sunpan       one track (simtest is the synthetic loop, simsprint the sprint,
 //                               simphysics the physics checks of tools/sim-physics.ts)
 //   npm run sim -- --ladder     also race six equal racers at different skills
 //   npm run sim -- --cups x     cup balance study even when filtering to track x
+//   npm run sim -- --cups=dust,frost x   ...only those cups' studies
 
+import { PHYSICS_AS_TUNED, resolvePhysics } from '../src/core/handling.ts';
+const AS_TUNED = resolvePhysics(PHYSICS_AS_TUNED);
 import { TRACKS } from '../src/data/tracks/index.ts';
 import { RACERS, racerById } from '../src/data/racers.ts';
 import { MAX_UPGRADE_LEVEL, effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
@@ -39,6 +43,8 @@ const IDLE: PlayerInput = { steer: 0, nudge: 0, brake: false, boost: false };
 const args = process.argv.slice(2);
 const ladder = args.includes('--ladder');
 const only = args.filter((a) => !a.startsWith('--'));
+const cupsArg = args.find((a) => a === '--cups' || a.startsWith('--cups='));
+const cupIds = cupsArg?.startsWith('--cups=') ? cupsArg.slice('--cups='.length).split(',') : [];
 let failures = 0;
 
 function fail(msg: string) {
@@ -76,7 +82,7 @@ interface RunResult {
 type Driver = (race: Race) => PlayerInput;
 
 function run(track: Track, laps: number, seed: number, field: RaceEntrant[], player: Driver | null): RunResult {
-  const race = new Race(track, { laps, seed, entrants: field });
+  const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps, seed, entrants: field });
   const maxSteps = Math.ceil((laps * TIMEOUT_PER_LAP) / SIM_DT);
   const events = new Map<string, number>();
   const viaBranch: Traversal[] = [];
@@ -141,7 +147,7 @@ const WALL_HUG_LAUNCH = 4;
  * hurts, it never pins. Ends early at a wreck (an obstacle or an open edge on that side).
  */
 function wallHug(track: Track, side: -1 | 1) {
-  const race = new Race(track, { laps: 1, seed: SEED, entrants: [entrant(0, racerById(STARTER), 1, true)] });
+  const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps: 1, seed: SEED, entrants: [entrant(0, racerById(STARTER), 1, true)] });
   const v = race.vehicles[0];
   const r = race.racers[0];
   const push: PlayerInput = { steer: side, nudge: 0, brake: false, boost: true };
@@ -209,35 +215,56 @@ const SPRINT_SETTLE = 12;
 const SPRINT_STOPPED = 0.5;
 
 /**
- * The sprint's own rules: everyone finishes (the synthetic sprint has nothing that must wreck),
- * places follow finishing times, every finisher stops on the run-out short of the road's end,
- * and each fork's field spreads over at least two of its ways.
+ * Seeds a sprint is raced on for its own rules, and the share of all those racers that may fail
+ * to finish. One seed made "everyone finishes" a coin toss: a single unlucky wreck in six (a
+ * hazard's timing, a contact) flipped it with any change anywhere. Over several seeds a rate
+ * says what the check means: the run is finishable, wrecks are rare.
  */
-function sprintCheck(track: Track, res: RunResult) {
-  const { race } = res;
+const SPRINT_SEEDS = 4;
+const SPRINT_MAX_DNF_SHARE = 0.1;
+
+/**
+ * The sprint's own rules, over SPRINT_SEEDS races: at most SPRINT_MAX_DNF_SHARE of the racers
+ * fail to finish; in each race places follow finishing times, and every finisher stops on the
+ * run-out short of the road's end; and each fork's field spreads over at least two of its ways.
+ */
+function sprintCheck(track: Track, runs: RunResult[]) {
   const id = track.def.id;
-  const stoppedAt = race.racers.map(() => -1);
-  for (let n = 0; n * SIM_DT < SPRINT_SETTLE; n++) {
-    race.step(IDLE);
+  let racers = 0;
+  const dnf: string[] = [];
+  for (const res of runs) {
+    const { race } = res;
+    const seed = race.config.seed;
+    const stoppedAt = race.racers.map(() => -1);
+    for (let n = 0; n * SIM_DT < SPRINT_SETTLE; n++) {
+      race.step(IDLE);
+      race.racers.forEach((r, i) => {
+        if (r.branch < 0) res.maxMainS[i] = Math.max(res.maxMainS[i], r.s);
+        if (stoppedAt[i] < 0 && r.speed < SPRINT_STOPPED) stoppedAt[i] = r.s;
+      });
+    }
+    const finishS = track.startS + track.raceLength;
+    const reach = race.racers.map((r, i) => (r.finishTime === null ? `${r.id} DNF` : `${r.id} ${(res.maxMainS[i] - finishS).toFixed(0)} m`));
+    console.log(`  run-out (${(track.length - finishS).toFixed(0)} m, seed ${seed}): stopped past the line at ${reach.join(', ')}`);
     race.racers.forEach((r, i) => {
-      if (r.branch < 0) res.maxMainS[i] = Math.max(res.maxMainS[i], r.s);
-      if (stoppedAt[i] < 0 && r.speed < SPRINT_STOPPED) stoppedAt[i] = r.s;
+      racers++;
+      if (r.finishTime === null) {
+        dnf.push(`${r.id}${r.crashed > 0 ? ' (wrecked)' : ''} on seed ${seed}`);
+        return;
+      }
+      if (res.maxMainS[i] >= track.length - RACER_LENGTH) fail(`${id}: ${r.id} ran the whole run-out to the road's end (seed ${seed})`);
+      if (stoppedAt[i] < 0) fail(`${id}: ${r.id} still moving ${SPRINT_SETTLE} s after the race ended (seed ${seed})`);
+    });
+    const byTime = race.racers.filter((r) => r.finishTime !== null).sort((x, y) => (x.finishTime as number) - (y.finishTime as number));
+    byTime.forEach((r, i) => {
+      if (r.place !== i + 1) fail(`${id}: ${r.id} finished ${i + 1}th by time but is placed ${r.place} (seed ${seed})`);
     });
   }
-  const finishS = track.startS + track.raceLength;
-  const reach = race.racers.map((r, i) => `${r.id} ${(res.maxMainS[i] - finishS).toFixed(0)} m`);
-  console.log(`  run-out (${(track.length - finishS).toFixed(0)} m): stopped past the line at ${reach.join(', ')}`);
-  race.racers.forEach((r, i) => {
-    if (r.finishTime === null) fail(`${id}: ${r.id} did not finish the sprint${r.crashed > 0 ? ' (wrecked)' : ''}`);
-    if (res.maxMainS[i] >= track.length - RACER_LENGTH) fail(`${id}: ${r.id} ran the whole run-out to the road's end`);
-    if (stoppedAt[i] < 0) fail(`${id}: ${r.id} still moving ${SPRINT_SETTLE} s after the race ended`);
-  });
-  const byTime = race.racers.filter((r) => r.finishTime !== null).sort((a, b) => (a.finishTime as number) - (b.finishTime as number));
-  byTime.forEach((r, i) => {
-    if (r.place !== i + 1) fail(`${id}: ${r.id} finished ${i + 1}th by time but is placed ${r.place}`);
-  });
+  console.log(`  sprint finishes: ${racers - dnf.length}/${racers} over ${runs.length} seeds${dnf.length ? ` (DNF ${dnf.join(', ')})` : ''}`);
+  if (dnf.length > racers * SPRINT_MAX_DNF_SHARE) fail(`${id}: ${dnf.length}/${racers} racers did not finish the sprint (${dnf.join(', ')})`);
+  const all = { ...runs[0], viaBranch: runs.flatMap((r) => r.viaBranch), viaMain: runs.flatMap((r) => r.viaMain) };
   for (const f of track.forks) {
-    const used = forkWays(track, res, f.index).filter((w) => w.times.length > 0).length;
+    const used = forkWays(track, all, f.index).filter((w) => w.times.length > 0).length;
     if (used < 2) fail(`${id}: the whole field took one way through fork "${f.name}"`);
   }
 }
@@ -258,7 +285,10 @@ for (const def of defs) {
   report(track, a);
   const b = run(track, def.laps, SEED, field, null);
   if (a.fingerprint !== b.fingerprint) fail(`${def.id}: two runs with the same seed diverged`);
-  if (def.course === 'sprint') sprintCheck(track, a);
+  if (def.course === 'sprint') {
+    const more = Array.from({ length: SPRINT_SEEDS - 1 }, (_, k) => run(track, def.laps, SEED + k + 1, field, null));
+    sprintCheck(track, [a, ...more]);
+  }
   wallHug(track, -1);
   wallHug(track, 1);
   if (ladder) {
@@ -299,8 +329,8 @@ interface DraftRun {
  */
 function draftRun(track: Track, gap: number, x: number, pullOutAt: number | null): DraftRun {
   const stats = effectiveStats(racerById(STARTER), noUpgrades());
-  const leader = new Vehicle('lead', stats, track, DRAFT_CHECK_S + gap + RACER_LENGTH, 0, 0, 1);
-  const follower = new Vehicle('chase', stats, track, DRAFT_CHECK_S, x, 0, 2);
+  const leader = new Vehicle('lead', stats, track, DRAFT_CHECK_S + gap + RACER_LENGTH, 0, 0, 1, AS_TUNED);
+  const follower = new Vehicle('chase', stats, track, DRAFT_CHECK_S, x, 0, 2, AS_TUNED);
   const vehicles = [leader, follower];
   for (const v of vehicles) v.state.speed = stats.topSpeed;
   const slip = new Slipstream(vehicles.length);
@@ -371,7 +401,7 @@ interface RoughRun {
 /** One starter over the stretch, driven by nothing but the real Vehicle: flat out, boosted or held slow. */
 function roughRun(track: Track, mode: 'fast' | 'boost' | 'slow', armor: number): RoughRun {
   const stats = { ...effectiveStats(racerById(STARTER), noUpgrades()), armor };
-  const v = new Vehicle('rough', stats, track, ROUGH_CHECK_START, 0, 0, SEED);
+  const v = new Vehicle('rough', stats, track, ROUGH_CHECK_START, 0, 0, SEED, AS_TUNED);
   v.state.speed = mode === 'slow' ? stats.topSpeed * ROUGH_CHECK_SLOW_SHARE : stats.topSpeed;
   v.state.boost = 1;
   const res: RoughRun = { damage: 0, jolts: 0, rough: 0, wrecked: false, fingerprint: '' };
@@ -436,7 +466,7 @@ function forceFieldCheck(racerId: string, level: number) {
   const def = racerById(racerId);
   const ups = { engine: level, thrusters: level, steering: level, tank: level, armor: level };
   const field: RaceEntrant[] = Array.from({ length: FIELD }, (_, i) => ({ ...entrant(i, def, spread(i, FIELD, SKILL_LO, SKILL_HI), false), stats: effectiveStats(def, ups) }));
-  const race = new Race(track, { laps: 1, seed: SEED, entrants: field });
+  const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps: 1, seed: SEED, entrants: field });
   const finishS = track.startS + track.raceLength;
   const entry = track.length - SPRINT_FIELD_DEPTH;
   const trace = race.racers.map(() => [] as { speed: number; s: number; x: number; landed: boolean }[]);
@@ -494,7 +524,7 @@ if (only.length === 0 || only.includes(simSprint.id)) {
 if (only.length === 0 || only.includes('simphysics')) physicsChecks(fail);
 
 // Cup balance: the real rival fields against stand-in players (skipped for single-track runs).
-if (only.length === 0 || args.includes('--cups')) allCupStudies();
+if (only.length === 0 || cupsArg !== undefined) allCupStudies(cupIds);
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);

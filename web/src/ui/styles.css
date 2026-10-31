@@ -611,6 +611,7 @@
 .debug__credits { font-size: 18px; font-weight: 800; color: var(--gold); }
 .debug__stat { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .debug__value { font: 13px ui-monospace, monospace; color: var(--sand); text-align: right; overflow-wrap: anywhere; }
+.debug__physics-status--changed { color: var(--gold); font-weight: 700; }
 .debug__row { display: flex; flex-wrap: wrap; gap: 8px; }
 .debug__gliders { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
 .debug__glider { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); }

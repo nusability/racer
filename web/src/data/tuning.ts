@@ -171,10 +171,14 @@ export const CORNER_PULL = 0.11;
 export const GRIP_REF = 0.6;
 /**
  * Road load: over a crest the road falls away under the craft and presses it on less (in a dip,
- * more), by speed²·vertical curvature against gravity plus the hover's suction; grip goes with
- * it (see roadLoad). A light craft keeps at least CREST_GRIP_MIN of its grip (its cushion still
- * bites the air), which is also all it has in the air; a compression adds up to DIP_GRIP_MAX.
+ * more): by CREST_LIGHTNESS of speed²·vertical curvature against gravity plus the hover's
+ * suction; grip goes with it (see roadLoad). A light craft keeps at least CREST_GRIP_MIN of its
+ * grip (its cushion still bites the air), which is also all it has in the air; a compression
+ * adds up to DIP_GRIP_MAX. At full lightness (1) every roller took most of the grip away and
+ * the craft slid out of every bend over one: half of it is the middle ground the owner asked
+ * for, light over a crest, sliding wide only when far too fast.
  */
+export const CREST_LIGHTNESS = 0.5;
 export const CREST_GRIP_MIN = 0.25;
 export const DIP_GRIP_MAX = 1.5;
 /**
@@ -227,6 +231,19 @@ export const BOUNDARY_DAMAGE_REF_SPEED = 30;
  * (before armour), less as it slows. Scrapes add up: three seconds of wall is a quarter hull.
  */
 export const BOUNDARY_GRIND_DAMAGE = 0.08;
+/**
+ * Riding the outside wall of a bend: the wall holds the craft on the bend (v²·κ m/s² of
+ * hold), and friction on that hold scrubs WALL_CORNER_FRICTION of it as deceleration, down to
+ * WALL_CORNER_SCRUB_FLOOR of top speed (a wall never pins: tools/sim-check.ts' wall hug). It
+ * also wears WALL_CORNER_WEAR hull per second at WALL_CORNER_WEAR_REF m/s² of hold (before
+ * armour). A starter flat out against the wall of a 60 m hairpin (375 m/s²) loses ~94 m/s²
+ * (more than the air brake) and ~28% hull a second; a 300 m sweeper at the same speed, ~19 m/s²
+ * and ~6%/s. Without it, never braking and riding the rails round was the fastest line.
+ */
+export const WALL_CORNER_FRICTION = 0.25;
+export const WALL_CORNER_SCRUB_FLOOR = 0.5;
+export const WALL_CORNER_WEAR = 0.15;
+export const WALL_CORNER_WEAR_REF = 200;
 /** Fraction of the sideways speed bounced back off a boundary. */
 export const BOUNDARY_RESTITUTION = 0.3;
 /** Scrape intensity of a gentle grind; impact speed adds to it. */
@@ -235,8 +252,20 @@ export const SCRAPE_BASE_INTENSITY = 0.2;
 export const IMPACT_INTENSITY_SPEED = 40;
 
 // Vertical
-/** Hover suction pulling the racer onto the road, m/s² on top of gravity. */
-export const HOVER_SUCTION = 45;
+/**
+ * Hover suction pulling the racer onto the road, m/s² on top of gravity: a craft leaves the
+ * road where it falls away faster than both (speed²·vertical curvature, see liftsOff). At 45 the
+ * new layouts' rollers threw a starter into the air 25–60 times a lap; at 90 it flies off jumps,
+ * kickers and only the sharpest crests at speed.
+ */
+export const HOVER_SUCTION = 160;
+/**
+ * A step's drop in the road's vertical speed past what gravity and suction follow, m/s, that
+ * launches a craft whatever the road load says: a ledge, such as a jump's lip. The road is
+ * sampled every TRACK_SAMPLE_STEP, so its slope kinks at each sample by under ~1 m/s at race
+ * speed over a crest: those must not.
+ */
+export const LAUNCH_LEDGE_SPEED = 3;
 /** Landings softer than this closing speed cost nothing, m/s: a pod absorbs its own jumps. */
 export const LAND_SOFT_IMPACT = 42;
 /** Fraction of forward speed lost per m/s of hard landing. */
@@ -373,6 +402,13 @@ export const AI_LINE_LOOK_TIME_HI = 1.5;
 export const AI_LINE_FULL_CURVATURE = 1 / 300;
 /** Distance the AI's line keeps inside the road edge, metres. */
 export const AI_WALL_MARGIN = 3;
+/**
+ * Extra room, metres, the AI keeps off a wall (beyond AI_WALL_MARGIN): its target wanders by
+ * up to about AI_TARGET_NOISE × (1 − skill), and a wall at the inside of a hairpin (a
+ * shortcut's divider) is where the line wants to be. Rookies keep more, aces shave it.
+ */
+export const AI_WALL_BERTH_LO = 1.5;
+export const AI_WALL_BERTH_HI = 0;
 /** The AI closes the gap between its target and where it wants it in about this long, s. */
 export const AI_TARGET_TIME = 0.08;
 /** Obstacle look-ahead in seconds of travel. */
@@ -415,8 +451,22 @@ export const AI_PATH_LAG = 0.08;
 export const AI_CLEARANCE_LO = 5;
 export const AI_CLEARANCE_HI = 1.6;
 /** Fraction of the theoretical cornering limit the AI dares to carry. */
-export const AI_CORNER_FACTOR_LO = 0.45;
-export const AI_CORNER_FACTOR_HI = 0.95;
+export const AI_CORNER_FACTOR_LO = 0.8;
+export const AI_CORNER_FACTOR_HI = 1;
+/**
+ * How much of a lane (road half-width less a racer and the wall margin) an AI lets a bend's
+ * drift carry it out, beyond what its steer cancels: a short hairpin on a wide road is taken
+ * faster than the bend's sustained limit, as a pilot would. Rookies use some, aces most.
+ */
+export const AI_DRIFT_ROOM_LO = 0.5;
+export const AI_DRIFT_ROOM_HI = 1;
+/**
+ * Share of the lift-off acceleration (see liftsOff) at which an AI planning a bend counts a crest
+ * as throwing it: a little more speed or a bump on the way puts it in the air from just short.
+ */
+export const AI_LAUNCH_MARGIN = 0.15;
+/** A bend's drift counts as reeled back in once the hull is this close to the line again, metres. */
+export const AI_BEND_SETTLED = 0.5;
 /** Braking reaction delay, seconds of travel lost before the AI starts braking. */
 export const AI_BRAKE_REACTION_LO = 0.35;
 export const AI_BRAKE_REACTION_HI = 0.05;
@@ -436,8 +486,12 @@ export const AI_REACTION_HI = 0;
 export const AI_TARGET_NOISE = 4;
 /** Correlation time of the target wander, seconds. */
 export const AI_NOISE_TAU = 0.5;
-/** Lapses per second at skill 0 (scaled by (1 - skill)²): hands off, obstacles unseen. */
-export const AI_MISTAKE_RATE = 0.3;
+/**
+ * Lapses per second at skill 0 (scaled by (1 - skill)²): hands off, obstacles unseen. A rookie
+ * rival lapses about every 15 s; at twice that (7% of its race hands off) lapses into hazards
+ * and rock were a third of all rival wrecks.
+ */
+export const AI_MISTAKE_RATE = 0.15;
 /** Length of a lapse, seconds. */
 export const AI_MISTAKE_DURATION = 0.6;
 /** Approaching a jump below this multiple of its minimum clearing speed, the AI won't brake. */
@@ -461,9 +515,9 @@ export const AI_REPAIR_WANT = 0.35;
 export const AI_REPAIR_DETOUR = 20;
 /**
  * AIs at or above this skill steer around rivals; below it they bump and barge. Contacts are
- * dear, so every cup rival (skill 0.32 and up) looks out for the others; only the clumsiest don't.
+ * dear, so every cup rival (skill 0.28 and up) looks out for the others; only the clumsiest don't.
  */
-export const AI_AVOID_RACERS_SKILL = 0.3;
+export const AI_AVOID_RACERS_SKILL = 0.25;
 /**
  * An AI that would rear-end the racer straight ahead before its brake could match that one's
  * speed lifts: it reckons on this long to react (a novice later than an ace, so it still bumps,
@@ -480,6 +534,14 @@ export const AI_TAIL_MARGIN = 1;
  * behind, and the tail check's).
  */
 export const AI_ASIDE_GAP = 1;
+/**
+ * Moving across toward a rival alongside, an AI (with mirrors) closes the gap between them no
+ * faster than gap / AI_SIDE_CLOSE_TIME, and at the last only at AI_SIDE_RUB_SPEED (m/s, under
+ * RACER_DAMAGE_FREE_SPEED): the line out of a hairpin or a planner's swerve used to cross a
+ * rival's at full steer, 40–60 m/s sideways, a hit that could destroy both.
+ */
+export const AI_SIDE_CLOSE_TIME = 0.3;
+export const AI_SIDE_RUB_SPEED = 4;
 export const AI_ASIDE_ALONG = 1.5;
 export const AI_ASIDE_IN_LINE = 0.5;
 /** How far toward a rival's line an AI tucks in to draft it (0..1 of the offset): aces ride wakes. */

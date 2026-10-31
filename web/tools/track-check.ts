@@ -4,6 +4,7 @@
 // race, parts of the course that crowd each other, and rows of lights that would strobe at
 // speed, and that city street sections are walled roads at ground level. Exit code 1 when any
 // check warns.
+import { PHYSICS_AS_TUNED } from '../src/core/handling.ts';
 import { TRACKS, sceneryById, trackById } from '../src/data/tracks/index.ts';
 import { DEV_TRACKS, loadDevTrack } from '../src/ui/devTracks.ts';
 import { worldOfTrack } from '../src/data/worlds.ts';
@@ -710,6 +711,7 @@ interface Measured {
 function measure(t: Track, mark: number, options: AiOptions, boostOn: number | null, seed: number, hold: number): Measured {
   const stats = effectiveStats(racerById(MEASURE_RACER), noUpgrades());
   const race = new Race(t, {
+    physics: PHYSICS_AS_TUNED,
     laps: t.def.laps,
     seed,
     entrants: [{ id: 'm', name: 'measure', racerId: MEASURE_RACER, stats, isPlayer: true, skill: MEASURE_EYES }],

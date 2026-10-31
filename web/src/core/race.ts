@@ -9,7 +9,7 @@ import { Vehicle } from './vehicle.ts';
 import { hazardObstacles } from './hazards.ts';
 import { junctionBounds, type JunctionBounds } from './junction.ts';
 import { Slipstream } from './slipstream.ts';
-import { impactWear } from './handling.ts';
+import { impactWear, resolvePhysics } from './handling.ts';
 import {
   AUTOPILOT_SKILL,
   BRANCH_JUNCTION_LENGTH,
@@ -121,6 +121,7 @@ export class Race {
     this.entrants = config.entrants;
     this.playerIndex = config.entrants.findIndex((e) => e.isPlayer);
     if (config.entrants.filter((e) => e.isPlayer).length > 1) throw new Error('Race: more than one player entrant');
+    const physics = resolvePhysics(config.physics);
     this.vehicles = config.entrants.map((e, i) => {
       const row = Math.floor(i / 2);
       const col = i % 2;
@@ -129,7 +130,9 @@ export class Race {
       if (track.course === 'sprint' && back > track.startS) throw new Error(`Race: grid slot ${i} stands ${back} m back, off the ${track.startS} m apron`);
       const s = track.wrap(track.startS - back);
       // Seeded after every driver's own stream, so the ground's jolts never echo a driver's choices.
-      return new Vehicle(e.id, e.stats, track, s, x, track.delta(track.startS, s), driverSeed(config.seed, config.entrants.length + i));
+      // The owner's corner grip is every racer's grip: the AI reads it from the same stats.
+      const stats = { ...e.stats, grip: e.stats.grip * physics.gripScale };
+      return new Vehicle(e.id, stats, track, s, x, track.delta(track.startS, s), driverSeed(config.seed, config.entrants.length + i), physics);
     });
     this.junctions = track.branches.map(junctionBounds);
     this.racers = this.vehicles.map((v) => v.state);

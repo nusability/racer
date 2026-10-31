@@ -2,6 +2,8 @@
 // air steering allows, and what a fall off the course ends in. Each prints its numbers and
 // reports a failure through the caller's `fail`.
 
+import { PHYSICS_AS_TUNED, resolvePhysics } from '../src/core/handling.ts';
+const AS_TUNED = resolvePhysics(PHYSICS_AS_TUNED);
 import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { Track } from '../src/core/track.ts';
@@ -47,7 +49,7 @@ const AIR_CHECK_NUDGE = 0.3;
 /** Sideways metres moved in AIR_CHECK_TIME of `input` from a standing start at top speed, on the road or in the air. */
 function sideways(track: Track, input: PlayerInput, air: boolean): number {
   const stats = starter();
-  const v = new Vehicle('air', stats, track, CHECK_S, 0, 0, SEED);
+  const v = new Vehicle('air', stats, track, CHECK_S, 0, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
   if (air) {
     v.grounded = false;
@@ -97,7 +99,7 @@ interface Fall {
 /** A starter at top speed steered hard off the right-hand open edge, until it wrecks. */
 function driveOff(track: Track): Fall {
   const stats = starter();
-  const v = new Vehicle('fall', stats, track, track.paramToS(DROP_FROM) + 50, 0, 0, SEED);
+  const v = new Vehicle('fall', stats, track, track.paramToS(DROP_FROM) + 50, 0, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
   const st = v.state;
   let over = -1;
@@ -153,7 +155,7 @@ function wideJumpCheck(fail: Fail) {
   const lip = track.paramToS(WIDE_JUMP_AT) + WIDE_JUMP_RAMP;
   if (!(WIDE_TARGET_X > WIDE_JUMP_TAKEOFF / 2 && WIDE_TARGET_X < track.widthAt(lip + WIDE_JUMP_RAMP * 2) / 2)) throw new Error('wide jump check: its target is not between the lip\'s edge and the landing\'s');
   const stats = starter();
-  const v = new Vehicle('wide', stats, track, lip - WIDE_START_BACK, WIDE_START_X, 0, SEED);
+  const v = new Vehicle('wide', stats, track, lip - WIDE_START_BACK, WIDE_START_X, 0, SEED, AS_TUNED);
   const st = v.state;
   st.speed = stats.topSpeed;
   st.vx = WIDE_START_VX;
@@ -199,7 +201,7 @@ function wallHit(vn: number, armor: number): number {
   const track = new Track(simDraftOval);
   const stats = { ...starter(), armor };
   const lineX = track.maxXAt(CHECK_S) - RACER_HALF_WIDTH;
-  const v = new Vehicle('wall', stats, track, CHECK_S, lineX - vn * SIM_DT * 0.5, 0, SEED);
+  const v = new Vehicle('wall', stats, track, CHECK_S, lineX - vn * SIM_DT * 0.5, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
   v.targetX = lineX + TARGET_OVERREACH;
   // One step of the critically damped chase: vx' = vx + (w²·d − 2w·vx)·dt, solved for vx' = vn.
@@ -216,7 +218,7 @@ function wallHit(vn: number, armor: number): number {
 function grindSecond(): number {
   const track = new Track(simDraftOval);
   const stats = starter();
-  const v = new Vehicle('grind', stats, track, CHECK_S, track.maxXAt(CHECK_S) - RACER_HALF_WIDTH, 0, SEED);
+  const v = new Vehicle('grind', stats, track, CHECK_S, track.maxXAt(CHECK_S) - RACER_HALF_WIDTH, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
   v.targetX = track.maxXAt(CHECK_S);
   for (let t = 0; t < 1; t += SIM_DT) {
@@ -231,7 +233,7 @@ function racerHit(closing: number): number {
   const track = new Track(simDraftOval);
   const stats = starter();
   const entrant = (i: number): RaceEntrant => ({ id: `r${i}`, name: `r${i}`, racerId: STARTER, stats, isPlayer: false, skill: 1 });
-  const race = new Race(track, { laps: 1, seed: SEED, entrants: [entrant(0), entrant(1)] });
+  const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps: 1, seed: SEED, entrants: [entrant(0), entrant(1)] });
   race.phase = 'racing';
   race.vehicles.forEach((v, i) => {
     const side = i === 0 ? -1 : 1;
@@ -278,17 +280,21 @@ const ROLL_AMPLITUDE = 2;
 const ROLL_WAVELENGTH = 200;
 /** Seconds the craft is let drift with no input. */
 const ROLL_DRIFT_TIME = 0.1;
-/** Over the crest the turn must carry it at least this many times as far wide as on the flat... */
-const CREST_DRIFT_MIN = 1.6;
-/** ...and in the dip at most this share of it. */
-const DIP_DRIFT_MAX = 0.8;
+/**
+ * Over the crest the turn must carry it at least this many times as far wide as on the flat,
+ * and in the dip at most this share of it. These rollers are ordinary ones (the road falling
+ * away at ~44 m/s² flat out): since the owner's middle ground (CREST_LIGHTNESS, HOVER_SUCTION)
+ * they make a craft only a little light, never airborne.
+ */
+const CREST_DRIFT_MIN = 1.08;
+const DIP_DRIFT_MAX = 0.93;
 /** A bend this tight, metres, for the cornering-limit comparison. */
 const LIMIT_RADIUS = 100;
 
 /** How far wide a stock starter at top speed drifts (its lateral target) in ROLL_DRIFT_TIME from sample k, hands off. */
 function driftFrom(track: Track, s: number): number {
   const stats = starter();
-  const v = new Vehicle('roll', stats, track, s, 0, 0, SEED);
+  const v = new Vehicle('roll', stats, track, s, 0, 0, SEED, AS_TUNED);
   v.state.speed = stats.topSpeed;
   v.state.vy = track.slopeAt(s) * stats.topSpeed;
   for (let t = 0; t < ROLL_DRIFT_TIME; t += SIM_DT) v.step(IDLE, track, [], t, []);
@@ -312,7 +318,7 @@ function crestCheck(fail: Fail) {
   // The AI plans its corners with the same grip: a 100 m bend's limit over that crest and dip.
   const stats = starter();
   const budget = (steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
-  const [onCrest, onFlat, onDip] = [crest.vcurve, 0, dip.vcurve].map((c) => cornerLimit(1 / LIMIT_RADIUS, budget, c));
+  const [onCrest, onFlat, onDip] = [crest.vcurve, 0, dip.vcurve].map((c) => cornerLimit(1 / LIMIT_RADIUS, budget, c, AS_TUNED));
   console.log(`  cornering limit of a ${LIMIT_RADIUS} m bend at its limit of drift: ${onCrest.toFixed(0)} m/s over the crest, ${onFlat.toFixed(0)} flat, ${onDip.toFixed(0)} in the dip`);
   if (!(onCrest < onFlat && onFlat < onDip)) fail('crests: the cornering limit the AI plans with ignores crests and dips');
 }

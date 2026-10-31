@@ -8,7 +8,7 @@ import { PathPlanner, type Blocker } from './aiPlanner.ts';
 import { junctionBounds } from './junction.ts';
 import { hazardObstacles } from './hazards.ts';
 import type { Vehicle } from './vehicle.ts';
-import { cornerLimit, cornerPull, crestGripAt, currentTopSpeed, roadLoad, steerRate } from './handling.ts';
+import { cornerLimit, cornerPull, crestGripAt, currentTopSpeed, roadLoad, steerRate, type Physics } from './handling.ts';
 import { minJumpSpeed } from './jumps.ts';
 import { draftGap } from './slipstream.ts';
 import {
@@ -83,6 +83,18 @@ import {
   AI_TARGET_NOISE,
   AI_TARGET_TIME,
   AI_WALL_MARGIN,
+  AI_WALL_BERTH_LO,
+  AI_BEND_SETTLED,
+  AI_LAUNCH_MARGIN,
+  GRAVITY,
+  AIR_RESPONSE_FACTOR,
+  AIR_STEER_FACTOR,
+  CREST_GRIP_MIN,
+  AI_DRIFT_ROOM_LO,
+  AI_DRIFT_ROOM_HI,
+  AI_WALL_BERTH_HI,
+  AI_SIDE_CLOSE_TIME,
+  AI_SIDE_RUB_SPEED,
   BRAKE_DECEL,
   CELL_VALUE,
   CORNER_PULL,
@@ -105,6 +117,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 
 // Tucking in closer than the wake starts would only ever end in a rear-end.
 if (AI_DRAFT_TUCK_MIN_GAP < DRAFT_MIN_GAP) throw new Error(`AI_DRAFT_TUCK_MIN_GAP ${AI_DRAFT_TUCK_MIN_GAP} is inside the draft's DRAFT_MIN_GAP ${DRAFT_MIN_GAP}`);
+// Easing in alongside at a contact's damage-free speed or faster would make every rub a hit.
+if (AI_SIDE_RUB_SPEED >= RACER_DAMAGE_FREE_SPEED) throw new Error(`AI_SIDE_RUB_SPEED ${AI_SIDE_RUB_SPEED} must stay under RACER_DAMAGE_FREE_SPEED ${RACER_DAMAGE_FREE_SPEED}`);
 // A pull-out faster than a contact's damage-free speed would turn every rub into a ram.
 if (AI_DRAFT_SHIFT_RATE >= RACER_DAMAGE_FREE_SPEED) throw new Error(`AI_DRAFT_SHIFT_RATE ${AI_DRAFT_SHIFT_RATE} must stay under RACER_DAMAGE_FREE_SPEED ${RACER_DAMAGE_FREE_SPEED}`);
 
@@ -218,6 +232,7 @@ export class AiDriver {
     target = this.draftLine(st, ribbon, field, target, v);
     target = this.cellDetour(veh, ribbon, target, lineLook);
     if (st.damage >= AI_REPAIR_WANT) target = this.repairDetour(veh, ribbon, target, lineLook);
+    const line = target;
     const route = this.routeChoice(track, st, v, target);
     target = route.x;
     // A glance at the mirrors: the line it wants never runs into a rival alongside.
@@ -275,18 +290,25 @@ export class AiDriver {
     }
     target += this.noise;
     if (mirrors && !rockAhead) target = this.keepAside(st, ribbon, field, target);
+    // Heading for a branch it hugs the road edge on purpose, and dodging rock or a hazard the
+    // planner (which knows the walls) has the say; anywhere else its wander and the line never
+    // take it closer to a wall than its berth (the divider beside a shortcut lines the inside of
+    // the hairpins it skips, right where the line wants to be).
+    const berth = route.x === line && !rockAhead;
+    if (berth) target = this.offWalls(ribbon, st.s, target);
     this.aimX = target;
     // Act on what was seen a reaction time ago (an empty history means the current target).
     this.seen.push(target);
     const lag = Math.round(this.bySkill(AI_REACTION_LO, AI_REACTION_HI) / SIM_DT);
     while (this.seen.length > lag + 1) this.seen.shift();
     target = this.seen[0];
-    // ...and the mirrors are checked again when acting, however late the driver acts.
+    // ...and the mirrors and walls are checked again when acting, however late the driver acts.
     if (mirrors && !rockAhead) target = this.keepAside(st, ribbon, field, target);
+    if (berth) target = this.offWalls(ribbon, st.s, target);
 
     // 3. Speed: brake when a bend ahead can't be held at this speed in the distance left.
     const reaction = this.bySkill(AI_BRAKE_REACTION_LO, AI_BRAKE_REACTION_HI);
-    const profiles = this.profilesFor(ribbon, stats);
+    const profiles = this.profilesFor(ribbon, stats, veh.physics);
     const seen = ribbon.wrap(st.s + v * reaction);
     const top = currentTopSpeed(stats, st, true);
     let brake = v > Math.min(profileAt(ribbon, profiles.brake, st.s), profileAt(ribbon, profiles.brake, seen));
@@ -304,10 +326,14 @@ export class AiDriver {
     if (v < jumpSpeed || st.airborne || loopAhead) brake = false;
 
     // 4. Steer the target onto where it should be, cancelling the corner drift.
-    const grip = ribbon.gripAt(st.s) * roadLoad(st.speed, ribbon.vcurveAt(st.s));
+    const grip = ribbon.gripAt(st.s) * roadLoad(st.speed, ribbon.vcurveAt(st.s), veh.physics);
     const pull = cornerPull(stats, ribbon.curvatureAt(st.s), st.speed, brake, grip);
     const rate = steerRate(stats);
-    const steer = this.lapse > 0 ? 0 : clamp(((target - veh.targetX) / AI_TARGET_TIME - pull) / rate, -1, 1);
+    let shift = (target - veh.targetX) / AI_TARGET_TIME;
+    // Moving across toward a rival alongside, it eases in rather than lunging: contact is
+    // only ever a rub (rock ahead excepted: a rub beats a rock).
+    if (mirrors && !rockAhead) shift = this.easeAlongside(st, ribbon, field, shift);
+    const steer = this.lapse > 0 ? 0 : clamp((shift - pull) / rate, -1, 1);
 
     // 5. Boost when it pays: never while braking, only on a straight long enough for this
     // driver's patience (skilled drivers save the tank for the long ones), or to clear a jump.
@@ -515,9 +541,11 @@ export class AiDriver {
         }
         if (!choice.take) continue;
       }
-      // Hug the road edge until the junction opens, then cross onto the branch.
+      // Keep to that side, a wall's margin in from the edge (before the junction opens the edge
+      // is often the divider wall, lining the inside of the bends the shortcut skips), then
+      // cross onto the branch.
       const half = track.widthAt(st.s) / 2;
-      return { x: b.side * (crossNow ? half + b.def.width / 2 : half - RACER_HALF_WIDTH), crossing: inJunction };
+      return { x: b.side * (crossNow ? half + b.def.width / 2 : half - RACER_HALF_WIDTH - AI_WALL_MARGIN), crossing: inJunction };
     }
     return { x: line, crossing: false };
   }
@@ -568,13 +596,14 @@ export class AiDriver {
    * so a cautious driver needs a longer straight to boost; `boostRun` is how long the
    * boostable stretch ahead of each sample is.
    */
-  private profilesFor(ribbon: Ribbon, stats: RacerStats): SpeedProfiles {
+  private profilesFor(ribbon: Ribbon, stats: RacerStats, ph: Physics): SpeedProfiles {
     const known = this.profiles.get(ribbon);
     if (known) return known;
     // Drift = |κ|·v²·CORNER_PULL·GRIP_REF/grip must stay within a share of the steer rate, with
     // the grip a crest just before (or the bend's own dip) leaves at that speed.
-    const budget = (this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI) * steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
-    const corner = ribbon.samples.map((p, k) => cornerLimit(Math.abs(p.curvature), budget * p.grip, crestGripAt(ribbon, k)));
+    const factor = this.bySkill(AI_CORNER_FACTOR_LO, AI_CORNER_FACTOR_HI);
+    const budget = (factor * steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
+    const corner = bendLimits(ribbon, stats, ph, budget, factor * steerRate(stats), this.bySkill(AI_DRIFT_ROOM_LO, AI_DRIFT_ROOM_HI), stats.topSpeed * (1 + stats.boostPower));
     const envelope = (decel: number, limits: readonly number[] = corner) => {
       const n = limits.length;
       const out = Float64Array.from(limits);
@@ -658,6 +687,39 @@ export class AiDriver {
     return clamp(target, lo, hi);
   }
 
+  /**
+   * The target kept its berth off any wall within this driver's line (the road's own edge, or
+   * a wall standing closer than that): AI_WALL_MARGIN plus a skill-scaled AI_WALL_BERTH, the
+   * room its wander and a shove need. Sand run-off beyond the road is no wall.
+   */
+  private offWalls(ribbon: Ribbon, s: number, target: number): number {
+    const keep = RACER_HALF_WIDTH + AI_WALL_MARGIN + this.bySkill(AI_WALL_BERTH_LO, AI_WALL_BERTH_HI);
+    const lo = ribbon.dropAt(s, -1) ? -Infinity : ribbon.minXAt(s) + keep;
+    const hi = ribbon.dropAt(s, 1) ? Infinity : ribbon.maxXAt(s) - keep;
+    // A gap narrower than the berth both sides: its middle.
+    return lo > hi ? (lo + hi) / 2 : clamp(target, lo, hi);
+  }
+
+  /**
+   * The rate it moves its target across (m/s), capped toward each rival alongside so the two
+   * close no faster than the gap between them allows: gap / AI_SIDE_CLOSE_TIME, never under
+   * AI_SIDE_RUB_SPEED (a rub, under a contact's damage-free speed). A rival already moving
+   * toward it uses up that allowance, so it gives room rather than meeting it halfway.
+   */
+  private easeAlongside(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], shift: number): number {
+    for (const r of field) {
+      if (r === st || r.branch !== st.branch || r.crashed > 0 || r.fall !== null) continue;
+      if (Math.abs(ribbon.delta(st.s, r.s)) >= RACER_LENGTH * AI_ASIDE_ALONG) continue;
+      const dx = r.x - st.x;
+      const dir = Math.sign(dx);
+      if (dir === 0 || Math.sign(shift) !== dir) continue;
+      const gap = Math.max(0, Math.abs(dx) - 2 * RACER_HALF_WIDTH);
+      const allowed = Math.max(AI_SIDE_RUB_SPEED, gap / AI_SIDE_CLOSE_TIME) + dir * r.vx;
+      if (dir * shift > allowed) shift = dir * Math.max(0, allowed);
+    }
+    return shift;
+  }
+
   /** Racers on the same ribbon we are catching, placed where we would meet them. */
   private addRacerBlockers(st: RacerState, ribbon: Ribbon, field: readonly RacerState[], out: Blocker[]) {
     for (const r of field) {
@@ -681,6 +743,106 @@ export class AiDriver {
     if (this.lapse > 0) this.lapse -= dt;
     else if (this.rng() < AI_MISTAKE_RATE * (1 - this.skill) ** 2 * dt) this.lapse = AI_MISTAKE_DURATION;
   }
+}
+
+/**
+ * Vertical curvature at sample k from the slope to the next sample, unsmoothed: a crest's sharp
+ * top throws a craft (Vehicle's ledge rule) where the smoothed curvature the grip reads is milder.
+ */
+function sharpVcurve(ribbon: Ribbon, k: number): number {
+  const n = ribbon.samples.length;
+  const next = ribbon.closed ? (k + 1) % n : Math.min(n - 1, k + 1);
+  return (ribbon.samples[next].slope - ribbon.samples[k].slope) / ribbon.step;
+}
+
+/** Iterations of the bisection for a bend's limit: far finer than a m/s. */
+const BEND_LIMIT_ITERATIONS = 24;
+
+/**
+ * Per-sample corner limits for a driver whose steer cancels drift up to `rate` m/s (`budget`
+ * is the same as speed²·curvature per unit of grip, see cornerLimit) and who dares let its
+ * hull be carried `roomShare` of a lane wide over a bend. A bend is not held at one speed
+ * forever: entered over its sustained limit, the drift beyond what the steer cancels moves the
+ * target out for as long as the excess lasts, the steer reels it back in once the bend eases,
+ * and the hull chases the target with the lateral response's lag (slow in the air, quicker
+ * with grip). So a short hairpin on a wide road, or a bend gone light for a moment over a
+ * crest, takes more speed than a long one. From each sample this little chase is run along
+ * the road at the entry speed, and the limit is the fastest entry speed whose widest hull
+ * excursion fits the room (the lane narrowest over the bend). It is never under the bend's
+ * sustained limit, reckoned with the lightest crest just before it (crestGripAt).
+ */
+function bendLimits(ribbon: Ribbon, stats: RacerStats, ph: Physics, budget: number, rate: number, roomShare: number, fastest: number): number[] {
+  const n = ribbon.samples.length;
+  const crest = ribbon.samples.map((_, k) => crestGripAt(ribbon, k));
+  const sustained = ribbon.samples.map((p, k) => cornerLimit(Math.abs(p.curvature), budget * p.grip, crest[k], ph));
+  const lane = (k: number) => Math.max(0, ribbon.samples[k].width / 2 - RACER_HALF_WIDTH - AI_WALL_MARGIN);
+  const response = LATERAL_RESPONSE * (stats.handling / HANDLING_REF);
+  // The widest the hull is carried out entering at sample k at speed v, against the room there.
+  const fits = (k: number, v: number) => {
+    const sign = Math.sign(ribbon.samples[k].curvature);
+    const dt = ribbon.step / v;
+    let target = 0;
+    let hull = 0;
+    let room = lane(k);
+    // A crest the road falls away from faster than the craft can follow throws it (reckoned
+    // with a margin: a little more speed or a bump and it goes): from there it flies on
+    // ballistically, rising with the road's climb at the lip, until it meets the road again.
+    let air = false;
+    let alt = 0;
+    let vy = 0;
+    for (let d = 0; d < n; d++) {
+      const j = ribbon.closed ? (k + d) % n : k + d;
+      if (j >= n) break;
+      const p = ribbon.samples[j];
+      if (air) {
+        vy -= GRAVITY * dt;
+        alt += vy * dt;
+        if (alt <= p.pos.y) air = false;
+      } else if (v * v * Math.min(p.vcurve, sharpVcurve(ribbon, j)) <= -ph.liftOff * (1 - AI_LAUNCH_MARGIN)) {
+        air = true;
+        alt = p.pos.y;
+        vy = p.slope * v;
+      }
+      // In the air the grip is the cushion's least and the steer a fraction (as in Vehicle).
+      const load = air ? CREST_GRIP_MIN : roadLoad(v, p.vcurve, ph);
+      const steer = air ? AIR_STEER_FACTOR : 1;
+      // Bending the other way the drift helps reel it in: count only this bend's own push.
+      const pull = Math.sign(p.curvature) === sign ? (v * v * Math.abs(p.curvature)) / (budget * p.grip * load) : 0;
+      target = Math.max(0, target + (pull - steer) * rate * dt);
+      const w = air ? response * AIR_RESPONSE_FACTOR : response * Math.sqrt(Math.min(1, p.grip * load));
+      // The hull trails a critically damped chase by about 2/ω.
+      hull += (target - hull) * Math.min(1, (w / 2) * dt);
+      room = Math.min(room, lane(j));
+      if (hull > room * roomShare) return false;
+      if (target <= 0 && hull < AI_BEND_SETTLED) return true;
+    }
+    return true;
+  };
+  const entry = sustained.map((limit, k) => {
+    if (!Number.isFinite(limit) || limit >= fastest) return limit;
+    if (fits(k, fastest)) return fastest;
+    let lo = limit;
+    let hi = fastest;
+    for (let i = 0; i < BEND_LIMIT_ITERATIONS; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(k, mid)) lo = mid;
+      else hi = mid;
+    }
+    return lo;
+  });
+  // Each limit counts a bend's room from where the chase starts; one sample further into the
+  // bend that room is partly spent already. So inside a bend speed may grow past the limit it
+  // entered on only up to the sustained limit (whose drift the steer cancels outright).
+  for (let pass = 0; pass < (ribbon.closed ? 2 : 1); pass++) {
+    for (let k = 1; k <= n; k++) {
+      const j = k % n;
+      if (!ribbon.closed && k === n) break;
+      const prev = k - 1;
+      const sameBend = Math.sign(ribbon.samples[j].curvature) === Math.sign(ribbon.samples[prev].curvature) && Number.isFinite(sustained[j]);
+      if (sameBend) entry[j] = Math.min(entry[j], Math.max(entry[prev], sustained[j]));
+    }
+  }
+  return entry;
 }
 
 /**

@@ -2,6 +2,7 @@
 // field (built the way the game builds it) raced by stand-ins for a human, so cup balance is
 // measured rather than argued.
 
+import { PHYSICS_AS_TUNED } from '../src/core/handling.ts';
 import { TRACKS } from '../src/data/tracks/index.ts';
 import { CUPS, CUP_POINTS, PLAYER_ENTRANT_ID, type CupDef } from '../src/data/championships.ts';
 import { noUpgrades, type UpgradeLevels } from '../src/data/upgrades.ts';
@@ -105,11 +106,13 @@ interface Outcome {
   bulkPasses: number;
   /** Championship points every entrant scored, by entrant id. */
   points: Map<string, number>;
+  /** The wreck that ended each rival's race that did not finish, by reason. */
+  rivalWrecks: string[];
 }
 
 function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerId: string, levels: UpgradeLevels): Outcome {
   const field = championshipGrid(cup, 0, playerEntrant(racerId, levels), {});
-  const race = new Race(track, { laps: track.def.laps, seed, entrants: field });
+  const race = new Race(track, { physics: PHYSICS_AS_TUNED, laps: track.def.laps, seed, entrants: field });
   const drive = botDriver(race, seed, bot);
   const maxSteps = Math.ceil((track.def.laps * TIMEOUT_PER_LAP) / SIM_DT);
   const me = race.player();
@@ -154,8 +157,7 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     }
   }
   const index = race.racers.indexOf(me);
-  const c = race.vehicles[index].drive.crashes;
-  const wreck = (Object.keys(c) as (keyof typeof c)[]).find((k) => c[k] > 0) ?? null;
+  const wreck = me.crashed > 0 ? wreckReason(race.vehicles[index].drive.crashes) : null;
   if (me.finishTime === null && wreck === null) throw new Error(`${cup.id}/${track.def.id}: ${bot.name} neither finished nor wrecked`);
   const points = new Map(race.results().map((r) => [r.id, CUP_POINTS[r.place - 1]]));
   // Everyone's finishing time; one still running when the race ended gets it from its pace so far.
@@ -169,6 +171,7 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
   const winner = Math.min(...race.racers.map((r) => r.finishTime ?? Infinity));
   // Only a circuit laps: a sprint is one run.
   const lapped = track.course === 'circuit' && me.finishTime !== null && rivals.some((r) => r.crashed <= 0 && r.distance < me.distance - track.length);
+  const rivalWrecks = race.vehicles.filter((v) => v.state !== me && v.state.crashed > 0).map((v) => wreckReason(v.drive.crashes));
   return {
     place: me.place,
     gap: me.finishTime === null ? Infinity : me.finishTime - winner,
@@ -184,7 +187,15 @@ function raceCup(cup: CupDef, track: Track, seed: number, bot: PlayerBot, racerI
     fieldSpread: finishes.length > 1 ? finishes[finishes.length - 1] - finishes[0] : 0,
     bulkPasses,
     points,
+    rivalWrecks,
   };
+}
+
+/** The reason a wrecked racer's race ended (a wreck is final, so there is exactly one). */
+function wreckReason(crashes: Record<string, number>): string {
+  const reason = Object.keys(crashes).find((k) => crashes[k] > 0);
+  if (reason === undefined) throw new Error('sim-cups: a wrecked racer with no crash reason');
+  return reason;
 }
 
 export interface StudyResult {
@@ -253,6 +264,9 @@ export function cupStudy(cup: CupDef, bot: PlayerBot, racerId: string, levels: U
     `  field: median gap between consecutive finishers ${fmt(median(gaps))} s (${Math.round((100 * gaps.filter((g) => g < 1).length) / Math.max(1, gaps.length))}% under 1 s), ` +
       `1st to last median ${fmt(median(all.map((o) => o.fieldSpread)))} s; bulk passes (${BULK_PLACES}+ places in ${BULK_WINDOW} s) ${mean((o) => o.bulkPasses)} per race`,
   );
+  const rivalWrecks = all.flatMap((o) => o.rivalWrecks);
+  const rivalReasons = [...new Set(rivalWrecks)].map((r) => `${r} ${rivalWrecks.filter((w) => w === r).length}`).join(', ');
+  console.log(`  rival wrecks: ${fmt(rivalWrecks.length / all.length)} per race${rivalReasons ? ` (${rivalReasons})` : ''}`);
   const margins = all.filter((o) => o.wreck === null && o.margin > 0 && Number.isFinite(o.margin)).map((o) => o.margin).sort((a, b) => a - b);
   if (margins.length) {
     const bands = [1, 3, 6, 10, Infinity];
@@ -279,8 +293,11 @@ export const ASSUMED: Record<number, { racerId: string; levels: Partial<UpgradeL
 /** The best glider fully upgraded: what a leaked save (or a long career) brings to cup 1. */
 const OVER_UPGRADED = { racerId: 'gyre', levels: { engine: 5, thrusters: 5, steering: 5, tank: 5, armor: 5 }, label: 'maxed Orbis Gyre' };
 
-export function allCupStudies() {
+/** Every cup's study, or only the cups with these ids. */
+export function allCupStudies(only: readonly string[] = []) {
+  for (const id of only) if (!CUPS.some((c) => c.id === id)) throw new Error(`sim-cups: unknown cup id "${id}"`);
   for (const cup of CUPS) {
+    if (only.length > 0 && !only.includes(cup.id)) continue;
     const a = ASSUMED[cup.tier];
     if (!a) throw new Error(`sim-cups: no assumed player machine for tier ${cup.tier} (cup ${cup.id})`);
     const levels = { ...noUpgrades(), ...a.levels };

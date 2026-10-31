@@ -3,7 +3,7 @@
 // the device only (the last few races), exported as text from the debug menu. Nothing is sent.
 
 import type { Race } from '../core/race.ts';
-import type { CourseKind, PlayerInput, RaceEvent, RaceResultRow, RacerStats } from '../core/types.ts';
+import type { CourseKind, PhysicsTuning, PlayerInput, RaceEvent, RaceResultRow, RacerStats } from '../core/types.ts';
 import { trackById } from '../data/tracks/index.ts';
 import type { RaceOutcome, RaceRequest, Settings } from './types.ts';
 import { SIM_DT } from '../data/tuning.ts';
@@ -62,6 +62,8 @@ export interface RaceTelemetry {
   laps: number;
   seed: number;
   settings: Settings;
+  /** The owner's physics tuning this race ran with (debug menu; 1s are the game as tuned). */
+  physics: PhysicsTuning;
   device: { width: number; height: number; dpr: number; ua: string };
   player: { racerId: string; stats: RacerStats };
   field: { name: string; racerId: string; skill: number; stats: RacerStats }[];
@@ -94,6 +96,7 @@ const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
 export class TelemetryRecorder {
   private readonly request: RaceRequest;
   private readonly settings: Settings;
+  private readonly physics: PhysicsTuning;
   private readonly build: string;
   private readonly samples: TelemetrySample[] = [];
   private readonly events: TelemetryEvent[] = [];
@@ -107,9 +110,10 @@ export class TelemetryRecorder {
   private roughSteps = 0;
   private offroad = false;
 
-  constructor(request: RaceRequest, settings: Settings, build: string) {
+  constructor(request: RaceRequest, settings: Settings, physics: PhysicsTuning, build: string) {
     this.request = request;
     this.settings = settings;
+    this.physics = physics;
     this.build = build;
   }
 
@@ -193,6 +197,7 @@ export class TelemetryRecorder {
       laps: this.request.laps,
       seed: this.request.seed,
       settings: this.settings,
+      physics: this.physics,
       device: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio, ua: navigator.userAgent },
       player: { racerId: player.racerId, stats: roundStats(player.stats) },
       field: this.request.entrants

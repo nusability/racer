@@ -1,7 +1,7 @@
 // The handling formulas the physics and the AI share: how a glider's stats turn into steer
 // rate, corner drift and top speed.
 
-import type { RacerState, RacerStats } from './types.ts';
+import type { PhysicsTuning, RacerState, RacerStats } from './types.ts';
 import type { Ribbon } from './track.ts';
 import {
   CORNER_PULL,
@@ -9,6 +9,8 @@ import {
   DAMAGE_TOP_SPEED_LOSS,
   AI_CREST_LOOKBACK,
   CREST_GRIP_MIN,
+  CREST_LIGHTNESS,
+  WALL_CORNER_FRICTION,
   DIP_GRIP_MAX,
   GRAVITY,
   GRIP_REF,
@@ -44,17 +46,53 @@ export function impactWear(speed: number, free: number, ref: number, atRef: numb
   return atRef * (Math.max(0, speed - free) / (ref - free)) ** IMPACT_DAMAGE_EXP;
 }
 
+/** The game as tuned: every multiplier of the owner's live tuning at 1. */
+export const PHYSICS_AS_TUNED: PhysicsTuning = { cornerGrip: 1, crestLightness: 1, suction: 1, wallScrape: 1 };
+
+/** A race's physics, resolved from the owner's multipliers (PhysicsTuning) and data/tuning.ts. */
+export interface Physics {
+  readonly tuning: PhysicsTuning;
+  /** Multiplies every racer's grip stat. */
+  readonly gripScale: number;
+  /** Share of the road's vertical acceleration (against liftOff) a crest takes off the load. */
+  readonly crestLightness: number;
+  /** The road's downward acceleration under the craft at which it leaves the road, m/s²: gravity plus suction. */
+  readonly liftOff: number;
+  /** See WALL_CORNER_FRICTION. */
+  readonly wallFriction: number;
+}
+
+export function resolvePhysics(t: PhysicsTuning): Physics {
+  for (const [k, v] of Object.entries(t)) {
+    if (!(v > 0 && Number.isFinite(v))) throw new Error(`Physics tuning ${k} = ${v}: a multiplier must be positive`);
+  }
+  return {
+    tuning: { ...t },
+    gripScale: t.cornerGrip,
+    crestLightness: CREST_LIGHTNESS * t.crestLightness,
+    liftOff: GRAVITY + HOVER_SUCTION * t.suction,
+    wallFriction: WALL_CORNER_FRICTION * t.wallScrape,
+  };
+}
+
 /**
  * How hard the road presses a craft on at `speed` where it curves vertically by `vcurve` (1/m,
- * negative over a crest), as a share of level road, before clamping: at 0 the craft lifts off.
+ * negative over a crest), as a share of level road, before clamping. It goes light by
+ * crestLightness of the road's vertical acceleration against liftOff, so a crest short of a
+ * lift-off still leaves it some grip (see liftsOff).
  */
-export function roadLoadRaw(speed: number, vcurve: number): number {
-  return 1 + (speed * speed * vcurve) / (GRAVITY + HOVER_SUCTION);
+export function roadLoadRaw(speed: number, vcurve: number, ph: Physics): number {
+  return 1 + (ph.crestLightness * speed * speed * vcurve) / ph.liftOff;
 }
 
 /** The share of its grip a grounded craft has there (see CREST_GRIP_MIN, DIP_GRIP_MAX). */
-export function roadLoad(speed: number, vcurve: number): number {
-  return Math.min(DIP_GRIP_MAX, Math.max(CREST_GRIP_MIN, roadLoadRaw(speed, vcurve)));
+export function roadLoad(speed: number, vcurve: number, ph: Physics): number {
+  return Math.min(DIP_GRIP_MAX, Math.max(CREST_GRIP_MIN, roadLoadRaw(speed, vcurve, ph)));
+}
+
+/** The road falls away under a craft at `speed` faster than gravity and suction can follow: it flies. */
+export function liftsOff(speed: number, vcurve: number, ph: Physics): boolean {
+  return speed * speed * vcurve <= -ph.liftOff;
 }
 
 /** Upper end of the cornering-limit search, m/s: past anything a glider reaches. */
@@ -66,9 +104,9 @@ const CORNER_LIMIT_ITERATIONS = 40;
  * more than `budget` (m/s of steer, as speed²·curvature per unit of grip) times the grip the road
  * load leaves at that speed over vertical curvature `vcurve`. Infinity on the straight.
  */
-export function cornerLimit(curv: number, budget: number, vcurve: number): number {
+export function cornerLimit(curv: number, budget: number, vcurve: number, ph: Physics): number {
   if (curv <= 0) return Infinity;
-  const holds = (v: number) => v * v * curv <= budget * roadLoad(v, vcurve);
+  const holds = (v: number) => v * v * curv <= budget * roadLoad(v, vcurve, ph);
   if (holds(CORNER_LIMIT_SEARCH)) return Infinity;
   let lo = 0;
   let hi = CORNER_LIMIT_SEARCH;

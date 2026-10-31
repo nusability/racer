@@ -10,12 +10,12 @@
 //   boosting wherever it can, braking as late as it can) spends neither braking nor held to a
 //   corner's limit.
 // - brake zones: where that ideal line must shed more than BRAKE_ZONE_DROP of its speed.
-// - crests before corners: crests that leave the ideal line under CREST_LIGHT of its grip with
-//   a corner (radius under CORNER_RADIUS) starting within CREST_CORNER_REACH.
+// - crests before corners: crests whose road falls away under the ideal line at CREST_DROP_ACCEL
+//   or more, with a corner (radius under CORNER_RADIUS) starting within CREST_CORNER_REACH.
 // - elevation range and climb (metres per km of climbing), loops and corkscrews left out.
 
 import type { Ribbon } from '../src/core/track.ts';
-import { cornerLimit, crestGripAt, roadLoadRaw, steerRate } from '../src/core/handling.ts';
+import { cornerLimit, crestGripAt, PHYSICS_AS_TUNED, steerRate, type Physics } from '../src/core/handling.ts';
 import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
 import { ACCEL_TAPER_EXP, BOOST_ACCEL_MULT, BRAKE_DECEL, CORNER_PULL, GRIP_REF } from '../src/data/tuning.ts';
@@ -25,7 +25,19 @@ const STRAIGHT_RADIUS = 1500;
 const CHICANE_RADIUS = 300;
 const CHICANE_GAP = 150;
 const BRAKE_ZONE_DROP = 0.1;
-const CREST_LIGHT = 0.5;
+/**
+ * m/s² of the road falling away under the ideal line that makes a crest: a layout measure, so a
+ * fixed one, not the physics (whose crest lightness and suction the owner tunes live). It is
+ * what the layouts were written against: half of gravity plus the first hover suction (38 + 45).
+ */
+const CREST_DROP_ACCEL = 41.5;
+/**
+ * The physics the ideal line corners with: the one the layouts were written against (crests
+ * lightening the craft fully, against gravity plus the first suction, 38 + 45 m/s²), fixed, so
+ * a layout's character is the layout's and not whatever the owner's live tuning or the tuned
+ * middle ground make of it (more grip would read as more throttle on every track).
+ */
+const LAYOUT_PHYSICS: Physics = { tuning: PHYSICS_AS_TUNED, gripScale: 1, crestLightness: 1, liftOff: 83, wallFriction: 0 };
 const CREST_CORNER_REACH = 200;
 /** The ideal line's glider: the stock starter the hull and lap targets are written for. */
 const IDEAL_RACER = 'dustwing';
@@ -68,7 +80,7 @@ export function idealLine(r: Ribbon): { v: Float64Array; braking: Uint8Array; he
   const budget = (steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
   // Flat out is on boost: the tank is assumed to last (cells and pads keep it topped up).
   const top = stats.topSpeed * (1 + stats.boostPower);
-  const limit = Float64Array.from(r.samples, (p, k) => Math.min(top, cornerLimit(Math.abs(p.curvature), budget * p.grip, crestGripAt(r, k))));
+  const limit = Float64Array.from(r.samples, (p, k) => Math.min(top, cornerLimit(Math.abs(p.curvature), budget * p.grip, crestGripAt(r, k), LAYOUT_PHYSICS)));
   const passes = r.closed ? 2 : 1;
   const accel = (v: number) => {
     const a = stats.accel * BOOST_ACCEL_MULT * (1 - (v / top) ** ACCEL_TAPER_EXP);
@@ -150,7 +162,7 @@ export function layoutCharacter(r: Ribbon, raceLength: number, sprint: boolean):
   let crests = 0;
   let inCrest = false;
   for (let k = 0; k < n; k++) {
-    const light = !smp[k].magnet && !smp[k].gap && roadLoadRaw(line.v[k], smp[k].vcurve) < CREST_LIGHT;
+    const light = !smp[k].magnet && !smp[k].gap && -line.v[k] * line.v[k] * smp[k].vcurve >= CREST_DROP_ACCEL;
     if (light && !inCrest) {
       for (let d = 0; d * r.step <= CREST_CORNER_REACH; d++) {
         const q = r.closed ? (k + d) % n : Math.min(n - 1, k + d);

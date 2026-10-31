@@ -197,7 +197,7 @@ export class RaceSession {
     const def = trackById(request.trackId);
     this.track = new Track(def);
     this.race = this.newRace();
-    this.telemetry = new TelemetryRecorder(request, ctx.settings, __BUILD__);
+    this.telemetry = new TelemetryRecorder(request, ctx.settings, this.race.config.physics, __BUILD__);
 
     const renderer = ctx.renderer;
     const level = graphicsLevel(ctx.settings);
@@ -283,8 +283,10 @@ export class RaceSession {
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
+  /** Each start (and restart) races with the owner's physics tuning as it stands then. */
   private newRace(): Race {
-    return new Race(this.track, { laps: this.request.laps, seed: this.request.seed, entrants: this.request.entrants });
+    const physics = loadDebugFlags(this.ctx.store).physics;
+    return new Race(this.track, { laps: this.request.laps, seed: this.request.seed, entrants: this.request.entrants, physics });
   }
 
   private player(): RacerState {
@@ -333,7 +335,7 @@ export class RaceSession {
   private restart() {
     this.resume();
     this.race = this.newRace();
-    this.telemetry = new TelemetryRecorder(this.request, this.ctx.settings, __BUILD__);
+    this.telemetry = new TelemetryRecorder(this.request, this.ctx.settings, this.race.config.physics, __BUILD__);
     this.acc = 0;
     this.finishedFor = 0;
     this.countdown = null;

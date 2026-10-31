@@ -2,7 +2,8 @@
 // times): progress cheats through Career's debug methods, per-device debug flags, the build
 // stamp, the level viewer, the graphics benchmark, the world-look switches, and the last race
 // logs to copy or share.
-import type { UpgradeId } from '../../core/types.ts';
+import type { PhysicsTuning, UpgradeId } from '../../core/types.ts';
+import { PHYSICS_AS_TUNED } from '../../core/handling.ts';
 import { racerById, RACERS } from '../../data/racers.ts';
 import { MAX_UPGRADE_LEVEL, UPGRADES } from '../../data/upgrades.ts';
 import { clearTelemetry, loadTelemetry, telemetrySummary, telemetryToText } from '../../game/telemetry.ts';
@@ -15,6 +16,10 @@ import { graphicsLevel } from '../../game/graphics.ts';
 import type { AppCtx, Screen } from './context.ts';
 
 const CREDIT_GRANTS = [10_000, 100_000];
+/** The physics panel's range and step per multiplier: from half to twice the tuned value. */
+const PHYSICS_KNOB_MIN = 0.5;
+const PHYSICS_KNOB_MAX = 2;
+const PHYSICS_KNOB_STEP = 0.05;
 
 export function debugScreen(ctx: AppCtx): Screen {
   const career = ctx.career;
@@ -99,6 +104,64 @@ export function debugScreen(ctx: AppCtx): Screen {
       onOff('ao', 'BAKED SHADOW', 'Baked ambient occlusion'),
       onOff('haze', 'HEAT HAZE', 'Desert heat shimmer'),
     );
+  }
+
+  /**
+   * The owner's physics tuning: multipliers of the tuned values, stored on this device and
+   * applied from the next race start (and in its race log). Off the tuned values the panel
+   * says which, in the accent colour, until RESET.
+   */
+  function physicsPanel(): HTMLElement {
+    const knobs: { key: keyof PhysicsTuning; label: string; aria: string }[] = [
+      { key: 'cornerGrip', label: 'CORNER GRIP', aria: 'Corner grip multiplier' },
+      { key: 'crestLightness', label: 'CREST LIGHTNESS', aria: 'Crest lightness multiplier' },
+      { key: 'suction', label: 'SUCTION', aria: 'Suction (lift-off threshold) multiplier' },
+      { key: 'wallScrape', label: 'WALL SCRAPE', aria: 'Wall scrape speed loss multiplier' },
+    ];
+    const status = h('p', 'note debug__physics-status');
+    const show = (t: PhysicsTuning) => {
+      const off = knobs.filter((k) => t[k.key] !== PHYSICS_AS_TUNED[k.key]);
+      status.textContent = off.length === 0 ? 'AS TUNED: every value at ×1.00.' : `TUNED BY HAND: ${off.map((k) => `${k.label} ×${t[k.key].toFixed(2)}`).join(', ')}`;
+      status.classList.toggle('debug__physics-status--changed', off.length > 0);
+    };
+    const set = (key: keyof PhysicsTuning, v: number) => {
+      const f = loadDebugFlags(ctx.store);
+      const physics = { ...f.physics, [key]: v };
+      saveDebugFlags(ctx.store, { ...f, physics });
+      show(physics);
+    };
+    const tuning = loadDebugFlags(ctx.store).physics;
+    show(tuning);
+    const el: HTMLElement = panel(
+      'PHYSICS',
+      h('p', 'note', 'Multipliers of the tuned physics, ×1.00 as tuned. Applies from the next race start; each race log records them.'),
+      ...knobs.map((k) =>
+        stepper({
+          idPrefix: `debug_physics_${k.key}`,
+          label: k.label,
+          aria: k.aria,
+          value: tuning[k.key],
+          min: PHYSICS_KNOB_MIN,
+          max: PHYSICS_KNOB_MAX,
+          step: PHYSICS_KNOB_STEP,
+          format: (v) => `×${v.toFixed(2)}`,
+          onChange: (v) => set(k.key, v),
+        }),
+      ),
+      status,
+      button({
+        id: 'debug_physics_reset_button',
+        label: 'RESET TO TUNED',
+        aria: 'Reset every physics multiplier to the tuned value',
+        onTap: () => {
+          const f = loadDebugFlags(ctx.store);
+          saveDebugFlags(ctx.store, { ...f, physics: { ...PHYSICS_AS_TUNED } });
+          el.replaceWith(physicsPanel());
+          say('Physics: as tuned');
+        },
+      }),
+    );
+    return el;
   }
 
   /** The graphics benchmark's last result on this device, and a button to run it again. */
@@ -237,7 +300,7 @@ export function debugScreen(ctx: AppCtx): Screen {
     const scroll = root.querySelector('.debug__body')?.scrollTop ?? 0;
     root.replaceChildren(
       header('debug', 'DEBUG', career.save.credits, () => ctx.go({ screen: 'menu' })),
-      h('div', 'debug__body list-scroll', flagsPanel(), toolsPanel(), devTracksPanel(), graphicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
+      h('div', 'debug__body list-scroll', flagsPanel(), toolsPanel(), devTracksPanel(), graphicsPanel(), physicsPanel(), lookPanel(), progressPanel(), glidersPanel(), logsPanel()),
       note.el,
     );
     root.querySelector('.debug__body')?.scrollTo(0, scroll);
