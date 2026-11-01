@@ -18,7 +18,7 @@ import type { Ribbon } from '../src/core/track.ts';
 import { cornerLimit, crestGripAt, PHYSICS_AS_TUNED, steerRate, type Physics } from '../src/core/handling.ts';
 import { racerById } from '../src/data/racers.ts';
 import { effectiveStats, noUpgrades } from '../src/data/upgrades.ts';
-import { ACCEL_TAPER_EXP, BOOST_ACCEL_MULT, BRAKE_DECEL, CORNER_PULL, GRIP_REF } from '../src/data/tuning.ts';
+import { ACCEL_TAPER_EXP, BOOST_ACCEL_MULT, BRAKE_DECEL } from '../src/data/tuning.ts';
 
 const CORNER_RADIUS = 600;
 const STRAIGHT_RADIUS = 1500;
@@ -40,6 +40,14 @@ const CREST_DROP_ACCEL = 41.5;
  * line's cornering limit never reads it.
  */
 const LAYOUT_PHYSICS: Physics = { tuning: PHYSICS_AS_TUNED, gripScale: 1, crestLightness: 1, liftOff: 83, wallFriction: 0, airSteer: 0.2, airResponse: 0.35 };
+/**
+ * The corner drift the layouts were written against, fixed for the same reason: 0.11 m/s per
+ * m/s² of speed²·curvature at grip 0.6 (the stock starter's). The game's own (CORNER_PULL at
+ * GRIP_REF) took the owner's hand-tuned corner grip since; read live, it would raise every
+ * track's full throttle without a metre of road changing.
+ */
+const LAYOUT_CORNER_PULL = 0.11;
+const LAYOUT_GRIP_REF = 0.6;
 const CREST_CORNER_REACH = 200;
 /** The ideal line's glider: the stock starter the hull and lap targets are written for. */
 const IDEAL_RACER = 'dustwing';
@@ -79,7 +87,7 @@ const SPRINT_UNIT = 10000;
 export function idealLine(r: Ribbon): { v: Float64Array; braking: Uint8Array; held: Uint8Array } {
   const stats = effectiveStats(racerById(IDEAL_RACER), noUpgrades());
   const n = r.samples.length;
-  const budget = (steerRate(stats) * stats.grip) / (CORNER_PULL * GRIP_REF);
+  const budget = (steerRate(stats) * stats.grip) / (LAYOUT_CORNER_PULL * LAYOUT_GRIP_REF);
   // Flat out is on boost: the tank is assumed to last (cells and pads keep it topped up).
   const top = stats.topSpeed * (1 + stats.boostPower);
   const limit = Float64Array.from(r.samples, (p, k) => Math.min(top, cornerLimit(Math.abs(p.curvature), budget * p.grip, crestGripAt(r, k), LAYOUT_PHYSICS)));

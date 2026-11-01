@@ -33,7 +33,7 @@ const RACE_SPEED = 170;
  * Corners open wider than this radius anywhere. Tighter, down to HAIRPIN_MIN_RADIUS, is a
  * hairpin: allowed where its inside is walled or narrow enough that the inner hard boundary
  * keeps HAIRPIN_INNER_CLEARANCE from the centre of the turn (wide run-off would fold over
- * itself). A hairpin is a brake corner at any speed (a stock starter holds only ~55 m flat out).
+ * itself). A hairpin is a brake corner on boost (a stock starter holds ~72 m boosting, ~46 m without).
  */
 const MIN_RADIUS = 70;
 const HAIRPIN_MIN_RADIUS = 40;

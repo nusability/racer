@@ -4,10 +4,12 @@
 // and the owner's physics tuning, the multipliers every race on this device starts with.
 import type { KeyValueStore } from '../game/save.ts';
 import type { PhysicsTuning } from '../core/types.ts';
-import { PHYSICS_AS_TUNED } from '../core/handling.ts';
+import { PHYSICS_AS_TUNED, PHYSICS_BASE } from '../core/handling.ts';
 import { LOOK_FLAGS_ON, type LookFlags } from '../render/look/look.ts';
 
 const KEY = 'mirage-racer.debug';
+/** The tuning base of flags stored before they recorded PHYSICS_BASE. */
+const UNVERSIONED_PHYSICS_BASE = 1;
 
 export interface DebugFlags {
   enabled: boolean;
@@ -24,7 +26,20 @@ export function loadDebugFlags(store: KeyValueStore): DebugFlags {
   const v: unknown = JSON.parse(raw);
   if (typeof v !== 'object' || v === null) throw new Error(`Bad debug flags in storage: ${raw}`);
   const o = v as Record<string, unknown>;
-  return { enabled: o.enabled === true, perfOverlay: o.perfOverlay === true, look: parseLook(o.look, raw), physics: parsePhysics(o.physics, raw) };
+  const flags = { enabled: o.enabled === true, perfOverlay: o.perfOverlay === true, look: parseLook(o.look, raw), physics: parsePhysics(o.physics, raw) };
+  const base = o.physicsBase === undefined ? UNVERSIONED_PHYSICS_BASE : o.physicsBase;
+  if (base === PHYSICS_BASE) return flags;
+  if (!Number.isInteger(base)) throw new Error(`Bad physics base in storage: ${raw}`);
+  // Saved against other tuned values: the base now holds what the owner tuned (or has moved on),
+  // so the same multipliers would apply twice. Reset them, once, and say so.
+  const stale = flags.physics;
+  const migrated = { ...flags, physics: { ...PHYSICS_AS_TUNED } };
+  saveDebugFlags(store, migrated);
+  const changed = (Object.keys(stale) as (keyof PhysicsTuning)[]).filter((k) => stale[k] !== PHYSICS_AS_TUNED[k]);
+  if (changed.length > 0) {
+    console.info(`debug flags: physics multipliers (${changed.map((k) => `${k} ×${stale[k].toFixed(2)}`).join(', ')}) were set against tuning base ${String(base)}; the base is now ${PHYSICS_BASE}, so they are reset to ×1.00`);
+  }
+  return migrated;
 }
 
 /**
@@ -65,5 +80,5 @@ function parseLook(v: unknown, raw: string): LookFlags {
 }
 
 export function saveDebugFlags(store: KeyValueStore, flags: DebugFlags): void {
-  store.setItem(KEY, JSON.stringify(flags));
+  store.setItem(KEY, JSON.stringify({ ...flags, physicsBase: PHYSICS_BASE }));
 }

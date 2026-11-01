@@ -39,8 +39,12 @@ function oval(id: string, floor: FloorKind, features: TrackDef['features'], y = 
 const AIR_CHECK_TIME = 0.5;
 /** Height the craft is put in the air at, metres: high enough not to land within the check. */
 const AIR_CHECK_HEIGHT = 30;
-/** In the air, full steer (or the same drag) may move the craft at most this share of what it does on the road (a hop is no dodge). */
-const AIR_CHECK_MAX_SHARE = 0.25;
+/**
+ * In the air, full steer (or the same drag) may move the craft at most this share of what it does
+ * on the road: air control stays the lesser kind. A quarter until the owner tuned air steering by
+ * hand on device (~46% since, a hop now edges round a rock); past half, a hop steers like the road.
+ */
+const AIR_CHECK_MAX_SHARE = 0.5;
 /** ...and still at least this share: a pilot can line up a landing. */
 const AIR_CHECK_MIN_SHARE = 0.03;
 /** The drag each step in the nudge run, metres: about a quick thumb. */

@@ -211,18 +211,25 @@ export const LATERAL_SPEED_MAX = 60;
 export const TARGET_OVERREACH = 1;
 /** Corners drift the target outward: m/s of drift per m/s² of speed²·curvature at GRIP_REF. */
 export const CORNER_PULL = 0.11;
-/** Grip (racer stat) at which CORNER_PULL applies as written; more grip, less drift. */
-export const GRIP_REF = 0.6;
+/**
+ * Grip (racer stat) at which CORNER_PULL applies as written; more grip, less drift. It was the
+ * stock starter's 0.6; the owner tuned corner grip by hand on device to ×1.2 of that (every
+ * glider drifting a sixth less), so it sits a sixth under the starter's grip. Here rather than
+ * in each glider's grip stat: the stats (and their upgrade cap) keep their ladder and the whole
+ * field gains alike, as the knob gave it.
+ */
+export const GRIP_REF = 0.5;
 /**
  * Road load: over a crest the road falls away under the craft and presses it on less (in a dip,
  * more): by CREST_LIGHTNESS of speed²·vertical curvature against gravity plus the hover's
  * suction; grip goes with it (see roadLoad). A light craft keeps at least CREST_GRIP_MIN of its
  * grip (its cushion still bites the air), which is also all it has in the air; a compression
  * adds up to DIP_GRIP_MAX. At full lightness (1) every roller took most of the grip away and
- * the craft slid out of every bend over one: half of it is the middle ground the owner asked
- * for, light over a crest, sliding wide only when far too fast.
+ * the craft slid out of every bend over one: half of it was the middle ground the owner asked
+ * for, light over a crest, sliding wide only when far too fast; the owner then tuned it by hand
+ * on device to three quarters of that half.
  */
-export const CREST_LIGHTNESS = 0.5;
+export const CREST_LIGHTNESS = 0.375;
 export const CREST_GRIP_MIN = 0.25;
 export const DIP_GRIP_MAX = 1.5;
 /**
@@ -234,15 +241,15 @@ export const AI_CREST_LOOKBACK = 60;
 export const CORNER_PULL_BRAKE = 0.35;
 /**
  * Share of the steer rate and of a drag's nudge that still moves the lateral target in the air:
- * with no ground to push against a pod lines up its landing, it can't swerve. With
- * AIR_RESPONSE_FACTOR, a stock starter's full input over a typical jump (1.2 s in the air) moves
- * it ~13 m, a lane of a wide (54 m) road, where a fifth of the steer gave ~7.5 m and left the
- * landing where the lip threw it; over a 0.5 s hop it moves ~3.5 m, short of the ~5 m a dodge
- * round a rock needs (on the road: 17 m).
+ * with no ground to push against a pod lines up its landing, it can't swerve. 0.3 of the steer
+ * and 0.5 of the response (AIR_RESPONSE_FACTOR) moved a stock starter ~13 m over a typical jump
+ * (1.2 s in the air), a lane of a wide (54 m) road; the owner tuned both by hand on device to
+ * ×1.65 of that: ~23 m over such a jump, and ~8 m over a 0.5 s hop (enough to edge round a
+ * rock, 17 m on the road). Still under half the road's swerve (tools/sim-physics.ts).
  */
-export const AIR_STEER_FACTOR = 0.3;
-/** Share of the lateral chase's response kept in the air: sideways motion carries on, slowly corrected. */
-export const AIR_RESPONSE_FACTOR = 0.5;
+export const AIR_STEER_FACTOR = 0.495;
+/** Share of the lateral chase's response kept in the air: sideways motion carries on, slowly corrected (×1.65 of 0.5 by the owner's hand, with AIR_STEER_FACTOR). */
+export const AIR_RESPONSE_FACTOR = 0.825;
 /** Frenet denominator floor: keeps ds/dt finite far on the inside of very tight turns. */
 export const FRENET_MIN_DENOM = 0.3;
 
@@ -284,11 +291,12 @@ export const BOUNDARY_GRIND_DAMAGE = 0.08;
  * hold), and friction on that hold scrubs WALL_CORNER_FRICTION of it as deceleration, down to
  * WALL_CORNER_SCRUB_FLOOR of top speed (a wall never pins: tools/sim-check.ts' wall hug). It
  * also wears WALL_CORNER_WEAR hull per second at WALL_CORNER_WEAR_REF m/s² of hold (before
- * armour). A starter flat out against the wall of a 60 m hairpin (375 m/s²) loses ~94 m/s²
- * (more than the air brake) and ~28% hull a second; a 300 m sweeper at the same speed, ~19 m/s²
- * and ~6%/s. Without it, never braking and riding the rails round was the fastest line.
+ * armour). A starter flat out against the wall of a 60 m hairpin (375 m/s²) loses ~141 m/s²
+ * (well past the air brake) and ~28% hull a second; a 300 m sweeper at the same speed, ~28 m/s²
+ * and ~6%/s. Without it, never braking and riding the rails round was the fastest line. It was
+ * 0.25; the owner tuned it by hand on device to ×1.5 of that, so a wall costs a line more.
  */
-export const WALL_CORNER_FRICTION = 0.25;
+export const WALL_CORNER_FRICTION = 0.375;
 export const WALL_CORNER_SCRUB_FLOOR = 0.5;
 export const WALL_CORNER_WEAR = 0.15;
 export const WALL_CORNER_WEAR_REF = 200;
@@ -304,9 +312,10 @@ export const IMPACT_INTENSITY_SPEED = 40;
  * Hover suction pulling the racer onto the road, m/s² on top of gravity: a craft leaves the
  * road where it falls away faster than both (speed²·vertical curvature, see liftsOff). At 45 the
  * new layouts' rollers threw a starter into the air 25–60 times a lap; at 90 it flies off jumps,
- * kickers and only the sharpest crests at speed.
+ * kickers and only the sharpest crests at speed. It was 160; the owner tuned it by hand on
+ * device to ×1.05 of that.
  */
-export const HOVER_SUCTION = 160;
+export const HOVER_SUCTION = 168;
 /**
  * A step's drop in the road's vertical speed past what gravity and suction follow, m/s, that
  * launches a craft whatever the road load says: a ledge, such as a jump's lip. The road is

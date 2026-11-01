@@ -716,9 +716,19 @@ export class Vehicle {
     this.freeBoost = Math.max(this.freeBoost, seconds);
   }
 
-  /** Moves the racer to another ribbon (a junction transfer), keeping its offset to the target. */
-  transfer(branch: number, s: number, x: number) {
+  /**
+   * Moves the racer from ribbon `from` to ribbon `to` (a junction transfer), keeping its offset to
+   * the target, its height over the road and its vertical speed against the road's. Each ribbon's
+   * road is level across in its own space while the two meet on the banked surface, so at a
+   * junction in a bend their centreline heights and slopes differ: carried over as they stood, a
+   * grounded craft found the road metres under it and falling away, and flew off the merge.
+   */
+  transfer(branch: number, s: number, x: number, from: Ribbon, to: Ribbon) {
     const st = this.state;
+    const height = this.alt - from.elevationAt(st.s);
+    const climb = st.vy - from.slopeAt(st.s) * st.speed;
+    this.alt = to.elevationAt(s) + height;
+    st.vy = climb + to.slopeAt(s) * st.speed;
     this.targetX += x - st.x;
     st.branch = branch;
     st.s = s;

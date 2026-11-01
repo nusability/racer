@@ -217,11 +217,12 @@ export const seastacks: TrackDef = {
     // Gull Head: bored through, out into the light and straight into the cliff left.
     { kind: 'tunnel', from: 27.4, to: 32, ceiling: 15 },
     { kind: 'narrow', from: 27, to: 32.3, width: 30, blend: 70 },
-    { kind: 'kicker', at: 68, length: 40, height: 2.5 },
+    // Low enough that its flight at full boost, drifting toward the run-off with the owner's air steering, comes down before the lip.
+    { kind: 'kicker', at: 68, length: 40, height: 2.3 },
     { kind: 'boostPad', at: 116.2, lateral: 0 },
     // The two tide channels.
     // A lower ramp: its flight at full boost into the bend would otherwise carry a craft past the lagoon's buoys.
-    { kind: 'jump', at: 117.48, rampLength: 70, rampHeight: 4, gapLength: 50 },
+    { kind: 'jump', at: 117.48, rampLength: 70, rampHeight: 3.5, gapLength: 50 },
     { kind: 'jump', at: 128.3, rampLength: 70, rampHeight: 5, gapLength: 55 },
     { kind: 'boostPad', at: 117.08, lateral: 0 },
     { kind: 'boostPad', at: 117.12, lateral: 0 },
@@ -257,7 +258,8 @@ export const seastacks: TrackDef = {
       name: 'Arch Gap',
       side: 1,
       from: 132,
-      to: 164.5,
+      // Rejoining any sooner closes its last turn to a ~53 m hairpin that eats the time the cut saves.
+      to: 165,
       width: 20,
       runoff: 0,
       points: [
@@ -272,7 +274,7 @@ export const seastacks: TrackDef = {
         // Threading the arches, then fallen stack rubble.
         { kind: 'arch', at: 2.5, opening: 12, offset: -3, height: 12 },
         { kind: 'arch', at: 2.9, opening: 12, offset: 3, height: 12 },
-        { kind: 'rough', from: 3.2, to: 4.6, amount: 1 },
+        { kind: 'rough', from: 3.2, to: 4.6, amount: 0.8 },
         { kind: 'boulders', from: 3.5, to: 4.1, count: 3, radius: 1.3 },
       ],
     },

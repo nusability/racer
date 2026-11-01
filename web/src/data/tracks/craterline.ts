@@ -469,6 +469,12 @@ export const craterline: TrackDef = {
     // Crater hops: long, floating flights off the rims, then a rim into the first right-hander and
     // the esses.
     { kind: 'kicker', at: 16.8, length: 60, height: 4 },
+    // The hops' and the crater jumps' flights are long (2-3 s at full boost): lining up the landing
+    // in the air carries a craft past the usual run-off, so it widens under them, coming down on
+    // the regolith rather than over the lip.
+    { kind: 'runoff', from: 16.8, to: 26, amount: 25 },
+    { kind: 'runoff', from: 100.1, to: 117, amount: 25 },
+    { kind: 'runoff', from: 325.3, to: 342, amount: 25 },
     // Low enough that its flight at full boost, drifting toward the run-off, comes down before the lip: a wall stops a craft only as high as it stands.
     { kind: 'kicker', at: 23.466, length: 60, height: 3.2 },
     { kind: 'boostCells', at: 39.267, lateral: -10, count: 4, spacing: 26 },

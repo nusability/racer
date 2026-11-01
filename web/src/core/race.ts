@@ -539,7 +539,7 @@ export class Race {
         const into = main.delta(b.entryS, st.s);
         if (into < 0 || into > BRANCH_JUNCTION_LENGTH || b.side * st.x <= main.widthAt(st.s) / 2) continue;
         const p = b.ribbon.project(main.toWorld(st.s, st.x, 0, worldBuf), into, 2 * BRANCH_JUNCTION_LENGTH);
-        v.transfer(b.index, p.s, p.x);
+        v.transfer(b.index, p.s, p.x, main, b.ribbon);
         return;
       }
       return;
@@ -553,7 +553,7 @@ export class Race {
     if (!crossed && !atEnd) return;
     const hint = inEntry ? b.entryS + st.s : b.exitS - (rb.length - st.s);
     const p = main.project(rb.toWorld(st.s, st.x, 0, worldBuf), hint, 2 * BRANCH_JUNCTION_LENGTH);
-    v.transfer(-1, p.s, p.x);
+    v.transfer(-1, p.s, p.x, rb, main);
     if (atEnd) this.mergeOntoMain(v, b);
   }
 
@@ -563,7 +563,7 @@ export class Race {
     const lo = this.track.minXAt(st.s) + RACER_HALF_WIDTH;
     const hi = this.track.maxXAt(st.s) - RACER_HALF_WIDTH;
     const x = Math.min(hi, Math.max(lo, st.x));
-    if (x !== st.x) v.transfer(-1, st.s, x);
+    if (x !== st.x) v.transfer(-1, st.s, x, this.track, this.track);
     if (b.side * st.vx > 0) st.vx = 0;
   }
 }

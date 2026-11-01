@@ -51,6 +51,14 @@ export function impactWear(speed: number, free: number, ref: number, atRef: numb
 /** The game as tuned: every multiplier of the owner's live tuning at 1. */
 export const PHYSICS_AS_TUNED: PhysicsTuning = { cornerGrip: 1, crestLightness: 1, suction: 1, wallScrape: 1, airSteer: 1 };
 
+/**
+ * Which tuned values PhysicsTuning's multipliers are relative to. Bumped whenever a value a knob
+ * scales changes in data/tuning.ts, so multipliers stored against the old values (debug flags)
+ * are reset rather than applied on top of a new base that already holds them. 1: the first
+ * tuning; 2: the owner's hand tuning folded in (MIRA-99).
+ */
+export const PHYSICS_BASE = 2;
+
 /** A race's physics, resolved from the owner's multipliers (PhysicsTuning) and data/tuning.ts. */
 export interface Physics {
   readonly tuning: PhysicsTuning;
