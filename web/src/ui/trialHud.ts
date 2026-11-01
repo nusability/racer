@@ -1,15 +1,19 @@
-// The time trial's HUD over the race HUD: the lap in progress, its live delta to the ghost
-// (green ahead, red behind), best and last lap, each sector line's split, a quick restart, and
-// the small results panel after each lap (or a sprint's run). The physics sliders a lap was
-// flown with show only in debug mode: a player sees time, delta and splits.
-import type { LapResult } from '../game/timeTrial.ts';
+// The time trial's HUD over the race HUD. While a run is flown it stays small and in the
+// top-left corner, text with no box, so it never covers the road ahead: the lap in progress,
+// its live delta to the ghost (green ahead, red behind), each sector line's split, best and
+// last lap, and after each lap a compact readout that fades. When the trial ends, a summary
+// panel takes the screen: the best lap against the ghost, every lap, whether a ghost was saved,
+// and (in debug mode only) the physics sliders the run was flown with.
+import type { LapResult, TrialSummary } from '../game/timeTrial.ts';
 import type { TrialPhysics } from '../game/ghostStore.ts';
-import { TRIAL_LAP_PANEL_SHOWN, TRIAL_SPLIT_SHOWN } from '../game/trialTuning.ts';
-import { formatTime, h } from './kit.ts';
+import { TRIAL_LAP_READOUT_SHOWN, TRIAL_SPLIT_SHOWN } from '../game/trialTuning.ts';
+import { button, formatTime, h } from './kit.ts';
 
 const RESTART_KEYS = new Set(['KeyR']);
 /** A delta this close to zero reads as level, neither ahead nor behind (half the shown precision). */
 const LEVEL = 0.005;
+/** On the race layer while the summary is up: the race HUD and the run's readouts step aside. */
+const SUMMARY_LAYER = 'race-layer--summary';
 
 export interface TrialHudView {
   /** 'LAP n' on a circuit, 'SPRINT' on a sprint. */
@@ -20,23 +24,32 @@ export interface TrialHudView {
   last: number | null;
 }
 
+/** Why the trial ended, for the summary's headline. */
+export interface TrialEnd {
+  title: string;
+  sub: string | null;
+  sprint: boolean;
+}
+
 export interface TrialHud {
   update(v: TrialHudView): void;
   split(sector: number, time: number, delta: number | null): void;
-  /** A lap's (or run's) results; `final` keeps the panel up with RESTART and EXIT. */
-  lap(r: LapResult, final: boolean): void;
-  /** The run ended without a time (a wreck): RESTART and EXIT. */
-  over(title: string): void;
-  /** Clears the panel and split for a fresh start. */
+  /** A lap (or a sprint's run) closed: the compact readout, faded out after a few seconds. */
+  lap(r: LapResult, sprint: boolean): void;
+  /** The trial is over: the summary panel with RETRY, CHANGE TRACK and MENU. */
+  summary(s: TrialSummary, end: TrialEnd): void;
+  /** Clears every readout and the summary for a fresh start. */
   reset(): void;
   dispose(): void;
 }
 
 export interface TrialHudOpts {
-  /** Debug mode: the panel also lists the physics sliders. */
+  /** Debug mode: the summary also lists the physics sliders. */
   debug: boolean;
-  restart(): void;
-  exit(): void;
+  retry(): void;
+  /** Back to the track picker. */
+  tracks(): void;
+  menu(): void;
 }
 
 /** "+0.12" behind, "−0.12" ahead (a true minus sign, so the digits don't shift). */
@@ -49,14 +62,21 @@ function deltaClass(d: number | null): string {
   return d === null || Math.abs(d) < LEVEL ? 'is-level' : d < 0 ? 'is-ahead' : 'is-behind';
 }
 
+function deltaSpan(cls: string, d: number | null, digits: number): HTMLElement {
+  return h('span', `${cls} ${deltaClass(d)}`, d === null ? '' : formatDelta(d, digits));
+}
+
 export function createTrialHud(root: HTMLElement, opts: TrialHudOpts): TrialHud {
   const stageEl = h('span', 'trial__stage');
   const timeEl = h('span', 'trial__time');
   const deltaEl = h('span', 'trial__delta');
+  const splitEl = h('span', 'trial__split');
   const bestEl = h('span', 'trial__line');
   const lastEl = h('span', 'trial__line');
-  const splitEl = h('div', 'trial__split');
-  const panel = h('div', 'trial__panel');
+  const lapOut = h('div', 'trial__lapout');
+  const summaryEl = h('div', 'trial__summary');
+  summaryEl.setAttribute('role', 'dialog');
+  summaryEl.setAttribute('aria-label', 'Time trial summary');
   const restart = h('button', 'trial__restart');
   restart.type = 'button';
   restart.id = 'hud_restart_button';
@@ -65,54 +85,87 @@ export function createTrialHud(root: HTMLElement, opts: TrialHudOpts): TrialHud 
   restart.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    opts.restart();
+    opts.retry();
   });
   const onKey = (e: KeyboardEvent) => {
     if (!RESTART_KEYS.has(e.code)) return;
     e.preventDefault();
-    opts.restart();
+    opts.retry();
   };
   window.addEventListener('keydown', onKey);
-  const el = h('div', 'race-ui trial', h('div', 'trial__tl', stageEl, timeEl, deltaEl, bestEl, lastEl), splitEl, panel, restart);
+  const el = h(
+    'div',
+    'race-ui trial',
+    h('div', 'trial__tl', stageEl, timeEl, h('div', 'trial__row', deltaEl, splitEl), bestEl, lastEl, lapOut),
+    summaryEl,
+    restart,
+  );
   root.append(el);
 
   let last = { stage: '', time: '', delta: '', deltaCls: '', best: '', lastLap: '' };
   let splitUntil = 0;
-  let panelUntil = 0;
+  let lapUntil = 0;
 
-  const physicsRows = (r: LapResult) => {
-    const keys = Object.keys(r.physics);
+  const physicsRows = (physics: TrialPhysics, ghost: TrialPhysics | null) => {
+    const keys = Object.keys(physics);
     if (!opts.debug || keys.length === 0) return null;
-    const ghost: TrialPhysics | null = r.ghostPhysics;
     return h(
       'div',
       'trial__physics',
       h('div', 'trial__phead', 'PHYSICS', ghost ? h('span', 'trial__note', ' · ≠ differs from the ghost') : null),
       ...keys.map((k) => {
-        const differs = ghost !== null && ghost[k] !== r.physics[k];
-        return h('div', `trial__prow${differs ? ' is-diff' : ''}`, h('span', null, k), h('span', null, `×${r.physics[k].toFixed(2)}${differs ? ` ≠ ×${ghost?.[k]?.toFixed(2) ?? '—'}` : ''}`));
+        const differs = ghost !== null && ghost[k] !== physics[k];
+        return h('div', `trial__prow${differs ? ' is-diff' : ''}`, h('span', null, k), h('span', null, `×${physics[k].toFixed(2)}${differs ? ` ≠ ×${ghost?.[k]?.toFixed(2) ?? '—'}` : ''}`));
       }),
     );
   };
 
-  const actions = () => {
-    const btn = (id: string, label: string, aria: string, fn: () => void, primary: boolean) => {
-      const b = h('button', `btn btn--${primary ? 'primary' : 'secondary'}`, h('span', 'btn__label', label));
-      b.type = 'button';
-      b.id = id;
-      b.setAttribute('aria-label', aria);
-      b.addEventListener('click', fn);
-      return b;
-    };
-    return h('div', 'trial__actions', btn('trial_restart_button', 'RESTART', 'Restart the run', opts.restart, true), btn('trial_exit_button', 'EXIT', 'Back to the track list', opts.exit, false));
+  /** The best lap's (or the run's) sectors: its own time, the start ghost's, and the difference. */
+  const sectorTable = (s: TrialSummary, sprint: boolean) => {
+    const best = s.best;
+    if (!best) return null;
+    const ghost = s.ghost;
+    const cell = (text: string, cls = 'trial__cell') => h('span', cls, text);
+    return h(
+      'div',
+      `trial__stable${ghost ? '' : ' is-alone'}`,
+      cell(''),
+      cell(sprint ? 'RUN' : 'BEST', 'trial__cell trial__chead'),
+      ghost ? cell('GHOST', 'trial__cell trial__chead') : null,
+      ghost ? cell('', 'trial__cell trial__chead') : null,
+      ...best.sectors.flatMap((t, i) => [
+        cell(`S${i + 1}`, 'trial__cell trial__split-n'),
+        cell(t.toFixed(2)),
+        ghost ? cell(ghost.sectors[i].toFixed(2)) : null,
+        ghost ? deltaSpan('trial__cell', s.sectorDeltas[i], 2) : null,
+      ]),
+    );
   };
 
-  const showPanel = (children: (HTMLElement | null)[], final: boolean) => {
-    panel.replaceChildren(...children.filter((c): c is HTMLElement => c !== null));
-    if (final) panel.append(actions());
-    panel.classList.add('is-on');
-    panel.classList.toggle('is-final', final);
-    panelUntil = final ? Infinity : performance.now() + TRIAL_LAP_PANEL_SHOWN * 1000;
+  /** Every lap against the run's best. */
+  const lapList = (s: TrialSummary) => {
+    const best = s.best;
+    if (!best || s.laps.length < 2) return null;
+    return h(
+      'div',
+      'trial__laps',
+      ...s.laps.map((r) =>
+        h(
+          'div',
+          `trial__lrow${r === best ? ' is-best' : ''}`,
+          h('span', 'trial__split-n', `LAP ${r.lap}`),
+          h('span', null, formatTime(r.time)),
+          r === best ? h('span', 'trial__tag', 'BEST') : deltaSpan('trial__ld', r.time - best.time, 3),
+        ),
+      ),
+    );
+  };
+
+  /** Against the ghost the run started with: saved over it, short of it, or the first ever. */
+  const ghostLine = (s: TrialSummary) => {
+    if (!s.best) return h('div', 'trial__sghost is-level', 'NO LAP SET');
+    if (s.ghostSaved) return h('div', 'trial__sghost is-ahead', s.delta === null ? 'FIRST GHOST SAVED' : `NEW GHOST SAVED · ${formatDelta(s.delta, 3)}`);
+    return h('div', `trial__sghost ${deltaClass(s.delta)}`, s.delta === null ? '' : `${formatDelta(s.delta, 3)} TO THE GHOST`);
   };
 
   return {
@@ -135,43 +188,77 @@ export function createTrialHud(root: HTMLElement, opts: TrialHudOpts): TrialHud 
       set('lastLap', l, () => (lastEl.textContent = l));
       const now = performance.now();
       splitEl.classList.toggle('is-on', now < splitUntil);
-      if (now >= panelUntil) panel.classList.remove('is-on');
+      lapOut.classList.toggle('is-on', now < lapUntil);
     },
     split(sector, time, delta) {
       splitEl.className = `trial__split ${deltaClass(delta)}`;
-      splitEl.replaceChildren(h('span', 'trial__split-n', `S${sector}`), h('span', null, delta === null ? formatTime(time) : formatDelta(delta, 2)));
+      splitEl.replaceChildren(h('span', 'trial__split-n', `S${sector} `), delta === null ? formatTime(time) : formatDelta(delta, 2));
       splitUntil = performance.now() + TRIAL_SPLIT_SHOWN * 1000;
     },
-    lap(r, final) {
-      const head = r.newBest ? (r.best === null ? 'FIRST TIME' : 'NEW BEST') : r.delta !== null ? `${formatDelta(r.delta, 3)} TO BEST` : '';
-      showPanel(
-        [
-          h('div', 'trial__ptitle', final ? 'RUN' : `LAP ${r.lap}`),
-          h('div', 'trial__ptime', formatTime(r.time)),
-          h('div', `trial__phead2 ${r.newBest ? 'is-ahead' : deltaClass(r.delta)}`, head, r.newBest && r.delta !== null ? ` ${formatDelta(r.delta, 3)}` : ''),
+    lap(r, sprint) {
+      const sectors = r.sectors.map((s, i) => {
+        const d = r.sectorDeltas[i];
+        return h('span', `trial__ls ${deltaClass(d)}`, h('span', 'trial__split-n', `S${i + 1} `), d === null ? s.toFixed(2) : formatDelta(d, 2));
+      });
+      lapOut.replaceChildren(
+        h(
+          'div',
+          'trial__lhead',
+          h('span', 'trial__split-n', sprint ? 'RUN' : `LAP ${r.lap}`),
+          h('span', null, formatTime(r.time)),
+          r.delta === null ? null : deltaSpan('trial__ld', r.delta, 3),
+          r.newBest ? h('span', 'trial__tag', 'NEW BEST') : null,
+        ),
+        h('div', 'trial__lsectors', ...sectors),
+      );
+      lapUntil = performance.now() + TRIAL_LAP_READOUT_SHOWN * 1000;
+    },
+    summary(s, end) {
+      const laps = lapList(s);
+      const physics = physicsRows(s.physics, s.ghost?.physics ?? null);
+      summaryEl.replaceChildren(
+        h(
+          'div',
+          'trial__spanel',
+          h('div', 'trial__stitle', end.title),
+          end.sub ? h('div', 'trial__ssub', end.sub) : null,
           h(
             'div',
-            'trial__sectors',
-            ...r.sectors.map((s, i) => {
-              const d = r.sectorDeltas[i];
-              return h('div', 'trial__sector', h('span', 'trial__split-n', `S${i + 1}`), h('span', null, s.toFixed(2)), h('span', `trial__sd ${deltaClass(d)}`, d === null ? '' : formatDelta(d, 2)));
-            }),
+            'trial__sbody',
+            h(
+              'div',
+              'trial__scol',
+              h('div', 'trial__slabel', end.sprint ? 'RUN' : 'BEST LAP'),
+              h('div', 'trial__stime', s.best ? formatTime(s.best.time) : '—'),
+              ghostLine(s),
+              sectorTable(s, end.sprint),
+            ),
+            laps || physics ? h('div', 'trial__scol', laps, physics) : null,
           ),
-          physicsRows(r),
-        ],
-        final,
+          h(
+            'div',
+            'trial__actions',
+            button({ id: 'trial_retry_button', label: 'RETRY', aria: 'Retry the trial from the grid', variant: 'primary', onTap: opts.retry }),
+            button({ id: 'trial_tracks_button', label: 'CHANGE TRACK', aria: 'Back to the track list', onTap: opts.tracks }),
+            button({ id: 'trial_menu_button', label: 'MENU', aria: 'Back to the main menu', variant: 'ghost', onTap: opts.menu }),
+          ),
+        ),
       );
-    },
-    over(title) {
-      showPanel([h('div', 'trial__ptitle', title)], true);
+      summaryEl.classList.add('is-on');
+      root.classList.add(SUMMARY_LAYER);
     },
     reset() {
-      panel.classList.remove('is-on');
-      panelUntil = 0;
+      summaryEl.classList.remove('is-on');
+      summaryEl.replaceChildren();
+      root.classList.remove(SUMMARY_LAYER);
       splitUntil = 0;
+      lapUntil = 0;
+      splitEl.classList.remove('is-on');
+      lapOut.classList.remove('is-on');
     },
     dispose() {
       window.removeEventListener('keydown', onKey);
+      root.classList.remove(SUMMARY_LAYER);
       el.remove();
     },
   };

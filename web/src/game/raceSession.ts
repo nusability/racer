@@ -37,7 +37,7 @@ import { TrialSession } from './trialSession.ts';
 import { loadDebugFlags } from '../ui/debugFlags.ts';
 import { createPerfOverlay, type PerfOverlay } from '../ui/perfOverlay.ts';
 import { showPauseMenu } from '../ui/pauseMenu.ts';
-import type { CrashReason, Hud, HudView, InputSource, RaceOutcome, RacePerf, RaceRequest, Settings, WreckInfo } from './types.ts';
+import type { CrashReason, Hud, HudView, InputSource, RaceDone, RaceExit, RaceOutcome, RaceRequest, Settings, WreckInfo } from './types.ts';
 import { graphicsLevel } from './graphics.ts';
 import { SlowFrameWatch } from './slowFrameWatch.ts';
 import { GRAPHICS_PROFILE } from '../render/graphicsTuning.ts';
@@ -124,10 +124,38 @@ const WRECK_KIND: Record<CrashReason, WreckKind> = {
 /** Wrecks that end a fall off the course: the debris lands on the floor the craft hit. */
 const FALL_ENDS = new Set<CrashReason>(['fell', 'offEdge', 'splash']);
 
+/**
+ * The session's state that belongs to one start from the grid. A restart replaces it whole, so
+ * nothing a run showed (a wreck's slow motion, its banner, a countdown, a flashed name) can
+ * carry into the next one.
+ */
+interface RunState {
+  /** Sim time owed to the fixed step. */
+  acc: number;
+  countdown: number | null;
+  countdownClearAt: number;
+  /** How hard a wall and rough ground battered the player this frame, for the scrape and rumble loops. */
+  scrapeLevel: number;
+  roughLevel: number;
+  /** The named way (shortcut, route) last flashed for the player; null on plain main road. */
+  shownPath: string | null;
+  /** The sprint sector last shown (sprints count sectors where circuits count laps). */
+  shownSector: number;
+  finishedFor: number;
+  /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
+  playerWreck: WreckInfo | null;
+  wreckFor: number;
+  wreckBannerShown: boolean;
+}
+
+function freshRun(): RunState {
+  return { acc: 0, countdown: null, countdownClearAt: 0, scrapeLevel: 0, roughLevel: 0, shownPath: null, shownSector: 1, finishedFor: 0, playerWreck: null, wreckFor: 0, wreckBannerShown: false };
+}
+
 export class RaceSession {
   private readonly ctx: SessionContext;
   private readonly request: RaceRequest;
-  private readonly onDone: (o: RaceOutcome | null, perf: RacePerf) => void;
+  private readonly onDone: RaceDone;
   /** The graphics safety net's view of this race's frame rate. */
   private readonly slowWatch = new SlowFrameWatch();
   private readonly track: Track;
@@ -149,20 +177,11 @@ export class RaceSession {
   private readonly hud: Hud;
   private readonly input: InputSource;
   private readonly hudRoot: HTMLElement;
-  private acc = 0;
   private clock = 0;
-  private countdown: number | null = null;
-  private countdownClearAt = 0;
-  private scrapeLevel = 0;
-  /** How hard rough ground battered the player this frame, for the rumble loop. */
-  private roughLevel = 0;
-  /** The named way (shortcut, route) last flashed for the player; null on plain main road. */
-  private shownPath: string | null = null;
-  /** The sprint sector last shown (sprints count sectors where circuits count laps). */
-  private shownSector = 1;
+  /** What this start (or restart) has shown so far; replaced whole on a restart. */
+  private run: RunState = freshRun();
   private readonly minimap: Minimap;
   private readonly dotColors: string[];
-  private finishedFor = 0;
   private paused = false;
   private done = false;
   private pauseClose: (() => void) | null = null;
@@ -180,10 +199,6 @@ export class RaceSession {
   /** On-screen fps / draw-call readout, when the debug flag asks for it. */
   private readonly perf: PerfOverlay | null;
   private fpsSmoothed = 0;
-  /** Set once the player is wrecked: drives the slow-motion cinematic, then ends the race. */
-  private playerWreck: WreckInfo | null = null;
-  private wreckFor = 0;
-  private wreckBannerShown = false;
   /** The world's live look (null: drawn as before the look pass), its post pipeline and glider reflections. */
   private readonly look: ActiveLook | null;
   private readonly post: PostFx | null;
@@ -197,7 +212,7 @@ export class RaceSession {
   /** A time trial's ghost, splits and HUD; null in a race against the field. */
   private readonly trial: TrialSession | null;
 
-  constructor(ctx: SessionContext, request: RaceRequest, onDone: (o: RaceOutcome | null, perf: RacePerf) => void) {
+  constructor(ctx: SessionContext, request: RaceRequest, onDone: RaceDone) {
     this.ctx = ctx;
     this.request = request;
     this.onDone = onDone;
@@ -305,8 +320,9 @@ export class RaceSession {
       ghosts: this.ctx.ghosts,
       setup: { glider: player.racerId, upgrades: this.request.upgrades ?? fail('a time trial request carries the glider\'s upgrades'), physics: { ...this.race.config.physics }, build: __BUILD__ },
       debug: loadDebugFlags(this.ctx.store).enabled,
-      restart: () => this.restart(),
-      exit: () => this.finish(null),
+      retry: () => this.restart(),
+      tracks: () => this.finish(null, 'back'),
+      menu: () => this.finish(null, 'menu'),
     });
   }
 
@@ -343,14 +359,22 @@ export class RaceSession {
   }
 
   pause() {
-    if (this.paused || this.done) return;
+    // A trial's summary has its own buttons; a pause menu over it would only repeat them.
+    if (this.paused || this.done || this.trial?.isOver) return;
     this.paused = true;
     this.ctx.audio.stopRaceSounds();
     this.pauseClose = showPauseMenu(this.ctx.uiRoot, {
       resume: () => this.resume(),
       restart: () => this.restart(),
-      quit: () => this.finish(null),
+      quit: () => (this.trial ? this.leaveTrial() : this.finish(null, 'back')),
     });
+  }
+
+  /** Quitting a trial ends it on its summary, the scene held still (still paused) where the player left it. */
+  private leaveTrial() {
+    this.pauseClose?.();
+    this.pauseClose = null;
+    this.endTrial();
   }
 
   private resume() {
@@ -359,22 +383,23 @@ export class RaceSession {
     this.paused = false;
   }
 
+  /**
+   * Back to the grid: the pause menu's RESTART, a trial's ↻ (or R) and its summary's RETRY all
+   * come here, mid-run, mid-wreck or after the end. Everything the last run put on screen goes:
+   * its state, the HUD's banner and messages, the wreck's camera, debris, fire and slow motion.
+   */
   private restart() {
     this.resume();
     this.saveTrialLog();
     this.race = this.newRace();
     this.trial?.restart({ ...this.race.config.physics });
     this.telemetry = new TelemetryRecorder(this.request, this.ctx.settings, this.race.config.physics, __BUILD__);
-    this.acc = 0;
-    this.finishedFor = 0;
-    this.countdown = null;
-    this.shownPath = null;
-    this.shownSector = 1;
+    // With no wreck in the new run, the chase camera takes the lens back from the wreck camera.
+    this.run = freshRun();
+    this.hud.reset();
+    this.effects.clear();
     this.cam.reset();
     this.trackScene.resetCells();
-    this.playerWreck = null;
-    this.wreckFor = 0;
-    this.wreckBannerShown = false;
     this.vista?.reset();
     this.ctx.audio.setTimeScale(1);
     this.syncSnapshots(true);
@@ -382,11 +407,14 @@ export class RaceSession {
       if (v.wrecked) v.model.reset();
       v.wrecked = false;
       v.lastHit = null;
+      v.offroad = false;
+      v.wasBoosting = false;
       v.model.root.visible = true;
     }
   }
 
-  private finish(outcome: RaceOutcome | null) {
+  /** `exit`: where a race without an outcome (quit, or a trial left) goes. */
+  private finish(outcome: RaceOutcome | null, exit: RaceExit) {
     if (this.done) return;
     this.done = true;
     // A quit race isn't worth a log: there is no outcome to explain. A trial is only ever left
@@ -394,18 +422,22 @@ export class RaceSession {
     if (this.trial) this.saveTrialLog();
     else if (outcome) saveTelemetry(this.telemetry.finish(outcome));
     this.dispose();
-    this.onDone(outcome, { sustainedSlow: this.slowWatch.sustainedSlow });
+    this.onDone(outcome, { sustainedSlow: this.slowWatch.sustainedSlow }, exit);
   }
 
   /** The run's log, once it has a lap: the race as it stands, with its lap times and physics. */
   private saveTrialLog() {
     if (!this.trial || this.trial.lapsDone === 0) return;
-    saveTelemetry(this.telemetry.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck }, this.trial.telemetry()));
+    saveTelemetry(this.telemetry.finish({ request: this.request, results: this.race.results(), playerWreck: this.run.playerWreck }, this.trial.telemetry()));
   }
 
-  /** A trial's run ended: the scene plays on behind its panel until RESTART or EXIT. */
+  /**
+   * A trial ended: in a wreck or at the line, the scene plays on behind its summary; left from
+   * the pause menu, it holds still. Left during a wreck or past the line, that is how it ended.
+   */
   private endTrial(): void {
-    this.trial?.end(this.playerWreck !== null);
+    const wreck = this.run.playerWreck;
+    this.trial?.end(wreck ? { kind: 'wreck', wreck } : this.player().finishTime !== null ? { kind: 'finished' } : { kind: 'left' });
   }
 
   /** Advance and draw one display frame. */
@@ -415,29 +447,29 @@ export class RaceSession {
     const scale = this.timeScale();
     const dt = real * scale;
     if (!this.paused) {
-      if (this.playerWreck) {
-        this.wreckFor += real;
+      if (this.run.playerWreck) {
+        this.run.wreckFor += real;
         // Let the first moments of the break-up play clean before the banner lands.
-        if (!this.wreckBannerShown && this.wreckFor >= SESSION_WRECK_BANNER_DELAY) {
-          this.wreckBannerShown = true;
-          this.hud.wrecked(this.playerWreck);
+        if (!this.run.wreckBannerShown && this.run.wreckFor >= SESSION_WRECK_BANNER_DELAY) {
+          this.run.wreckBannerShown = true;
+          this.hud.wrecked(this.run.playerWreck);
         }
         this.ctx.audio.setTimeScale(scale);
-        if (this.wreckFor >= SESSION_WRECK_LINGER) {
+        if (this.run.wreckFor >= SESSION_WRECK_LINGER) {
           if (this.trial) this.endTrial();
           else {
-            this.finish({ request: this.request, results: this.race.results(), playerWreck: this.playerWreck });
+            this.finish({ request: this.request, results: this.race.results(), playerWreck: this.run.playerWreck }, 'back');
             return;
           }
         }
       }
       this.clock += dt;
-      this.acc += dt;
+      this.run.acc += dt;
       this.telemetry.frame(real);
       this.slowWatch.frame(dtRaw);
       const input: PlayerInput = this.input.read();
-      while (this.acc >= SIM_DT) {
-        this.acc -= SIM_DT;
+      while (this.run.acc >= SIM_DT) {
+        this.run.acc -= SIM_DT;
         const events = this.race.step(input);
         this.telemetry.step(this.race, input, events);
         this.trial?.step(this.race, events);
@@ -446,13 +478,13 @@ export class RaceSession {
         this.syncSnapshots(false);
         for (const ev of events) this.handleEvent(ev);
       }
-      if (this.race.phase === 'finished' && !this.playerWreck) {
-        this.finishedFor += dt;
+      if (this.race.phase === 'finished' && !this.run.playerWreck) {
+        this.run.finishedFor += dt;
         // A sprint's results wait for the player to have taken in the view from its end.
-        if (this.finishedFor >= SESSION_FINISH_LINGER && (this.vista === null || this.vista.shown >= SESSION_VISTA_LINGER)) {
+        if (this.run.finishedFor >= SESSION_FINISH_LINGER && (this.vista === null || this.vista.shown >= SESSION_VISTA_LINGER)) {
           if (this.trial) this.endTrial();
           else {
-            this.finish({ request: this.request, results: this.race.results(), playerWreck: null });
+            this.finish({ request: this.request, results: this.race.results(), playerWreck: null }, 'back');
             return;
           }
         }
@@ -467,23 +499,23 @@ export class RaceSession {
     const pid = this.request.entrants[pi].id;
     switch (ev.type) {
       case 'countdown':
-        this.countdown = ev.n;
+        this.run.countdown = ev.n;
         audio.oneShot(ev.n === 0 ? 'go' : 'countdown');
-        if (ev.n === 0) this.countdownClearAt = this.clock + SESSION_GO_SHOWN;
+        if (ev.n === 0) this.run.countdownClearAt = this.clock + SESSION_GO_SHOWN;
         return;
       case 'scrape': {
         const i = this.indexOf(ev.id);
         if (this.nearCamera(i)) this.wallSparks(i, ev.side, ev.intensity);
         if (ev.id === pid) {
           this.cam.addShake(SESSION_SHAKE_SCRAPE * ev.intensity);
-          this.scrapeLevel = Math.max(this.scrapeLevel, ev.intensity);
+          this.run.scrapeLevel = Math.max(this.run.scrapeLevel, ev.intensity);
         }
         return;
       }
       case 'rough':
         if (ev.id === pid) {
           this.cam.addShake(SESSION_SHAKE_ROUGH * ev.intensity);
-          this.roughLevel = Math.max(this.roughLevel, ev.intensity);
+          this.run.roughLevel = Math.max(this.run.roughLevel, ev.intensity);
         }
         return;
       case 'jolt': {
@@ -529,7 +561,7 @@ export class RaceSession {
         if (ev.id === pid) {
           // A hull worn out by many knocks still names the last one: it is what the player saw.
           const cause = ev.reason === 'obstacle' || ev.reason === 'hazard' || ev.reason === 'destroyed' ? v.lastHit : null;
-          this.playerWreck = { reason: ev.reason, cause };
+          this.run.playerWreck = { reason: ev.reason, cause };
           // From where the player last saw the craft: the interpolated pose, not the raw step.
           this.wreckCam.begin(this.track.ribbon(v.draw.branch), v.draw.s, v.model.debris(this.debris));
           audio.oneShot('wreck');
@@ -648,8 +680,8 @@ export class RaceSession {
 
   /** `dt`: race seconds (slowed during the wreck); `real`: display seconds. */
   private draw(dt: number, real: number) {
-    if (this.countdown === 0 && this.clock >= this.countdownClearAt) this.countdown = null;
-    const alpha = this.paused ? 1 : this.acc / SIM_DT;
+    if (this.run.countdown === 0 && this.clock >= this.run.countdownClearAt) this.run.countdown = null;
+    const alpha = this.paused ? 1 : this.run.acc / SIM_DT;
     const pi = this.playerIndex();
     this.race.racers.forEach((r, i) => {
       const v = this.views[i];
@@ -691,20 +723,20 @@ export class RaceSession {
     const top = this.request.entrants[pi].stats.topSpeed;
     const speedFrac = p.speed / top;
     const pv = this.views[pi].draw;
-    if (this.playerWreck) this.wreckCam.update(dt, real, this.views[pi].model.debris(this.debris));
+    if (this.run.playerWreck) this.wreckCam.update(dt, real, this.views[pi].model.debris(this.debris));
     // The camera follows the interpolated pose, not the raw step, or it judders.
     else if (!this.vista?.update(this.paused ? 0 : real, this.views[pi].model.root.position, p.finishTime !== null && p.speed === 0)) {
       this.cam.update(dt, this.track, { ...p, branch: pv.branch, s: pv.s, x: pv.x, y: pv.y, fall: pv.falling ? pv.fall : null }, speedFrac, this.clock);
     }
     // Entering a shortcut or a fork's route (the main road's own route included) names it.
     const path = this.track.pathNameAt(pv.branch, pv.s);
-    if (path !== this.shownPath) {
+    if (path !== this.run.shownPath) {
       if (path !== null) this.hud.flash(path.toUpperCase());
-      this.shownPath = path;
+      this.run.shownPath = path;
     }
     const stage = this.stage(p);
-    if (stage.kind === 'sector' && stage.n !== this.shownSector) {
-      this.shownSector = stage.n;
+    if (stage.kind === 'sector' && stage.n !== this.run.shownSector) {
+      this.run.shownSector = stage.n;
       if (p.finishTime === null) {
         this.ctx.audio.oneShot('lap');
         this.hud.flash(stage.n === stage.of ? 'FINAL SECTOR' : `SECTOR ${stage.n}`);
@@ -713,21 +745,21 @@ export class RaceSession {
     this.minimap.update(this.race.racers, pi, this.dotColors);
     this.speedLines.update(dt, Math.max(0, Math.min(1, (speedFrac - 0.45) * 1.6)) + (p.boosting ? 0.35 : 0));
     // A wrecked player has no wake to ride; its draft only decays in the sim.
-    this.draftLines.update(dt, this.playerWreck ? 0 : p.draft);
+    this.draftLines.update(dt, this.run.playerWreck ? 0 : p.draft);
     this.effects.update(dt, this.cam.camera);
     this.trackScene.pressField(this.race.racers, this.race.time);
     // Hazards run on race time: the scene must show exactly what the simulation collides with.
     this.trackScene.update(this.race.time, this.cam.camera.position);
 
-    if (!this.paused && !this.playerWreck) {
+    if (!this.paused && !this.run.playerWreck) {
       const surface = this.ctx.audio.environment.surfaceAt(p.branch, p.s, p.x);
       this.ctx.audio.engine({ speed: p.speed, topSpeed: top, boosting: p.boosting, airborne: p.airborne, style: this.playerStyle, surface });
       this.ctx.audio.wind(Math.min(1, speedFrac));
-      this.ctx.audio.scrapeLoop(this.scrapeLevel);
-      this.ctx.audio.rumbleLoop(this.roughLevel);
-      this.roughLevel = 0;
+      this.ctx.audio.scrapeLoop(this.run.scrapeLevel);
+      this.ctx.audio.rumbleLoop(this.run.roughLevel);
+      this.run.roughLevel = 0;
       this.ctx.audio.draft(p.draft);
-      this.scrapeLevel = 0;
+      this.run.scrapeLevel = 0;
     }
     // The world keeps sounding through the wreck cinematic; hazards run on race time.
     if (!this.paused) {
@@ -745,7 +777,7 @@ export class RaceSession {
       damage: p.damage,
       boosting: p.boosting,
       draft: p.draft,
-      countdown: this.countdown,
+      countdown: this.run.countdown,
       finished: p.finishTime !== null,
     });
     this.input.showTank(p.boost);
@@ -755,7 +787,7 @@ export class RaceSession {
       const ribbon = this.track.ribbon(pv.branch);
       const ahead = this.look?.look.wetRoad.curlLookAhead ?? 0;
       const curling = ribbon.isMagnet(pv.s) || ribbon.isMagnet(pv.branch >= 0 ? Math.min(ribbon.length, pv.s + ahead) : pv.s + ahead);
-      this.post.render(this.scene, this.cam.camera, { dt, boosting: p.boosting && !this.playerWreck, speedFrac, roadUp: this.roadUp, curling });
+      this.post.render(this.scene, this.cam.camera, { dt, boosting: p.boosting && !this.run.playerWreck, speedFrac, roadUp: this.roadUp, curling });
     } else {
       this.ctx.renderer.render(this.scene, this.cam.camera);
     }
@@ -776,8 +808,8 @@ export class RaceSession {
 
   /** Slow motion while the player's craft comes apart, easing back to real time. */
   private timeScale(): number {
-    if (!this.playerWreck) return 1;
-    const t = this.wreckFor;
+    if (!this.run.playerWreck) return 1;
+    const t = this.run.wreckFor;
     if (t < SESSION_WRECK_SLOWMO_HOLD) return SESSION_WRECK_SLOWMO;
     const u = Math.min(1, (t - SESSION_WRECK_SLOWMO_HOLD) / SESSION_WRECK_SLOWMO_EASE);
     return SESSION_WRECK_SLOWMO + (1 - SESSION_WRECK_SLOWMO) * u * u;

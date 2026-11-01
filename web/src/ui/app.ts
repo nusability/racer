@@ -99,12 +99,12 @@ export function startApp(deps: AppDeps): void {
     clear();
     shell.hidden = true;
     graphics.cancel();
-    deps.launchRace(req, (outcome, perf) => {
+    deps.launchRace(req, (outcome, perf, exit) => {
       racing = false;
       shell.hidden = false;
-      // A time trial ends back at its picker: it has nothing for the career to apply.
-      if (outcome === null || req.mode === 'timeTrial') go(back);
-      else go({ screen: 'results', report: career.applyOutcome(outcome) });
+      // A time trial never has an outcome (it has nothing for the career to apply), so it always leaves by `exit`.
+      if (outcome !== null) go({ screen: 'results', report: career.applyOutcome(outcome) });
+      else go(exit === 'menu' ? { screen: 'menu' } : back);
       safetyNet(perf);
     });
   }

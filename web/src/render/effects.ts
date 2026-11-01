@@ -348,6 +348,16 @@ export class Effects {
     this.ringCarry[i] = carry;
   }
 
+  /** A restart: the last run's fire, smoke, sparks, rings and scorch marks all go at once. */
+  clear(): void {
+    this.soft.clear();
+    this.glow.clear();
+    this.scorch.clear();
+    this.ringLife.fill(0);
+    for (let i = 0; i < RING_COUNT; i++) this.rings.setMatrixAt(i, tmpMat.makeScale(0, 0, 0));
+    this.rings.instanceMatrix.needsUpdate = true;
+  }
+
   dispose(): void {
     this.scene.remove(this.soft.buf.points, this.glow.buf.points, this.rings, this.scorch.mesh);
     this.scorch.dispose();

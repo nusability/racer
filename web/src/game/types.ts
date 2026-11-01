@@ -47,8 +47,14 @@ export interface RacePerf {
   sustainedSlow: boolean;
 }
 
-/** Menus hand a race to the runtime and get the outcome back; quitting returns null. */
-export type RaceLauncher = (req: RaceRequest, onDone: (outcome: RaceOutcome | null, perf: RacePerf) => void) => void;
+/** Where a race that ends without an outcome goes: back to the screen it came from, or the main menu. */
+export type RaceExit = 'back' | 'menu';
+
+/** The race is over: its outcome (null when quit, and always for a time trial), and where it leaves to without one. */
+export type RaceDone = (outcome: RaceOutcome | null, perf: RacePerf, exit: RaceExit) => void;
+
+/** Menus hand a race to the runtime and get the outcome back. */
+export type RaceLauncher = (req: RaceRequest, onDone: RaceDone) => void;
 
 export type SteeringMode = 'drag' | 'tilt' | 'buttons';
 /** Boost and brake on touch: one thumb sliding on the throttle pad, or two separate buttons. */
@@ -118,8 +124,10 @@ export interface Hud {
   pulseBoost(): void;
   /** A repair cell was collected: the hull bar flashes green. */
   pulseRepair(): void;
-  /** The player is wrecked: a race-over banner that stays until dispose(). */
+  /** The player is wrecked: a race-over banner that stays until reset() or dispose(). */
   wrecked(wreck: WreckInfo): void;
+  /** A restart: clears what the last run left up (the wreck banner, a message mid-flash). */
+  reset(): void;
   dispose(): void;
 }
 

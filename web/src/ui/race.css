@@ -330,36 +330,42 @@
 }
 
 /* --- Time trial ------------------------------------------------------------------------------- */
-/* Alone on the track, place and race time say nothing: the trial's own block takes their corner. */
+/* Alone on the track, place and race time say nothing: the trial's own block takes their corner.
+   While a run is flown everything of the trial is text in that corner with no box behind it, so
+   it never covers the road ahead; a dark outline keeps it legible over bright sand and snow. */
 .race-layer--trial .hud__tl { display: none; }
 .trial { position: absolute; inset: 0; z-index: 22; pointer-events: none; }
-.trial__tl { position: absolute; top: var(--safe-t); left: var(--safe-l); display: flex; flex-direction: column; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; line-height: 1.05; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55); }
+.trial__tl {
+  position: absolute;
+  top: var(--safe-t);
+  left: var(--safe-l);
+  display: flex;
+  flex-direction: column;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
 .trial__stage { font-size: 16px; color: var(--gold); letter-spacing: 0.12em; }
 .trial__time { font-size: 38px; font-style: italic; font-weight: 900; }
-.trial__delta { font-size: 24px; font-style: italic; font-weight: 900; min-height: 1.05em; }
+.trial__row { display: flex; align-items: baseline; gap: 10px; min-height: 1.6em; }
+.trial__delta { font-size: 24px; font-style: italic; font-weight: 900; }
 .trial__line { font-size: 14px; color: var(--sand-dim); }
 .trial .is-ahead { color: var(--green); }
 .trial .is-behind { color: var(--red); }
 .trial .is-level { color: var(--sand); }
-.trial__split {
-  position: absolute;
-  top: 14%;
-  left: 50%;
-  transform: translate(-50%, 0);
-  display: flex;
-  gap: 10px;
-  padding: 4px 14px;
-  border-radius: 10px;
-  background: var(--panel);
-  font-size: 28px;
-  font-weight: 900;
-  font-style: italic;
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
+/* The split at a sector line, beside the live delta; and after a lap its readout under BEST and
+   LAST. Both fade: they hold their room so nothing above or below them moves. */
+.trial__split { font-size: 18px; font-weight: 900; font-style: italic; opacity: 0; transition: opacity 0.2s; }
 .trial__split.is-on { opacity: 1; }
-.trial__split-n { color: var(--sand-dim); }
+.trial__split-n { color: var(--sand-dim); font-style: normal; }
+.trial__lapout { margin-top: 4px; min-height: 2.3em; opacity: 0; transition: opacity 0.4s; }
+.trial__lapout.is-on { opacity: 1; }
+.trial__lhead { display: flex; align-items: baseline; gap: 8px; font-size: 16px; font-weight: 900; }
+.trial__ld { font-style: italic; }
+.trial__tag { color: var(--green); font-size: 13px; letter-spacing: 0.1em; }
+.trial__lsectors { display: flex; gap: 8px; font-size: 12px; font-weight: 700; }
 .trial__restart {
   position: absolute;
   top: var(--safe-t);
@@ -375,38 +381,59 @@
   pointer-events: auto;
   touch-action: none;
 }
-.trial__panel {
-  /* Under the minimap while the next lap is flown: clear of the craft and the road ahead. */
+
+/* The end of the trial: the one big panel, centred; the race HUD and the run's readouts step aside. */
+.race-layer--summary .hud,
+.race-layer--summary .minimap,
+.race-layer--summary .trial__tl,
+.race-layer--summary .trial__restart { display: none; }
+.trial__summary {
   position: absolute;
-  top: calc(var(--safe-t) + 196px);
-  right: var(--safe-r);
-  min-width: 240px;
-  padding: 10px 16px;
+  inset: 0;
+  padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
+  display: none;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+.trial__summary.is-on { display: flex; }
+.trial__spanel {
+  /* auto margins centre it, and still let a panel taller than the screen scroll from its top. */
+  margin: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 20px 14px;
   border-radius: var(--radius);
   border: 1px solid var(--panel-edge);
   background: var(--panel);
   font-variant-numeric: tabular-nums;
   text-align: center;
-  opacity: 0;
-  transition: opacity 0.25s;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
-.trial__panel.is-on { opacity: 1; }
-.trial__panel.is-final { top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); }
-.trial__panel.is-final.is-on { pointer-events: auto; }
-.trial__ptitle { font-size: 14px; font-weight: 800; letter-spacing: 0.14em; color: var(--gold); }
-.trial__ptime { font-size: 40px; font-weight: 900; font-style: italic; line-height: 1; }
-.trial__phead2 { font-size: 16px; font-weight: 900; letter-spacing: 0.06em; margin-bottom: 4px; }
-.trial__sectors { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 12px; justify-content: center; }
-.trial__sector { display: flex; flex-direction: column; font-size: 14px; font-weight: 700; }
-.trial__sd { font-size: 12px; min-height: 1.2em; }
-.trial__physics { margin-top: 6px; font-size: 12px; text-align: left; border-top: 1px solid var(--panel-edge); padding-top: 4px; }
+.trial__stitle { font-size: 22px; font-weight: 900; font-style: italic; letter-spacing: 0.08em; color: var(--gold); }
+.trial__ssub { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--sand-dim); }
+.trial__sbody { display: flex; gap: 24px; justify-content: center; align-items: flex-start; margin-top: 8px; }
+.trial__scol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.trial__slabel { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; color: var(--sand-dim); }
+.trial__stime { font-size: 40px; font-weight: 900; font-style: italic; line-height: 1; }
+.trial__sghost { font-size: 15px; font-weight: 900; letter-spacing: 0.06em; }
+.trial__stable { display: grid; grid-template-columns: repeat(4, auto); gap: 1px 14px; margin-top: 4px; font-size: 14px; font-weight: 700; }
+.trial__stable.is-alone { grid-template-columns: repeat(2, auto); }
+.trial__cell { text-align: right; }
+.trial__chead { font-size: 11px; letter-spacing: 0.12em; color: var(--sand-dim); }
+.trial__laps { display: grid; grid-template-columns: auto auto auto; gap: 1px 14px; max-height: 9.5em; overflow-y: auto; font-size: 14px; font-weight: 700; scrollbar-width: thin; }
+.trial__lrow { display: contents; }
+.trial__lrow > * { text-align: right; }
+.trial__lrow.is-best { color: var(--green); }
+.trial__physics { font-size: 12px; text-align: left; border-top: 1px solid var(--panel-edge); padding-top: 4px; min-width: 200px; }
 .trial__phead { font-weight: 800; letter-spacing: 0.1em; color: var(--sand-dim); }
 .trial__note { font-weight: 400; letter-spacing: 0; }
 .trial__prow { display: flex; justify-content: space-between; gap: 16px; }
 .trial__prow.is-diff { color: var(--gold); }
-.trial__actions { display: flex; gap: var(--gap); justify-content: center; margin-top: 10px; }
+.trial__actions { display: flex; flex-wrap: wrap; gap: var(--gap); justify-content: center; margin-top: 12px; }
 @media (orientation: portrait) {
   .trial__time { font-size: 30px; }
   .trial__delta { font-size: 20px; }
-  .race-layer--trial .hud__bottom { top: calc(var(--safe-t) + 150px); }
+  /* The speed and gauges sit under the trial's corner block, readout included. */
+  .race-layer--trial .hud__bottom { top: calc(var(--safe-t) + 178px); }
+  .trial__sbody { flex-direction: column; align-items: center; gap: 10px; }
 }

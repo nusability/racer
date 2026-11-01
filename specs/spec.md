@@ -134,17 +134,27 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    track picker, with the selected glider. The player flies alone: no rivals and nothing that
    depends on them, but the track's own hazards run as in a race, since they are part of the
    lap. A circuit is a standing start, then flying laps one after another until the player
-   leaves (pause → quit, or the 60-lap cap); every lap counts and the best one is the best. A
-   sprint is one run from the grid. A restart button on the HUD (or R) puts the run back on
-   the grid at once, mid-lap or after it. The ghost is the player's own best lap (or run) on
+   leaves (pause → quit) or reaches the 60-lap cap; every lap counts and the best one is the
+   best. A sprint is one run from the grid. A wreck ends the run. A restart button on the HUD
+   (or R) puts the run back on the grid at once, mid-lap, mid-wreck or after the end, with
+   nothing of the last run left on screen (no wreck banner, debris, fire, slow motion or wreck
+   camera). The ghost is the player's own best lap (or run) on
    that track, whatever the glider: a see-through tinted copy of the glider it was set with,
    with no collision, flying the recorded line (its poses, never its inputs, so it stays true
-   when the physics tuning changes). The HUD shows the lap time, a live delta to the ghost
+   when the physics tuning changes). While the player flies, the trial's HUD is small text in
+   the top-left corner with no panel behind it (an outline keeps it legible), so it never
+   covers the middle of the screen or the road ahead: the lap time, a live delta to the ghost
    measured at the same point of the course (green ahead, red behind), the split delta at each
-   of four equal sector lines, the best lap and the last lap. After each lap (or the run) a
-   panel shows its time, the delta to the best, the four sector times against the ghost's,
-   and, in debug mode only, the physics tuning it was flown with, each value marked where it
-   differs from the ghost's. A new best replaces the ghost at once. A trial pays no credits
+   of four equal sector lines beside it, the best lap and the last lap. After each lap (or the
+   run) a compact readout under them shows its time, the delta to the best, NEW BEST when it
+   is one, and the four sector deltas on one line, then fades while the next lap runs. When
+   the trial ends (a wreck, a sprint's finish, the lap cap, or pause → quit, which holds the
+   scene still), a summary panel takes the screen: why it ended, the best lap (or the run),
+   whether it was saved as the new ghost or how far it fell short, its four sectors against
+   the ghost the trial started with, every lap with its delta to the best, and, in debug mode
+   only, the physics tuning it was flown with, each value marked ≠ where it differs from that
+   ghost's. Its buttons are RETRY (back on the grid), CHANGE TRACK (the track picker) and MENU
+   (the main menu). A new best replaces the ghost at once. A trial pays no credits
    and touches nothing in the career: each track keeps only its best ghost (with its time,
    glider, upgrades, physics tuning, build and date), on the device apart from the career
    save, and a ghost that can't be read is dropped with a warning. Each trial run that set a
@@ -207,7 +217,7 @@ world. Winning a world's elite cup makes you that world's champion.
 | World pay multiplier | Desert 1, Coast 1.6, Frostline 2.4, Neon Meridian 3.6, Orbital Reach 5.4 | Tiers 1 / 1.6 / 2.4; quick race pays 35% at the hardest cup won. Orbital Reach (decent player, sim): ~4.4k a race in the Apogee Cup, ~8.6k in the Perihelion Cup, ~11.0k in the Supernova Trophy; it opens with the Neon Cup (race 108) |
 | Upgrades | 5 tracks × 5 levels, e.g. engine 550–4950 × (1 + price/40k) | Full starter set ≈ the whole desert's winnings |
 | Time-trial ghost | Poses at 10 Hz, interpolated; distance 1/8 m, position 1/16 m, angles 0.35° | ~65 bytes per second stored: a circuit lap 3.5–4.7 KB, a sprint run ~6 KB (trial-check) |
-| Time-trial splits | 4 equal sectors per lap (or run), as the sprint HUD counts them | Split delta shown 2.5 s; a circuit lap's panel 6 s; the ghost hides within 4 m ahead of the camera |
+| Time-trial splits | 4 equal sectors per lap (or run), as the sprint HUD counts them | Split delta shown 2.5 s; a lap's readout 5 s, gone long before the next lap's first sector line; the ghost hides within 4 m ahead of the camera |
 
 ## Platforms & Scope
 

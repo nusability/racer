@@ -209,6 +209,15 @@ export function createHud(root: HTMLElement, onPause: () => void): Hud {
         { duration: WRECK_SLAM_MS, easing: 'cubic-bezier(.2,1.2,.4,1)', fill: 'forwards' },
       );
     },
+    reset(): void {
+      // The banner's slam holds its last frame (fill: forwards) and the class hides the gauges:
+      // both stay until taken off here.
+      el.classList.remove('is-wrecked');
+      for (const a of wreck.getAnimations()) a.cancel();
+      wreck.replaceChildren();
+      // A message flashed in the last run ("SECTOR 3", a shortcut's name) is not the new run's.
+      for (const a of flashEl.getAnimations()) a.cancel();
+    },
     dispose(): void {
       window.removeEventListener('keydown', onKey);
       el.remove();

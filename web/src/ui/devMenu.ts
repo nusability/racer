@@ -63,13 +63,13 @@ const launchRace: RaceLauncher = (req, onDone) => {
   const smooth: RacePerf = { sustainedSlow: false };
   const finish = (place: number | null, wreck: WreckInfo | null = null, perf = smooth) => {
     layer.remove();
-    onDone(fakeOutcome(req, place, wreck), perf);
+    onDone(fakeOutcome(req, place, wreck), perf, 'back');
   };
   layer.firstElementChild?.append(
     h(
       'div',
       'actions',
-      button({ id: 'fake_quit_button', label: 'QUIT', aria: 'Quit race', variant: 'ghost', onTap: () => (layer.remove(), onDone(null, smooth)) }),
+      button({ id: 'fake_quit_button', label: 'QUIT', aria: 'Quit race', variant: 'ghost', onTap: () => (layer.remove(), onDone(null, smooth, 'back')) }),
       button({ id: 'fake_wreck_button', label: 'WRECK', aria: 'Get wrecked', onTap: () => finish(null, FAKE_WRECKS[nextWreck++ % FAKE_WRECKS.length]) }),
       // A race the graphics safety net counts as too slow: at an automatic level it steps down.
       button({ id: 'fake_slow_button', label: 'SLOW', aria: 'Finish a race that ran too slowly', onTap: () => finish(null, null, { sustainedSlow: true }) }),

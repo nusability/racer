@@ -91,6 +91,17 @@ export class ScorchDecals {
     this.live = live;
   }
 
+  /** Every mark gone at once (a restart: the road is clean again). */
+  clear(): void {
+    for (let i = 0; i < DECALS; i++) {
+      this.fade.setX(i, 0);
+      this.mesh.setMatrixAt(i, tmpMat.makeScale(0, 0, 0));
+    }
+    this.fade.needsUpdate = true;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.live = 0;
+  }
+
   dispose(): void {
     this.geometry.dispose();
     this.material.dispose();

@@ -54,10 +54,10 @@ const launchRace: RaceLauncher = (req, onDone) => {
   session = new RaceSession(
     { renderer, uiRoot: root, audio, settings: loadSettings(window.localStorage), store: window.localStorage, ghosts: window.localStorage },
     req,
-    (outcome, perf) => {
+    (outcome, perf, exit) => {
       session = null;
       renderer.clear();
-      onDone(outcome, perf);
+      onDone(outcome, perf, exit);
     },
   );
 };

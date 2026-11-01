@@ -1,7 +1,8 @@
 // Headless checks of the time trial: a ghost recorded from real laps (the AI flying the player's
 // glider) survives record → quantise → store → load → interpolate, the delta to it is read by
 // distance along the course, splits add up, a new best replaces the ghost and a corrupt entry
-// is dropped loudly. Prints each ghost's stored size.
+// is dropped loudly, and the summary at the trial's end reads the run against the ghost it
+// started with. Prints each ghost's stored size.
 //   node --experimental-strip-types tools/trial-check.ts            a few tracks
 //   node --experimental-strip-types tools/trial-check.ts --all      every track
 
@@ -14,7 +15,7 @@ import { noUpgrades } from '../src/data/upgrades.ts';
 import { playerEntrant } from '../src/game/opponents.ts';
 import { GhostClock, ghostPoseAt, ribbonS, type GhostPose, type GhostRun } from '../src/game/ghost.ts';
 import { ghostKey, loadGhost, type GhostStorage } from '../src/game/ghostStore.ts';
-import { TrialRun, type LapResult, type TrialEvent } from '../src/game/timeTrial.ts';
+import { TrialRun, type LapResult, type TrialEvent, type TrialSummary } from '../src/game/timeTrial.ts';
 import { GHOST_ANGLE_UNIT, GHOST_DIST_UNIT, GHOST_HZ, GHOST_POS_UNIT, GHOST_STEPS_PER_SAMPLE, TRIAL_SECTORS, TRIAL_SEED } from '../src/game/trialTuning.ts';
 import { posePitch } from '../src/render/racerPose.ts';
 import { SIM_DT } from '../src/data/tuning.ts';
@@ -70,6 +71,8 @@ interface Flown {
   truth: Truth[];
   /** Every ghost saved, with its stored size. */
   ghosts: { run: GhostRun; bytes: number }[];
+  /** The run's end-of-trial summary. */
+  summary: TrialSummary;
 }
 
 /** Flies `laps` laps of a time trial with the AI on the player's glider. */
@@ -79,7 +82,7 @@ function fly(def: TrackDef, store: MapStore, laps: number): Flown {
   const race = new Race(track, { laps, seed: TRIAL_SEED, entrants: [entrant], physics: PHYSICS_AS_TUNED });
   const trial = new TrialRun(track, store, { glider: STARTER, upgrades: noUpgrades(), physics: { ...PHYSICS_AS_TUNED }, build: 'check' });
   const driver = new AiDriver(DRIVER_SKILL, driverSeed(TRIAL_SEED, 1));
-  const out: Flown = { results: [], events: [], truth: [], ghosts: [] };
+  const out: Omit<Flown, 'summary'> = { results: [], events: [], truth: [], ghosts: [] };
   let step = -1;
   let lapsDone = 0;
   const limit = Math.ceil((laps * LAP_TIMEOUT) / SIM_DT);
@@ -100,7 +103,7 @@ function fly(def: TrackDef, store: MapStore, laps: number): Flown {
     if (lapsDone >= laps && trial.lapTime > 1) break;
   }
   if (out.results.length < laps) throw new Error(`${def.id}: only ${out.results.length} of ${laps} laps`);
-  return out;
+  return { ...out, summary: trial.summary() };
 }
 
 function truthOf(track: Track, p: RacerState, t: number, lap: number): Truth {
@@ -243,6 +246,26 @@ function lapStartsOf(results: LapResult[]): number[] {
   return out;
 }
 
+/** The summary holds every lap, the fastest as its best, and measures it by the ghost the run started with. */
+function checkSummary(def: TrackDef, flown: Flown, startGhost: number | null): void {
+  const s = flown.summary;
+  check(s.laps.length === flown.results.length && s.laps.every((r, i) => r.time === flown.results[i].time), `${def.id}: the summary lists every lap`);
+  const fastest = Math.min(...flown.results.map((r) => r.time));
+  check(s.best !== null && s.best.time === fastest, `${def.id}: the summary's best is the fastest lap (${s.best?.time} vs ${fastest})`);
+  check(s.ghostSaved === flown.ghosts.length > 0, `${def.id}: the summary says a ghost was saved only when one was (${s.ghostSaved}, ${flown.ghosts.length} saved)`);
+  if (startGhost === null) {
+    check(s.ghost === null && s.delta === null && s.sectorDeltas.every((d) => d === null), `${def.id}: a first trial has no ghost to measure by`);
+    return;
+  }
+  const g = s.ghost;
+  check(g !== null && Math.abs(g.time - startGhost) < 1e-9, `${def.id}: the summary measures by the start ghost (${g?.time} vs ${startGhost})`);
+  if (!g || !s.best) return;
+  check(Math.abs(g.sectors.reduce((a, b) => a + b, 0) - g.time) < 1e-9, `${def.id}: the ghost's sectors sum to its time`);
+  check(s.delta !== null && Math.abs(s.delta - (s.best.time - g.time)) < 1e-9, `${def.id}: the summary's delta is best − ghost (${s.delta})`);
+  const ds = s.sectorDeltas.reduce((a: number, b) => a + (b ?? NaN), 0);
+  check(Math.abs(ds - (s.delta ?? NaN)) < 1e-6, `${def.id}: the best lap's sector deltas sum to its delta (${ds} vs ${s.delta})`);
+}
+
 const all = process.argv.includes('--all');
 const circuits = TRACKS.filter((t) => t.course === 'circuit');
 const sprints = TRACKS.filter((t) => t.course === 'sprint');
@@ -255,6 +278,7 @@ for (const def of picks) {
   const laps = def.course === 'circuit' ? 3 : 1;
   const flown = fly(def, store, laps);
   checkLaps(def, flown);
+  checkSummary(def, flown, null);
   const best = flown.results.reduce((a, b) => (b.time < a.time ? b : a));
   checkGhost(def, store, flown, lapStartsOf(flown.results), best.lap - 1);
   // The first lap always sets a ghost; a later one only by beating it.
@@ -271,7 +295,9 @@ for (const def of picks) {
 
   // A second trial reads the stored ghost; its standing lap can't beat a flying best.
   if (def.course === 'circuit') {
-    const r = fly(def, store, 1).results[0];
+    const again = fly(def, store, 1);
+    checkSummary(def, again, best.time);
+    const r = again.results[0];
     check(r.best !== null && Math.abs((r.best as number) - best.time) < 1e-9, `${def.id}: a new run compares against the stored best`);
     check(r.delta !== null && r.delta >= 0 && !r.newBest, `${def.id}: the same driver's standing lap is no new best (${r.delta})`);
   }

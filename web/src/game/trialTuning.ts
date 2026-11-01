@@ -1,5 +1,5 @@
 // Time Trial numbers: the ghost's sampling and quantisation, the run's shape, and how long its
-// HUD messages stay up.
+// HUD readouts stay up.
 import { SIM_DT } from '../data/tuning.ts';
 import { SPRINT_SECTORS } from './sessionTuning.ts';
 
@@ -36,8 +36,12 @@ export const TRIAL_CIRCUIT_LAPS = 60;
 export const TRIAL_SECTORS = SPRINT_SECTORS;
 /** Seconds a split's delta stays on the HUD after its sector line. */
 export const TRIAL_SPLIT_SHOWN = 2.5;
-/** Seconds a circuit lap's results panel stays up while the next lap is flown. */
-export const TRIAL_LAP_PANEL_SHOWN = 6;
+/**
+ * Seconds a lap's compact readout (time, delta, sectors) stays in the corner before it fades:
+ * long enough for a glance or two down the next straight, and gone long before the next lap's
+ * first sector line (a quarter of the shortest lap is over 13 s).
+ */
+export const TRIAL_LAP_READOUT_SHOWN = 5;
 /** The ghost's look: see-through, tinted, never solid enough to hide the road. */
 export const GHOST_OPACITY = 0.34;
 export const GHOST_TINT = 0x8fe8ff;

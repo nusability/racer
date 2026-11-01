@@ -27,6 +27,24 @@ export interface LapResult {
   ghostPhysics: TrialPhysics | null;
 }
 
+/** The whole run, for the panel at its end. */
+export interface TrialSummary {
+  /** Every lap of the run in order (a sprint: its one run, once finished). */
+  laps: LapResult[];
+  /** The run's fastest lap; null before the first. */
+  best: LapResult | null;
+  /** The ghost the run started against (null with none): what the best is measured by. */
+  ghost: { time: number; sectors: number[]; physics: TrialPhysics } | null;
+  /** best − the start ghost; null without either. */
+  delta: number | null;
+  /** Each of the best lap's sectors against the start ghost's same sector. */
+  sectorDeltas: (number | null)[];
+  /** A lap of this run became the stored ghost. */
+  ghostSaved: boolean;
+  /** The physics the run was flown with. */
+  physics: TrialPhysics;
+}
+
 export type TrialEvent =
   /** A sector line inside the lap: `time` into the lap, against the ghost there. */
   | { type: 'split'; sector: number; time: number; delta: number | null }
@@ -58,8 +76,11 @@ export class TrialRun {
   private lapBest: number | null;
   private lapGhostPhysics: TrialPhysics | null;
   private curD = 0;
-  /** Every lap time of this run, in order. */
-  readonly laps: number[] = [];
+  /** Every lap of this run, in order. */
+  private readonly results: LapResult[] = [];
+  /** The ghost as the run started, kept for its summary while a new best replaces the live one. */
+  private readonly startGhost: TrialSummary['ghost'];
+  private ghostSaved = false;
 
   constructor(track: Track, store: GhostStorage, setup: TrialSetup) {
     this.track = track;
@@ -71,6 +92,8 @@ export class TrialRun {
     this.useGhost(this.ghostRec);
     this.lapBest = this.ghostRec?.run.time ?? null;
     this.lapGhostPhysics = this.ghostRec?.physics ?? null;
+    const g = this.ghostRec;
+    this.startGhost = g ? { time: g.run.time, sectors: sectorTimes(this.ghostSplits, g.run.time), physics: g.physics } : null;
   }
 
   get ghost(): GhostRecord | null {
@@ -82,16 +105,39 @@ export class TrialRun {
     return this.recorder.lapTime;
   }
 
+  /** Every lap time of this run, in order. */
+  get laps(): number[] {
+    return this.results.map((r) => r.time);
+  }
+
   get lapNumber(): number {
-    return this.laps.length + 1;
+    return this.results.length + 1;
   }
 
   get bestLap(): number | null {
-    return this.laps.length === 0 ? null : Math.min(...this.laps);
+    return this.best()?.time ?? null;
   }
 
   get lastLap(): number | null {
-    return this.laps.length === 0 ? null : this.laps[this.laps.length - 1];
+    return this.results.at(-1)?.time ?? null;
+  }
+
+  summary(): TrialSummary {
+    const best = this.best();
+    const ghost = this.startGhost;
+    return {
+      laps: [...this.results],
+      best,
+      ghost,
+      delta: best && ghost ? best.time - ghost.time : null,
+      sectorDeltas: best ? best.sectors.map((s, i) => (ghost ? s - ghost.sectors[i] : null)) : [],
+      ghostSaved: this.ghostSaved,
+      physics: this.setup.physics,
+    };
+  }
+
+  private best(): LapResult | null {
+    return this.results.reduce<LapResult | null>((a, r) => (a === null || r.time < a.time ? r : a), null);
   }
 
   /** The player against the ghost at the same point of the lap, s (negative: ahead); null with no ghost. */
@@ -114,7 +160,7 @@ export class TrialRun {
       }
     }
     const runs = this.recorder.step(p);
-    const d = p.distance - this.laps.length * L - (lapped !== null ? L : 0);
+    const d = p.distance - this.results.length * L - (lapped !== null ? L : 0);
     const t = this.recorder.lapTime;
     if (lapped !== null) {
       // The last sector lines of the lap just closed, then the lap itself.
@@ -146,16 +192,12 @@ export class TrialRun {
   }
 
   private closeLap(time: number): LapResult {
-    const lines = [...this.splits];
-    // A lap that missed a line (a wreck mid-way has no lap) can't be split there: its sectors lump.
-    while (lines.length < TRIAL_SECTORS - 1) lines.push(lines[lines.length - 1] ?? 0);
-    const bounds = [0, ...lines, time];
-    const sectors = bounds.slice(1).map((b, i) => b - bounds[i]);
-    const ghostBounds = this.ghostRec ? [0, ...this.ghostSplits, this.ghostRec.run.time] : null;
-    const sectorDeltas = sectors.map((s, i) => (ghostBounds ? s - (ghostBounds[i + 1] - ghostBounds[i]) : null));
+    const sectors = sectorTimes(this.splits, time);
+    const ghostSectors = this.ghostRec ? sectorTimes(this.ghostSplits, this.ghostRec.run.time) : null;
+    const sectorDeltas = sectors.map((s, i) => (ghostSectors ? s - ghostSectors[i] : null));
     const best = this.lapBest;
     const result: LapResult = {
-      lap: this.laps.length + 1,
+      lap: this.results.length + 1,
       time,
       best,
       delta: best === null ? null : time - best,
@@ -165,7 +207,7 @@ export class TrialRun {
       physics: this.setup.physics,
       ghostPhysics: this.lapGhostPhysics,
     };
-    this.laps.push(time);
+    this.results.push(result);
     this.splits = [];
     if (result.newBest) this.lapBest = time;
     this.lapGhostPhysics = this.ghostRec?.physics ?? null;
@@ -185,6 +227,7 @@ export class TrialRun {
       date: new Date().toISOString(),
     };
     const bytes = saveGhost(this.store, record);
+    this.ghostSaved = true;
     this.useGhost(record);
     // The lap in progress started against the old ghost; from here it reads the new one.
     this.lapGhostPhysics = record.physics;
@@ -197,4 +240,13 @@ export class TrialRun {
     const clock = this.clock;
     this.ghostSplits = clock ? Array.from({ length: TRIAL_SECTORS - 1 }, (_, i) => clock.timeAt(((i + 1) / TRIAL_SECTORS) * this.track.raceLength)) : [];
   }
+}
+
+/** Each sector's own time from the lap times at its sector lines and the lap's end. */
+function sectorTimes(splits: readonly number[], time: number): number[] {
+  const lines = [...splits];
+  // A lap that missed a line (a wreck mid-way has no lap) can't be split there: its sectors lump.
+  while (lines.length < TRIAL_SECTORS - 1) lines.push(lines[lines.length - 1] ?? 0);
+  const bounds = [0, ...lines, time];
+  return bounds.slice(1).map((b, i) => b - bounds[i]);
 }
