@@ -6,6 +6,9 @@ import { UPGRADES, type UpgradeLevels } from '../data/upgrades.ts';
 import { decodeFrames, encodeFrames, type GhostRun } from './ghost.ts';
 import { GHOST_HZ, GHOST_KEY_PREFIX, GHOST_VERSION } from './trialTuning.ts';
 
+/** The physics base of a ghost stored before ghosts recorded it: the first tuning (core/handling.ts PHYSICS_BASE). */
+const UNVERSIONED_PHYSICS_BASE = 1;
+
 /** The physics sliders in force for a run (debug menu PHYSICS): name → multiplier. */
 export type TrialPhysics = Readonly<Record<string, number>>;
 
@@ -16,6 +19,8 @@ export interface GhostRecord {
   glider: string;
   upgrades: UpgradeLevels;
   physics: TrialPhysics;
+  /** The tuning base its physics multipliers sat on (core/handling.ts PHYSICS_BASE): on another, the same multipliers fly differently. */
+  physicsBase: number;
   build: string;
   /** ISO time it was set. */
   date: string;
@@ -39,6 +44,8 @@ interface Stored {
   glider: string;
   upgrades: UpgradeLevels;
   physics: Record<string, number>;
+  /** Absent on a ghost stored before it was recorded: base 1. */
+  physicsBase?: number;
   build: string;
   date: string;
 }
@@ -58,6 +65,7 @@ function encodeGhost(g: GhostRecord): string {
     glider: g.glider,
     upgrades: g.upgrades,
     physics: { ...g.physics },
+    physicsBase: g.physicsBase,
     build: g.build,
     date: g.date,
   };
@@ -83,6 +91,8 @@ function decodeGhost(trackId: string, raw: string): GhostRecord {
   for (const u of UPGRADES) if (!Number.isInteger(up[u.id])) fail(`upgrade ${u.id}`);
   const ph = isObj(o.physics) ? o.physics : fail('no physics');
   for (const [k, x] of Object.entries(ph)) if (typeof x !== 'number' || !Number.isFinite(x)) fail(`physics ${k}`);
+  const physicsBase = o.physicsBase === undefined ? UNVERSIONED_PHYSICS_BASE : num(o.physicsBase, 'physicsBase');
+  if (!Number.isInteger(physicsBase) || physicsBase < UNVERSIONED_PHYSICS_BASE) fail(`physics base ${physicsBase}`);
   if (typeof o.build !== 'string' || typeof o.date !== 'string') fail('no build or date');
   return {
     trackId,
@@ -90,6 +100,7 @@ function decodeGhost(trackId: string, raw: string): GhostRecord {
     glider: o.glider,
     upgrades: up as UpgradeLevels,
     physics: ph as Record<string, number>,
+    physicsBase,
     build: o.build,
     date: o.date,
   };

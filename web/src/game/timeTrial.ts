@@ -1,6 +1,7 @@
 // One time-trial run, headless: records the ghost, times the sectors and laps, reads the live
 // delta to the best ghost by distance along the course, and replaces the stored ghost when a
 // lap (or a sprint's run) beats it. The race session draws what this reports.
+import { PHYSICS_BASE } from '../core/handling.ts';
 import type { Race } from '../core/race.ts';
 import type { Track } from '../core/track.ts';
 import type { RaceEvent } from '../core/types.ts';
@@ -34,21 +35,24 @@ export interface TrialSummary {
   /** The run's fastest lap; null before the first. */
   best: LapResult | null;
   /** The ghost the run started against (null with none): what the best is measured by. */
-  ghost: { time: number; sectors: number[]; physics: TrialPhysics } | null;
+  ghost: { time: number; sectors: number[]; physics: TrialPhysics; physicsBase: number } | null;
   /** best − the start ghost; null without either. */
   delta: number | null;
   /** Each of the best lap's sectors against the start ghost's same sector. */
   sectorDeltas: (number | null)[];
   /** A lap of this run became the stored ghost. */
   ghostSaved: boolean;
-  /** The physics the run was flown with. */
+  /** The physics the run was flown with, and the tuning base they sit on (core/handling.ts PHYSICS_BASE). */
   physics: TrialPhysics;
+  physicsBase: number;
 }
 
 export type TrialEvent =
   /** A sector line inside the lap: `time` into the lap, against the ghost there. */
   | { type: 'split'; sector: number; time: number; delta: number | null }
   | { type: 'lap'; result: LapResult }
+  /** The lap line refitted the craft (hull, tank, or both back to the race start's). */
+  | { type: 'refit'; hull: boolean; tank: boolean }
   /** A new best is stored and is now the ghost. */
   | { type: 'ghost'; record: GhostRecord; bytes: number };
 
@@ -93,7 +97,7 @@ export class TrialRun {
     this.lapBest = this.ghostRec?.run.time ?? null;
     this.lapGhostPhysics = this.ghostRec?.physics ?? null;
     const g = this.ghostRec;
-    this.startGhost = g ? { time: g.run.time, sectors: sectorTimes(this.ghostSplits, g.run.time), physics: g.physics } : null;
+    this.startGhost = g ? { time: g.run.time, sectors: sectorTimes(this.ghostSplits, g.run.time), physics: g.physics, physicsBase: g.physicsBase } : null;
   }
 
   get ghost(): GhostRecord | null {
@@ -133,6 +137,7 @@ export class TrialRun {
       sectorDeltas: best ? best.sectors.map((s, i) => (ghost ? s - ghost.sectors[i] : null)) : [],
       ghostSaved: this.ghostSaved,
       physics: this.setup.physics,
+      physicsBase: PHYSICS_BASE,
     };
   }
 
@@ -153,11 +158,13 @@ export class TrialRun {
     const out: TrialEvent[] = [];
     const L = this.track.raceLength;
     let lapped: number | null = null;
+    let refit: TrialEvent | null = null;
     for (const ev of events) {
       if (ev.type === 'lap' && ev.id === p.id) {
         this.recorder.lap(ev.time);
         lapped = ev.time;
       }
+      if (ev.type === 'refit' && ev.id === p.id) refit = { type: 'refit', hull: ev.hull, tank: ev.tank };
     }
     const runs = this.recorder.step(p);
     const d = p.distance - this.results.length * L - (lapped !== null ? L : 0);
@@ -166,6 +173,7 @@ export class TrialRun {
       // The last sector lines of the lap just closed, then the lap itself.
       this.crossLines(this.prevD, L, lapped, out, lapped);
       out.push({ type: 'lap', result: this.closeLap(lapped) });
+      if (refit) out.push(refit);
       this.prevD = this.prevD === null ? null : this.prevD - L;
       this.prevT -= lapped;
     }
@@ -223,6 +231,7 @@ export class TrialRun {
       glider: this.setup.glider,
       upgrades: { ...this.setup.upgrades },
       physics: { ...this.setup.physics },
+      physicsBase: PHYSICS_BASE,
       build: this.setup.build,
       date: new Date().toISOString(),
     };

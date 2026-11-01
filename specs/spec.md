@@ -135,7 +135,10 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    depends on them, but the track's own hazards run as in a race, since they are part of the
    lap. A circuit is a standing start, then flying laps one after another until the player
    leaves (pause → quit) or reaches the 60-lap cap; every lap counts and the best one is the
-   best. A sprint is one run from the grid. A wreck ends the run. A restart button on the HUD
+   best. At every lap line the glider is refitted to how a race starts it (full hull, the
+   tank at its start fill), whatever the lap before cost, so every lap starts alike and lap
+   times compare; the hull and boost bars flash and the lap's readout says REPAIRED, REFUELLED
+   or REFITTED. A sprint is one run from the grid. A wreck ends the run. A restart button on the HUD
    (or R) puts the run back on the grid at once, mid-lap, mid-wreck or after the end, with
    nothing of the last run left on screen (no wreck banner, debris, fire, slow motion or wreck
    camera). The ghost is the player's own best lap (or run) on
@@ -153,10 +156,12 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    whether it was saved as the new ghost or how far it fell short, its four sectors against
    the ghost the trial started with, every lap with its delta to the best, and, in debug mode
    only, the physics tuning it was flown with, each value marked ≠ where it differs from that
-   ghost's. Its buttons are RETRY (back on the grid), CHANGE TRACK (the track picker) and MENU
+   ghost's, or every value marked "older physics" when the ghost was set on an earlier tuning
+   base (where the same multiplier flew differently). Its buttons are RETRY (back on the grid), CHANGE TRACK (the track picker) and MENU
    (the main menu). A new best replaces the ghost at once. A trial pays no credits
    and touches nothing in the career: each track keeps only its best ghost (with its time,
-   glider, upgrades, physics tuning, build and date), on the device apart from the career
+   glider, upgrades, physics tuning and the tuning base it sat on, build and date; a ghost
+   saved before the base was recorded counts as the first base), on the device apart from the career
    save, and a ghost that can't be read is dropped with a warning. Each trial run that set a
    lap is kept in the race logs the debug menu exports, with its lap times and physics tuning.
 3. **Collect**: credits by finishing place (one tap from the finish line to the results, one

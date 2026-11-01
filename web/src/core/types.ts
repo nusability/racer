@@ -495,6 +495,11 @@ export interface RaceConfig {
   seed: number;
   entrants: RaceEntrant[];
   physics: PhysicsTuning;
+  /**
+   * Time trial: at every lap line each racer is refitted to the race-start hull and tank, so
+   * every lap starts the same and lap times compare. Absent: hull and tank carry on, as in a race.
+   */
+  refitEachLap?: boolean;
 }
 
 export interface RacerState {
@@ -592,6 +597,8 @@ export type RaceEvent =
   /** A racer's tank ran dry while boost was held. */
   | { type: 'tankEmpty'; id: string }
   | { type: 'lap'; id: string; lap: number; time: number }
+  /** Refitted at a lap line (RaceConfig.refitEachLap): which of hull and tank it restored (each false when it was already as at the start). */
+  | { type: 'refit'; id: string; hull: boolean; tank: boolean }
   | { type: 'finish'; id: string; place: number; time: number };
 
 export type RacePhase = 'countdown' | 'racing' | 'finished';

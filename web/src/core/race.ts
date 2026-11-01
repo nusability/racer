@@ -289,6 +289,8 @@ export class Race {
     v.newLap();
     if (st.bestLap === null || lapTime < st.bestLap) st.bestLap = lapTime;
     events.push({ type: 'lap', id: st.id, lap: completed, time: lapTime });
+    // After the lap's own event, so a listener reads the refit as the start of the next lap.
+    if (this.config.refitEachLap === true && completed < this.config.laps) v.refit(events);
     if (completed >= this.config.laps) {
       st.finishTime = at;
       const place = this.racers.filter((r) => r.finishTime !== null).length;

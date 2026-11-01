@@ -705,6 +705,18 @@ export class Vehicle {
     this.repaired.clear();
   }
 
+  /** Back to the hull and tank a race starts with (a time trial's lap line). */
+  refit(events: RaceEvent[]) {
+    const st = this.state;
+    const hull = st.damage !== 0;
+    const tank = st.boost !== BOOST_START_FILL;
+    st.damage = 0;
+    st.boost = BOOST_START_FILL;
+    // The start fill is above the dry tank's resume mark: a tank emptied on the last lap is usable again.
+    this.dry = false;
+    if (hull || tank) events.push({ type: 'refit', id: st.id, hull, tank });
+  }
+
   /** Starts a free boost burst (launch boost at GO). */
   /** A false start: the engines give nothing for `seconds`, and any launch boost is lost. */
   stall(seconds: number) {

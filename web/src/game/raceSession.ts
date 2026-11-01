@@ -329,7 +329,8 @@ export class RaceSession {
   /** Each start (and restart) races with the owner's physics tuning as it stands then. */
   private newRace(): Race {
     const physics = loadDebugFlags(this.ctx.store).physics;
-    return new Race(this.track, { laps: this.request.laps, seed: this.request.seed, entrants: this.request.entrants, physics });
+    // A time trial's laps each start alike, so they compare: refitted at every line.
+    return new Race(this.track, { laps: this.request.laps, seed: this.request.seed, entrants: this.request.entrants, physics, refitEachLap: this.request.mode === 'timeTrial' });
   }
 
   private player(): RacerState {
@@ -616,6 +617,13 @@ export class RaceSession {
           audio.oneShot('finish');
           // Alone, first place says nothing: the trial's panel shows the time instead.
           if (!this.trial) this.hud.flash(ordinal(ev.place));
+        }
+        return;
+      case 'refit':
+        // A time trial's lap line: the bars that came back flash, as a cell's pickup does.
+        if (ev.id === pid) {
+          if (ev.hull) this.hud.pulseRepair();
+          if (ev.tank) this.hud.pulseBoost();
         }
         return;
       case 'launch':

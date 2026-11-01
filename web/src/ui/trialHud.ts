@@ -5,7 +5,6 @@
 // panel takes the screen: the best lap against the ghost, every lap, whether a ghost was saved,
 // and (in debug mode only) the physics sliders the run was flown with.
 import type { LapResult, TrialSummary } from '../game/timeTrial.ts';
-import type { TrialPhysics } from '../game/ghostStore.ts';
 import { TRIAL_LAP_READOUT_SHOWN, TRIAL_SPLIT_SHOWN } from '../game/trialTuning.ts';
 import { button, formatTime, h } from './kit.ts';
 
@@ -36,6 +35,8 @@ export interface TrialHud {
   split(sector: number, time: number, delta: number | null): void;
   /** A lap (or a sprint's run) closed: the compact readout, faded out after a few seconds. */
   lap(r: LapResult, sprint: boolean): void;
+  /** The lap line restored the hull, the tank or both: a small tag on the lap's readout. */
+  refit(hull: boolean, tank: boolean): void;
   /** The trial is over: the summary panel with RETRY, CHANGE TRACK and MENU. */
   summary(s: TrialSummary, end: TrialEnd): void;
   /** Clears every readout and the summary for a fresh start. */
@@ -106,16 +107,26 @@ export function createTrialHud(root: HTMLElement, opts: TrialHudOpts): TrialHud 
   let splitUntil = 0;
   let lapUntil = 0;
 
-  const physicsRows = (physics: TrialPhysics, ghost: TrialPhysics | null) => {
+  /**
+   * The run's physics sliders against the start ghost's. A ghost flown on another tuning base
+   * can't be compared slider by slider (the same multiplier flew differently there): every row
+   * says "older physics" instead.
+   */
+  const physicsRows = (s: TrialSummary) => {
+    const physics = s.physics;
     const keys = Object.keys(physics);
     if (!opts.debug || keys.length === 0) return null;
+    const ghost = s.ghost;
+    const older = ghost !== null && ghost.physicsBase !== s.physicsBase;
+    const note = ghost === null ? null : older ? ` · the ghost is on older physics (base ${ghost.physicsBase})` : ' · ≠ differs from the ghost';
     return h(
       'div',
       'trial__physics',
-      h('div', 'trial__phead', 'PHYSICS', ghost ? h('span', 'trial__note', ' · ≠ differs from the ghost') : null),
+      h('div', 'trial__phead', 'PHYSICS', note ? h('span', 'trial__note', note) : null),
       ...keys.map((k) => {
-        const differs = ghost !== null && ghost[k] !== physics[k];
-        return h('div', `trial__prow${differs ? ' is-diff' : ''}`, h('span', null, k), h('span', null, `×${physics[k].toFixed(2)}${differs ? ` ≠ ×${ghost?.[k]?.toFixed(2) ?? '—'}` : ''}`));
+        const differs = ghost !== null && !older && ghost.physics[k] !== physics[k];
+        const vs = older ? ' · older physics' : differs ? ` ≠ ×${ghost?.physics[k]?.toFixed(2) ?? '—'}` : '';
+        return h('div', `trial__prow${differs || older ? ' is-diff' : ''}`, h('span', null, k), h('span', null, `×${physics[k].toFixed(2)}${vs}`));
       }),
     );
   };
@@ -213,9 +224,15 @@ export function createTrialHud(root: HTMLElement, opts: TrialHudOpts): TrialHud 
       );
       lapUntil = performance.now() + TRIAL_LAP_READOUT_SHOWN * 1000;
     },
+    refit(hull, tank) {
+      const what = hull && tank ? 'REFITTED' : hull ? 'REPAIRED' : 'REFUELLED';
+      const head = lapOut.querySelector('.trial__lhead');
+      if (!head) throw new Error('trialHud: a refit with no lap readout to tag (the lap line sends its lap first)');
+      head.append(h('span', 'trial__refit', what));
+    },
     summary(s, end) {
       const laps = lapList(s);
-      const physics = physicsRows(s.physics, s.ghost?.physics ?? null);
+      const physics = physicsRows(s);
       summaryEl.replaceChildren(
         h(
           'div',

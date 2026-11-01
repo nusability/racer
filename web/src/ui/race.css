@@ -365,6 +365,7 @@
 .trial__lhead { display: flex; align-items: baseline; gap: 8px; font-size: 16px; font-weight: 900; }
 .trial__ld { font-style: italic; }
 .trial__tag { color: var(--green); font-size: 13px; letter-spacing: 0.1em; }
+.trial__refit { color: var(--cyan); font-size: 12px; letter-spacing: 0.1em; font-weight: 800; }
 .trial__lsectors { display: flex; gap: 8px; font-size: 12px; font-weight: 700; }
 .trial__restart {
   position: absolute;

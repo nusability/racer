@@ -18,8 +18,8 @@ import { ghostKey, loadGhost, type GhostStorage } from '../src/game/ghostStore.t
 import { TrialRun, type LapResult, type TrialEvent, type TrialSummary } from '../src/game/timeTrial.ts';
 import { GHOST_ANGLE_UNIT, GHOST_DIST_UNIT, GHOST_HZ, GHOST_POS_UNIT, GHOST_STEPS_PER_SAMPLE, TRIAL_SECTORS, TRIAL_SEED } from '../src/game/trialTuning.ts';
 import { posePitch } from '../src/render/racerPose.ts';
-import { SIM_DT } from '../src/data/tuning.ts';
-import { PHYSICS_AS_TUNED } from '../src/core/handling.ts';
+import { BOOST_START_FILL, SIM_DT } from '../src/data/tuning.ts';
+import { PHYSICS_AS_TUNED, PHYSICS_BASE } from '../src/core/handling.ts';
 
 declare const process: { argv: string[]; exit(code: number): never };
 
@@ -79,7 +79,7 @@ interface Flown {
 function fly(def: TrackDef, store: MapStore, laps: number): Flown {
   const track = new Track(def, courseBounds(def.id));
   const entrant = playerEntrant(STARTER, noUpgrades());
-  const race = new Race(track, { laps, seed: TRIAL_SEED, entrants: [entrant], physics: PHYSICS_AS_TUNED });
+  const race = new Race(track, { laps, seed: TRIAL_SEED, entrants: [entrant], physics: PHYSICS_AS_TUNED, refitEachLap: true });
   const trial = new TrialRun(track, store, { glider: STARTER, upgrades: noUpgrades(), physics: { ...PHYSICS_AS_TUNED }, build: 'check' });
   const driver = new AiDriver(DRIVER_SKILL, driverSeed(TRIAL_SEED, 1));
   const out: Omit<Flown, 'summary'> = { results: [], events: [], truth: [], ghosts: [] };
@@ -240,6 +240,62 @@ function checkCorrupt(): void {
   }
 }
 
+/**
+ * Every lap of a trial starts like the race: at the line the hull is whole again and the tank at
+ * the start fill, however lap 1 went. A race (no refit) carries both on.
+ */
+function checkRefit(): void {
+  const def = trackById(TRACKS.find((t) => t.course === 'circuit')?.id ?? fail('no circuit'));
+  for (const refitEachLap of [true, false]) {
+    const track = new Track(def, courseBounds(def.id));
+    const race = new Race(track, { laps: 2, seed: TRIAL_SEED, entrants: [playerEntrant(STARTER, noUpgrades())], physics: PHYSICS_AS_TUNED, refitEachLap });
+    const driver = new AiDriver(DRIVER_SKILL, driverSeed(TRIAL_SEED, 1));
+    let harmed = false;
+    let checked = false;
+    for (let i = 0; i < LAP_TIMEOUT / SIM_DT && !checked; i++) {
+      const p = race.player();
+      // Halfway round lap 1: a knock, and boost held so the tank is not at its start fill.
+      if (!harmed && p.distance > track.raceLength / 2) {
+        race.vehicles[0].harm(0.3, []);
+        harmed = true;
+      }
+      const input = driver.drive(race.vehicles[0], track, race.racers, race.time);
+      if (harmed) input.boost = true;
+      const events = race.step(input);
+      if (p.crashed > 0) fail(`${def.id}: the driver wrecked on lap 1`);
+      if (!events.some((e) => e.type === 'lap')) continue;
+      checked = true;
+      const refit = events.find((e) => e.type === 'refit');
+      if (refitEachLap) {
+        check(p.damage === 0 && p.boost === BOOST_START_FILL, `refit: lap 2 starts at full hull and the start tank (hull ${(1 - p.damage).toFixed(3)}, tank ${p.boost.toFixed(3)})`);
+        check(refit?.type === 'refit' && refit.hull && refit.tank, 'refit: the line says it restored hull and tank');
+        check(events.findIndex((e) => e.type === 'refit') > events.findIndex((e) => e.type === 'lap'), 'refit: comes after the lap event');
+      } else {
+        check(p.damage > 0 && refit === undefined, `refit: a race carries the damage on (${p.damage.toFixed(3)})`);
+      }
+    }
+    check(checked, `refit: lap 1 of ${def.id} completed`);
+  }
+}
+
+function fail(why: string): never {
+  throw new Error(`trial-check: ${why}`);
+}
+
+/** A ghost records the physics base it was flown on; one stored before that reads as base 1, and a run's summary says so. */
+function checkPhysicsBase(): void {
+  const def = trackById(TRACKS[0].id);
+  const store = new MapStore();
+  fly(def, store, 1);
+  check(loadGhost(store, def.id)?.physicsBase === PHYSICS_BASE, `a new ghost records physics base ${PHYSICS_BASE}`);
+  const o = JSON.parse(store.getItem(ghostKey(def.id)) as string);
+  delete o.physicsBase;
+  store.setItem(ghostKey(def.id), JSON.stringify(o));
+  check(loadGhost(store, def.id)?.physicsBase === 1, 'a ghost stored without a physics base reads as base 1');
+  const s = fly(def, store, 1).summary;
+  check(s.ghost?.physicsBase === 1 && s.physicsBase === PHYSICS_BASE, `the summary holds both bases (${s.ghost?.physicsBase} vs ${s.physicsBase})`);
+}
+
 function lapStartsOf(results: LapResult[]): number[] {
   const out = [0];
   for (const r of results) out.push(out[out.length - 1] + r.time);
@@ -273,6 +329,8 @@ const picks = all ? TRACKS : [circuits.find((t) => (t.branches?.length ?? 0) > 0
 
 checkClock();
 checkCorrupt();
+checkPhysicsBase();
+checkRefit();
 for (const def of picks) {
   const store = new MapStore();
   const laps = def.course === 'circuit' ? 3 : 1;

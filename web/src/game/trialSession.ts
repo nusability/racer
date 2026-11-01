@@ -23,7 +23,7 @@ export interface TrialTelemetry {
   best: number | null;
   physics: TrialPhysics;
   /** The ghost the run started against. */
-  ghost: { time: number; glider: string; physics: TrialPhysics; build: string; date: string } | null;
+  ghost: { time: number; glider: string; physics: TrialPhysics; physicsBase: number; build: string; date: string } | null;
 }
 
 export interface TrialSessionDeps {
@@ -79,6 +79,7 @@ export class TrialSession {
     for (const ev of this.run.step(race, events)) {
       if (ev.type === 'split') this.hud.split(ev.sector, ev.time, ev.delta);
       else if (ev.type === 'lap') this.hud.lap(ev.result, this.deps.track.course === 'sprint');
+      else if (ev.type === 'refit') this.hud.refit(ev.hull, ev.tank);
       else {
         console.info(`time trial: new best ${ev.record.run.time.toFixed(3)} s on ${ev.record.trackId}, ghost stored (${ev.bytes} bytes)`);
         this.syncGhostModel();
@@ -150,7 +151,7 @@ export class TrialSession {
 
   private ghostSummary(): TrialTelemetry['ghost'] {
     const g = this.run.ghost;
-    return g ? { time: g.run.time, glider: g.glider, physics: g.physics, build: g.build, date: g.date } : null;
+    return g ? { time: g.run.time, glider: g.glider, physics: g.physics, physicsBase: g.physicsBase, build: g.build, date: g.date } : null;
   }
 
   /** The ghost is drawn as the glider its run was set with: a new best in another glider rebuilds it. */
