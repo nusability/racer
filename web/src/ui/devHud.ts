@@ -1,7 +1,8 @@
 // Dev-only entry (hud-viewer.html): the HUD fed with animated fake values and the live touch
-// controls, with a readout of what input.read() returns. ?steer=drag|tilt|buttons picks the mode,
-// ?throttle=swipe|buttons the boost and brake layout.
-import type { HudView, SteeringMode, ThrottleLayout } from '../game/types.ts';
+// controls, with a readout of what input.read() returns. ?layout=twoThumbs|oneThumb picks the
+// control layout, ?steer=drag|tilt|buttons the two-thumb steering mode, ?throttle=swipe|buttons
+// the two-thumb boost and brake layout.
+import type { ControlLayout, HudView, SteeringMode, ThrottleLayout } from '../game/types.ts';
 import { createHud } from './hud.ts';
 import { createInput } from './input.ts';
 import { h } from './kit.ts';
@@ -11,6 +12,8 @@ if (!root) throw new Error('hud-viewer: #app missing');
 root.style.background = 'linear-gradient(180deg, #5b8fd0 0%, #f2c58c 52%, #d89a5a 53%, #8a5530 100%)';
 
 const params = new URLSearchParams(location.search);
+const layout = (params.get('layout') ?? 'twoThumbs') as ControlLayout;
+if (!['twoThumbs', 'oneThumb'].includes(layout)) throw new Error(`hud-viewer: bad layout "${layout}"`);
 const steering = (params.get('steer') ?? 'drag') as SteeringMode;
 if (!['drag', 'tilt', 'buttons'].includes(steering)) throw new Error(`hud-viewer: bad steer "${steering}"`);
 const throttle = (params.get('throttle') ?? 'swipe') as ThrottleLayout;
@@ -29,10 +32,11 @@ const craft = h('div');
 craft.style.cssText = 'position:absolute;top:-9px;width:24px;height:24px;margin-left:-12px;border-radius:6px;background:#3cf2ff;box-shadow:0 0 12px #3cf2ff';
 road.append(craft);
 root.append(road);
-const minimap = h('div');
+// Classed as the real one, so the one-thumb gauge keeps clear of it here too.
+const minimap = h('div', 'minimap');
 minimap.style.cssText = 'position:absolute;right:max(14px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 60px);width:var(--mm);height:var(--mm);border:2px dashed rgba(255,255,255,.6);border-radius:10px;z-index:30;pointer-events:none';
 minimap.style.setProperty('--mm', window.innerWidth > window.innerHeight ? '120px' : '96px');
-root.append(minimap);
+layer.append(minimap);
 let craftX = 0;
 const FAKE_TANK_S = 4;
 const FAKE_CELL_EVERY_S = 2.5;
@@ -58,7 +62,7 @@ const hud = createHud(layer, () => {
   paused = !paused;
   hud.flash(paused ? 'PAUSED' : 'GO');
 });
-const input = createInput(layer, { steering, throttle, sensitivity: 1 });
+const input = createInput(layer, { layout, steering, throttle, sensitivity: 1 });
 
 const COUNTDOWN_S = 4;
 const LAP_S = 20;
@@ -113,7 +117,7 @@ function frame(now: number): void {
   };
   hud.update(view);
   input.showTank(tankFill);
-  readout.textContent = `x ${craftX.toFixed(1)}m  nudgeΣ ${nudgeTotal.toFixed(1)}m  steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${steering}/${throttle}`;
+  readout.textContent = `x ${craftX.toFixed(1)}m  nudgeΣ ${nudgeTotal.toFixed(1)}m  steer ${inp.steer.toFixed(2)}  boost ${inp.boost ? 'ON ' : 'off'}  brake ${inp.brake ? 'ON ' : 'off'}  mode ${layout === 'oneThumb' ? layout : `${steering}/${throttle}`}`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -101,7 +101,14 @@ racers and upgrades, and a championship of three cups gives the series a goal.
    up to boost, down to brake, back to the middle or lift to fly on. A slim gauge beside the
    thumb shows the three zones (boost cyan above, brake red below), the held one lit, and the
    boost zone goes hollow while the tank is dry; a phone that can buzz ticks on each change.
-   Settings can swap the pad for the old separate boost and brake buttons. Boost runs from a tank that
+   Settings can swap the pad for the old separate boost and brake buttons. Settings also offer a
+   one-thumb layout (two thumbs stay the default): one finger anywhere on the screen but the
+   pause and restart buttons does both, its sideways travel steering exactly as the slide does
+   (same sensitivity) and its vertical travel working the throttle as the pad does, from a
+   neutral where it lands. A sideways slide never boosts or brakes on the thumb's wobble, and a
+   held boost or brake never stops the steering; lifting flies on and leaves the craft where it
+   is. The same gauge travels beside the finger, on the side away from its hand and clear of the
+   minimap. A second finger waits, and takes over at a fresh neutral when the first lifts. Boost runs from a tank that
    glowing boost cells along the course refill, and boost pads give free bursts. Open terrain is wide, with drivable sand beyond the road that is
    slower but harmless; canyons and tunnels are walled. Pillars, arches and boulder fields are
    choices with a clear way round. Collisions matter: obstacles, walls and rivals cost hull,
@@ -187,8 +194,9 @@ world. Winning a world's elite cup makes you that world's champion.
 | Boost tank | 5–7 s full (+12% per Boost tank upgrade) | Holding boost drains it; no heat, no penalty |
 | Tank fill | Start 40%; +1.5%/s passive (paused 1.5 s after use); +10% per boost cell | Dry tank resumes at 10%; cells once per racer per lap |
 | Boost cells | 33–41 per lap, never on the racing line | Strings wide of apexes, S-chains on straights, diagonal strings; none (nor pads) in shortcuts |
-| Slide steering | 0.42 m per finger px; 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
+| Slide steering | 0.42 m per finger px (one thumb's sideways travel too); 45 m/s target rate on keys | Lateral target; craft follows at up to 60 m/s sideways |
 | Throttle swipe | Enter boost / brake 5 mm from the touch-down point, let go 2.5 mm short of it; neutral trails a thumb more than 10 mm out; ~160 CSS px per inch on touch, the gauge at most 40% of the screen's height | Boost to brake is a 10 mm thumb roll; the 2.5 mm band is wider than a resting thumb's jitter, so a state never flickers |
+| One-thumb throttle | As the throttle swipe, but enter at 6 mm (let go at 3.5 mm); of each 1 mm of travel, vertical counts only beyond 0.7 × sideways (nothing flatter than 35°) | A 15 mm sideways slide with a 2 / 3 / 4 mm wobble on a 50–70 mm thumb's arc moves the throttle at most 0.9 / 1.8 / 2.9 mm (throttle-check), so it never boosts or brakes, nor lets go of a state held 1 mm past its enter; a straight stroke counts in full |
 | Corner drift | κ·v²·0.11 × 0.5 ÷ grip m/s outward (the stock starter's 0.6 grip: κ·v²·0.092) | Hairpins at full boost push you wide; braking leaves 35% |
 | Crests and dips | Grip × (1 + 0.375 × v²·vertical curvature ÷ 206 m/s²), between 0.25 and 1.5; 0.25 in the air | Over a crest a craft goes light and slides wide in a bend only when far too fast; a dip presses it on. It leaves the road only where the road falls away faster than gravity plus suction (38 + 168 m/s²): off jumps, kickers and the sharpest crests at speed (a stock starter at top speed off crests tighter than ~R110, boosting ~R170), never off ordinary rollers. AIs reckon a crest within 15% of lift-off (or of a ledge's kick) as a launch and fly it ballistically to the landing, a crest on a straight too when it throws them into a bend beyond (whichever way it turns); a bend's limit lets the drift carry them part of a lane wide (rookies half, aces one) plus half the sand run-off, never past an open edge. A stock starter holds a ~46 m bend flat out (~72 m on boost): hairpins (40–70 m, inside walled or narrow) are the brake corners on boost |
 | Road / sand run-off | 42–56 m / 35–80 m each side | Sand: 70% top speed and extra drag, no damage |

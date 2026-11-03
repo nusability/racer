@@ -1,15 +1,9 @@
 // The throttle pad: one finger in the right-hand thumb zone picks boost, drive or air brake by
-// sliding (throttleSwipe.ts), so the throttle thumb never leaves the glass. A slim gauge appears
-// under the finger with its three zones and a thumb marker, the held state lights, and a tick
-// buzzes on each change where the browser can vibrate.
-import { DESK_PX_PER_MM, TOUCH_PX_PER_MM, ThrottleSwipe, swipeThresholds, type ThrottleState } from './throttleSwipe.ts';
+// sliding (throttleSwipe.ts), so the throttle thumb never leaves the glass. The throttle gauge
+// (throttleGauge.ts) appears beside the finger.
+import { createThrottleGauge } from './throttleGauge.ts';
+import { DESK_PX_PER_MM, PAD_SWIPE_MM, TOUCH_PX_PER_MM, ThrottleSwipe, swipeThresholds, type ThrottleState } from './throttleSwipe.ts';
 import { h } from './kit.ts';
-
-/**
- * One short buzz per state change: long enough to feel through a case, short enough to read as
- * a detent rather than an alert. iOS Safari has no navigator.vibrate; there the light is all.
- */
-const STATE_TICK_MS = 12;
 
 export interface ThrottlePad {
   el: HTMLElement;
@@ -25,50 +19,34 @@ export function createThrottlePad(): ThrottlePad {
   zone.setAttribute('role', 'slider');
   zone.setAttribute('aria-label', 'Throttle: slide up to boost, down to air-brake, centre or lift to drive');
   zone.setAttribute('aria-orientation', 'vertical');
-  const thumb = h('div', 'tp-thumb');
-  const gauge = h(
-    'div',
-    'tp-gauge',
-    h('span', 'tp-label tp-label--boost', 'BOOST'),
-    h('div', 'tp-seg tp-seg--boost'),
-    h('div', 'tp-seg tp-seg--drive'),
-    h('div', 'tp-seg tp-seg--brake'),
-    h('span', 'tp-label tp-label--brake', 'BRAKE'),
-    thumb,
-  );
+  const g = createThrottleGauge();
+  const gauge = g.el;
   zone.append(gauge);
-  const canVibrate = typeof navigator.vibrate === 'function';
 
   let swipe: ThrottleSwipe | null = null;
   /** The finger on the pad, as 't<identifier>' for a touch or 'p<pointerId>' for a mouse or pen. */
   let fingerId: string | null = null;
   let zoneTop = 0;
   let zoneLeft = 0;
-  let shown: ThrottleState = 'drive';
 
   function show(state: ThrottleState): void {
-    if (state === shown) return;
-    shown = state;
-    gauge.dataset.state = state;
-    zone.setAttribute('aria-valuetext', state);
-    if (canVibrate) navigator.vibrate(STATE_TICK_MS);
+    if (g.show(state)) zone.setAttribute('aria-valuetext', state);
   }
   function placeThumb(): void {
-    if (swipe) thumb.style.transform = `translate3d(0, ${swipe.offset}px, 0)`;
+    if (swipe) g.placeThumb(swipe.offset);
   }
 
   function press(id: string, x: number, y: number, pxPerMm: number): boolean {
     if (fingerId !== null) return false;
     fingerId = id;
     // Thresholds per touch-down: a rotation since the last one changes the screen's height.
-    const t = swipeThresholds(pxPerMm, window.innerHeight);
+    const t = swipeThresholds(PAD_SWIPE_MM, pxPerMm, window.innerHeight);
     swipe = new ThrottleSwipe(t);
     swipe.press(y);
     const r = zone.getBoundingClientRect();
     zoneTop = r.top;
     zoneLeft = r.left;
-    gauge.style.setProperty('--tp-enter', `${t.enter}px`);
-    gauge.style.setProperty('--tp-reach', `${t.reach}px`);
+    g.size(t);
     gauge.style.left = `${x - zoneLeft}px`;
     gauge.style.top = `${y - zoneTop}px`;
     zone.classList.add('is-active');
@@ -95,7 +73,7 @@ export function createThrottlePad(): ThrottlePad {
     // Back to the resting hint the stylesheet places.
     gauge.style.left = '';
     gauge.style.top = '';
-    thumb.style.transform = '';
+    g.placeThumb(0);
     show('drive');
   }
 
@@ -139,15 +117,12 @@ export function createThrottlePad(): ThrottlePad {
   zone.addEventListener('pointercancel', pointerEnd);
   zone.addEventListener('lostpointercapture', pointerEnd);
 
-  gauge.dataset.state = shown;
   // The resting hint is drawn at a phone's size until the first touch-down sizes it for real.
-  const rest = swipeThresholds(TOUCH_PX_PER_MM, window.innerHeight);
-  gauge.style.setProperty('--tp-enter', `${rest.enter}px`);
-  gauge.style.setProperty('--tp-reach', `${rest.reach}px`);
+  g.size(swipeThresholds(PAD_SWIPE_MM, TOUCH_PX_PER_MM, window.innerHeight));
   return {
     el: zone,
     state: () => swipe?.state ?? 'drive',
-    showTankEmpty: (empty) => gauge.classList.toggle('is-tank-empty', empty),
+    showTankEmpty: g.showTankEmpty,
     release,
   };
 }

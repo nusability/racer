@@ -59,8 +59,15 @@ export type RaceLauncher = (req: RaceRequest, onDone: RaceDone) => void;
 export type SteeringMode = 'drag' | 'tilt' | 'buttons';
 /** Boost and brake on touch: one thumb sliding on the throttle pad, or two separate buttons. */
 export type ThrottleLayout = 'swipe' | 'buttons';
+/**
+ * Touch controls: two thumbs (steering by its mode on the left, the throttle by its layout on the
+ * right), or one thumb anywhere doing both. One thumb sets the steering mode and throttle layout
+ * aside, keeping them for a switch back.
+ */
+export type ControlLayout = 'twoThumbs' | 'oneThumb';
 
 export interface Settings {
+  layout: ControlLayout;
   steering: SteeringMode;
   throttle: ThrottleLayout;
   /** Steering sensitivity multiplier, 0.5..1.5. */

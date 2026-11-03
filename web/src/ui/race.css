@@ -306,6 +306,13 @@
   background: repeating-linear-gradient(135deg, rgba(60, 242, 255, 0.55) 0 3px, transparent 3px 6px);
 }
 
+/* One thumb: the whole screen is the zone (the pause and restart buttons stand above it). The
+   gauge has no resting hint, since the thumb can land anywhere; it shows only under a finger, and
+   oneThumbControl.ts moves it beside the finger, so it is drawn about its own centre here. */
+.ot-zone { position: absolute; inset: 0; touch-action: none; }
+.tp-gauge--follow { left: 0; top: 0; margin: calc(-1 * var(--tp-reach)) 0 0 -6px; opacity: 0; will-change: transform; }
+.ot-zone.is-active .tp-gauge--follow { opacity: 1; }
+
 @media (orientation: portrait) {
   .hud__bottom { left: var(--safe-l); top: calc(var(--safe-t) + 128px); bottom: auto; transform: none; align-items: flex-start; width: 170px; }
   .hud__speed-n { font-size: 46px; }

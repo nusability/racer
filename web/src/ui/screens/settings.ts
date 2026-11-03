@@ -1,6 +1,6 @@
-// Settings: steering, throttle layout, sensitivity, sound, graphics. Every change saves immediately.
+// Settings: control layout, steering, throttle layout, sensitivity, sound, graphics. Every change saves immediately.
 import { graphicsLevel } from '../../game/graphics.ts';
-import type { GraphicsChoice, Settings, SteeringMode, ThrottleLayout } from '../../game/types.ts';
+import type { ControlLayout, GraphicsChoice, Settings, SteeringMode, ThrottleLayout } from '../../game/types.ts';
 import { GRAPHICS_LEVELS } from '../../render/graphicsTuning.ts';
 import { requestTiltPermission } from '../input.ts';
 import { button, h, header, panel, segmented, stepper } from '../kit.ts';
@@ -9,6 +9,11 @@ import type { AppCtx, Screen } from './context.ts';
 export const MIN_SENSITIVITY = 0.5;
 export const MAX_SENSITIVITY = 1.5;
 const SENSITIVITY_STEP = 0.1;
+
+const LAYOUT_HELP: Record<ControlLayout, string> = {
+  twoThumbs: 'Steer with the left thumb, throttle with the right.',
+  oneThumb: 'One thumb anywhere: slide sideways to steer, up to boost, down to brake, back to the middle (or lift) to fly on.',
+};
 
 const STEERING_HELP: Record<SteeringMode, string> = {
   drag: 'Slide a thumb anywhere on the left: the craft follows it, and stays put when you lift.',
@@ -45,6 +50,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
 
   const career = ctx.career;
   const s = career.save.settings;
+  const row = (label: string, control: HTMLElement) => h('div', 'setting', h('span', 'setting__label', label), control);
   // Only the field that changed is written: the benchmark may record its result meanwhile.
   const save = (patch: Partial<Settings>) => career.setSettings({ ...career.save.settings, ...patch });
   const help = h('p', 'note');
@@ -77,13 +83,35 @@ export function settingsScreen(ctx: AppCtx): Screen {
     'settings_throttle',
     'Throttle',
     [
-      { value: 'swipe', label: 'SWIPE', sub: 'one thumb' },
+      { value: 'swipe', label: 'SWIPE', sub: 'slide pad' },
       { value: 'buttons', label: 'BUTTONS' },
     ],
     s.throttle,
     (v) => {
       save({ throttle: v });
       throttleHelp.textContent = THROTTLE_HELP[v];
+    },
+  );
+
+  const steeringRow = row('STEERING', steering);
+  const throttleRow = row('THROTTLE', throttle);
+  const layoutHelp = h('p', 'note');
+  // One thumb does the steering and the throttle itself: their two-thumb choices step aside, kept.
+  const showLayout = (v: ControlLayout) => {
+    layoutHelp.textContent = LAYOUT_HELP[v];
+    for (const el of [steeringRow, help, throttleRow, throttleHelp]) el.hidden = v === 'oneThumb';
+  };
+  const layout = segmented<ControlLayout>(
+    'settings_layout',
+    'Control layout',
+    [
+      { value: 'twoThumbs', label: 'TWO THUMBS' },
+      { value: 'oneThumb', label: 'ONE THUMB' },
+    ],
+    s.layout,
+    (v) => {
+      save({ layout: v });
+      showLayout(v);
     },
   );
 
@@ -123,7 +151,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
   showGraphics();
   const unsubscribe = ctx.graphics.subscribe(showGraphics);
 
-  const row = (label: string, control: HTMLElement) => h('div', 'setting', h('span', 'setting__label', label), control);
+  showLayout(s.layout);
   const el = h(
     'div',
     'screen screen--settings',
@@ -131,7 +159,7 @@ export function settingsScreen(ctx: AppCtx): Screen {
     h(
       'div',
       'settings__body list-scroll',
-      panel('CONTROLS', row('STEERING', steering), help, row('THROTTLE', throttle), throttleHelp, sensitivity),
+      panel('CONTROLS', row('LAYOUT', layout), layoutHelp, steeringRow, help, throttleRow, throttleHelp, sensitivity),
       panel('GAME', row('SOUND', sound), graphics, buildLabel()),
     ),
   );

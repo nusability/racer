@@ -8,7 +8,7 @@ import type { UpgradeLevels } from '../data/upgrades.ts';
 import { isGraphicsLevel } from '../render/graphics.ts';
 import type { Settings } from './types.ts';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = 'mirage-racer.save';
 /** How many applied race ids are remembered to make applying an outcome idempotent. */
 export const APPLIED_RACE_MEMORY = 16;
@@ -53,7 +53,7 @@ export interface KeyValueStore {
 }
 
 export function defaultSettings(): Settings {
-  return { steering: 'drag', throttle: 'swipe', sensitivity: 1, sound: true, graphics: 'auto', benchmark: null };
+  return { layout: 'twoThumbs', steering: 'drag', throttle: 'swipe', sensitivity: 1, sound: true, graphics: 'auto', benchmark: null };
 }
 
 export function freshSave(): SaveData {
@@ -95,6 +95,7 @@ function validLevels(v: unknown): boolean {
 function validSettings(v: unknown): boolean {
   if (!isObj(v)) return false;
   return (
+    (v.layout === 'twoThumbs' || v.layout === 'oneThumb') &&
     (v.steering === 'drag' || v.steering === 'tilt' || v.steering === 'buttons') &&
     (v.throttle === 'swipe' || v.throttle === 'buttons') &&
     typeof v.sensitivity === 'number' &&
@@ -206,6 +207,15 @@ function migrateV4(d: Record<string, unknown>): void {
 }
 
 /**
+ * v5 → v6 (one-thumb controls): the touch controls gained a layout. Every v5 player had two
+ * thumbs, the only layout there was, and it stays the default; one thumb is opt-in in Settings.
+ */
+function migrateV5(d: Record<string, unknown>): void {
+  if (isObj(d.settings)) d.settings.layout = 'twoThumbs';
+  d.version = 6;
+}
+
+/**
  * The 'cooling' upgrade became the 'tank' upgrade (heat was replaced by a boost tank). Levels
  * carry over so a player keeps what they paid for.
  */
@@ -228,6 +238,7 @@ export function decodeSave(raw: string | null): SaveData {
     if (parsed.version === 2) migrateV2(parsed);
     if (parsed.version === 3) migrateV3(parsed);
     if (parsed.version === 4) migrateV4(parsed);
+    if (parsed.version === 5) migrateV5(parsed);
     return validate(parsed);
   } catch (err) {
     console.warn('[save] Stored save is unusable; starting a fresh one (prototype saves may reset).', err);

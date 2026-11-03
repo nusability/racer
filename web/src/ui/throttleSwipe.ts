@@ -1,6 +1,7 @@
 // The throttle swipe's state machine, apart from the DOM so it runs headless
 // (tools/throttle-check.ts). One finger on the pad: its touch-down point is neutral, sliding up
-// boosts, sliding down air-brakes, back to the middle or lifting drives. Screen y grows down.
+// boosts, sliding down air-brakes, back to the middle or lifting drives. The one-thumb control
+// (oneThumb.ts) runs it on its finger's discounted vertical travel. Screen y grows down.
 
 export type ThrottleState = 'drive' | 'boost' | 'brake';
 
@@ -14,21 +15,31 @@ export interface SwipeThresholds {
   reach: number;
 }
 
-/**
- * Travel to enter boost or brake. Thumb jitter while holding still on glass is about 1–2 mm, so
- * 5 mm never fires by accident, and boost to brake is a 10 mm slide: one short thumb roll.
- */
-export const SWIPE_ENTER_MM = 5;
-/**
- * Leave boost or brake only 2.5 mm short of where it began: that gap is the hysteresis, wider
- * than a jittery thumb wobbles, so a finger resting on the line holds its state.
- */
-export const SWIPE_EXIT_MM = 2.5;
-/**
- * The anchor trails a finger that overshoots more than 10 mm, so however far the thumb went,
- * neutral is never more than 7.5 mm back and the opposite state 15 mm away.
- */
-export const SWIPE_REACH_MM = 10;
+/** A swipe's geometry in millimetres of thumb travel from the anchor, before any scaling. */
+export interface SwipeMm {
+  enter: number;
+  exit: number;
+  reach: number;
+}
+
+/** The throttle pad's geometry: a thumb that does nothing but throttle. */
+export const PAD_SWIPE_MM: SwipeMm = {
+  /**
+   * Thumb jitter while holding still on glass is about 1–2 mm, so 5 mm never fires by accident,
+   * and boost to brake is a 10 mm slide: one short thumb roll.
+   */
+  enter: 5,
+  /**
+   * Leave boost or brake only 2.5 mm short of where it began: that gap is the hysteresis, wider
+   * than a jittery thumb wobbles, so a finger resting on the line holds its state.
+   */
+  exit: 2.5,
+  /**
+   * The anchor trails a finger that overshoots more than 10 mm, so however far the thumb went,
+   * neutral is never more than 7.5 mm back and the opposite state 15 mm away.
+   */
+  reach: 10,
+};
 /**
  * CSS px per mm on a touch screen. Browsers hide the physical pixel density, and
  * devicePixelRatio is already divided out of CSS px; iOS points and Android dp are both laid out
@@ -45,11 +56,11 @@ export const DESK_PX_PER_MM = 96 / 25.4;
 export const SWIPE_MAX_REACH_SHARE = 0.2;
 
 /** The thresholds for a screen: millimetres at its density, scaled down together on a short one. */
-export function swipeThresholds(pxPerMm: number, viewportHeight: number): SwipeThresholds {
+export function swipeThresholds(mm: SwipeMm, pxPerMm: number, viewportHeight: number): SwipeThresholds {
   if (!(pxPerMm > 0) || !(viewportHeight > 0)) throw new Error(`swipeThresholds: bad screen ${pxPerMm} px/mm, ${viewportHeight} px high`);
-  const reach = SWIPE_REACH_MM * pxPerMm;
+  const reach = mm.reach * pxPerMm;
   const scale = Math.min(1, (SWIPE_MAX_REACH_SHARE * viewportHeight) / reach);
-  return { enter: SWIPE_ENTER_MM * pxPerMm * scale, exit: SWIPE_EXIT_MM * pxPerMm * scale, reach: reach * scale };
+  return { enter: mm.enter * pxPerMm * scale, exit: mm.exit * pxPerMm * scale, reach: reach * scale };
 }
 
 export class ThrottleSwipe {
@@ -69,6 +80,9 @@ export class ThrottleSwipe {
   }
   get touching(): boolean {
     return this.down;
+  }
+  get thresholds(): SwipeThresholds {
+    return this.t;
   }
   /** Where neutral is now (it moves only when the finger overshoots the reach). */
   get anchor(): number {

@@ -503,6 +503,8 @@
 .settings__graphicsnote { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings__graphicsnote .btn { flex: none; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* Its display would otherwise outrank the hidden attribute (a choice that does not apply). */
+.setting[hidden] { display: none; }
 .setting__label { font-size: 14px; font-weight: 800; letter-spacing: 0.14em; color: var(--sand-dim); }
 
 /* --- Results ----------------------------------------------------------------------------- */

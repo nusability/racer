@@ -1,20 +1,21 @@
 // Headless checks of the throttle swipe's state machine (src/ui/throttleSwipe.ts): the anchor
 // lands under the finger, each state enters past its threshold and holds through the hysteresis
 // band, an overshooting finger drags the anchor, lifting drives, and the thresholds scale with
-// the screen.
+// the screen. Then the one-thumb controls (src/ui/oneThumb.ts): a sideways slide with a thumb's
+// wobble and arc never boosts or brakes (the worst residue is printed), a clear stroke up or down
+// does, steering carries on through a held boost or brake, and a second finger waits its turn.
 //   node --experimental-strip-types tools/throttle-check.ts
 
 import {
   DESK_PX_PER_MM,
-  SWIPE_ENTER_MM,
-  SWIPE_EXIT_MM,
+  PAD_SWIPE_MM,
   SWIPE_MAX_REACH_SHARE,
-  SWIPE_REACH_MM,
   TOUCH_PX_PER_MM,
   ThrottleSwipe,
   swipeThresholds,
   type ThrottleState,
 } from '../src/ui/throttleSwipe.ts';
+import { LATERAL_DISCOUNT, ONE_THUMB_SWIPE_MM, OneThumb } from '../src/ui/oneThumb.ts';
 
 declare const process: { exit(code: number): never };
 
@@ -34,16 +35,16 @@ function expectState(got: ThrottleState, want: ThrottleState, what: string): voi
   check(got === want, `${what}: ${got}, want ${want}`);
 }
 
-const t = swipeThresholds(TOUCH_PX_PER_MM, PHONE_LANDSCAPE_H);
-check(Math.abs(t.enter - SWIPE_ENTER_MM * TOUCH_PX_PER_MM) < EPS, `phone enter ${t.enter} px is ${SWIPE_ENTER_MM} mm`);
-check(Math.abs(t.exit - SWIPE_EXIT_MM * TOUCH_PX_PER_MM) < EPS, `phone exit ${t.exit} px is ${SWIPE_EXIT_MM} mm`);
-check(Math.abs(t.reach - SWIPE_REACH_MM * TOUCH_PX_PER_MM) < EPS, `phone reach ${t.reach} px is ${SWIPE_REACH_MM} mm`);
-const squat = swipeThresholds(DESK_PX_PER_MM, SQUAT_H);
+const t = swipeThresholds(PAD_SWIPE_MM, TOUCH_PX_PER_MM, PHONE_LANDSCAPE_H);
+check(Math.abs(t.enter - PAD_SWIPE_MM.enter * TOUCH_PX_PER_MM) < EPS, `phone enter ${t.enter} px is ${PAD_SWIPE_MM.enter} mm`);
+check(Math.abs(t.exit - PAD_SWIPE_MM.exit * TOUCH_PX_PER_MM) < EPS, `phone exit ${t.exit} px is ${PAD_SWIPE_MM.exit} mm`);
+check(Math.abs(t.reach - PAD_SWIPE_MM.reach * TOUCH_PX_PER_MM) < EPS, `phone reach ${t.reach} px is ${PAD_SWIPE_MM.reach} mm`);
+const squat = swipeThresholds(PAD_SWIPE_MM, DESK_PX_PER_MM, SQUAT_H);
 check(Math.abs(squat.reach - SWIPE_MAX_REACH_SHARE * SQUAT_H) < EPS, `squat window reach ${squat.reach} px capped to ${SWIPE_MAX_REACH_SHARE} of its height`);
-check(Math.abs(squat.enter / squat.reach - SWIPE_ENTER_MM / SWIPE_REACH_MM) < EPS, 'squat window keeps the proportions');
+check(Math.abs(squat.enter / squat.reach - PAD_SWIPE_MM.enter / PAD_SWIPE_MM.reach) < EPS, 'squat window keeps the proportions');
 let threw = false;
 try {
-  swipeThresholds(0, PHONE_LANDSCAPE_H);
+  swipeThresholds(PAD_SWIPE_MM, 0, PHONE_LANDSCAPE_H);
 } catch {
   threw = true;
 }
@@ -124,6 +125,197 @@ expectState(s.move(Y - 4 * t.reach), 'drive', 'moves after a lift do nothing');
 expectState(s.press(Y + 3 * t.reach), 'drive', 'a fresh touch-down drives');
 
 console.log(`throttle swipe on a phone: enter ${t.enter.toFixed(1)} px, exit ${t.exit.toFixed(1)} px, reach ${t.reach.toFixed(1)} px`);
+
+// --- One thumb ---------------------------------------------------------------------------------
+const MM = TOUCH_PX_PER_MM;
+const ot = swipeThresholds(ONE_THUMB_SWIPE_MM, MM, PHONE_LANDSCAPE_H);
+check(Math.abs(ot.enter - ONE_THUMB_SWIPE_MM.enter * MM) < EPS, `one-thumb enter ${ot.enter} px is ${ONE_THUMB_SWIPE_MM.enter} mm`);
+check(
+  Math.abs(ONE_THUMB_SWIPE_MM.enter - ONE_THUMB_SWIPE_MM.exit - (PAD_SWIPE_MM.enter - PAD_SWIPE_MM.exit)) < EPS,
+  'one thumb keeps the pad\'s hysteresis band',
+);
+const newThumb = () => new OneThumb(() => ot);
+
+/** The slide the owner named: 15 mm sideways, with a thumb's typical 2–4 mm vertical wobble. */
+const SLIDE_MM = 15;
+const WOBBLES_MM = [2, 3, 4];
+/** Thumb lengths (tip to the joint it pivots on): the sideways slide is an arc of this radius. */
+const THUMB_RADII_MM = [50, 60, 70];
+/** Px a finger travels between touch events: a slow crawl, a steady slide, a fast flick. */
+const EVENT_STEPS_PX = [0.5, 1, 4];
+/** Sensor noise per touch event, px either way. */
+const TOUCH_NOISE_PX = 0.5;
+/** Wobble shapes over the slide (u = 0..1 along it): a hump, an S, and sudden hooks at either end. */
+const WOBBLE_SHAPES: Record<string, (u: number) => number> = {
+  hump: (u) => Math.sin(Math.PI * u),
+  s: (u) => Math.sin(2 * Math.PI * u),
+  hookStart: (u) => Math.min(1, u / 0.2),
+  hookEnd: (u) => Math.max(0, (u - 0.8) / 0.2),
+  drift: (u) => u,
+};
+
+/** A seeded generator for the touch noise, so a failure replays. */
+function lcg(seed: number): () => number {
+  let x = seed >>> 0;
+  return () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 2 ** 32) * 2 - 1;
+}
+
+interface SlideCase {
+  what: string;
+  wobbleMm: number;
+  /** Finger points after the touch-down point, px. */
+  points: [number, number][];
+}
+
+/** Every 15 mm slide: each shape, wobble, thumb, direction, arc sense, event step, with noise. */
+function wobblySlides(x0: number, y0: number): SlideCase[] {
+  const out: SlideCase[] = [];
+  let seed = 1;
+  for (const [shape, f] of Object.entries(WOBBLE_SHAPES))
+    for (const a of WOBBLES_MM)
+      for (const r of THUMB_RADII_MM)
+        for (const dir of [-1, 1])
+          for (const wob of [-1, 1])
+            for (const arc of [-1, 1])
+              for (const step of EVENT_STEPS_PX) {
+                const noise = lcg(seed++);
+                const len = SLIDE_MM * MM;
+                const points: [number, number][] = [];
+                for (let d = step; d <= len + EPS; d += step) {
+                  const mm = d / MM;
+                  const arcMm = r - Math.sqrt(r * r - mm * mm);
+                  const y = y0 + (arc * arcMm + wob * a * f(mm / SLIDE_MM)) * MM + noise() * TOUCH_NOISE_PX;
+                  points.push([x0 + dir * d, y]);
+                }
+                out.push({ what: `${shape} ${a} mm, thumb ${r} mm, dir ${dir}, wobble ${wob}, arc ${arc}, ${step} px/event`, wobbleMm: a, points });
+              }
+  return out;
+}
+
+const X0 = 400;
+let worstMm = 0;
+let worstWhat = '';
+let slides = 0;
+const worstByWobble = new Map<number, number>();
+for (const c of wobblySlides(X0, Y)) {
+  const o = newThumb();
+  o.down('a', X0, Y);
+  let left: ThrottleState = 'drive';
+  for (const [x, y] of c.points) {
+    const st = o.move('a', x, y);
+    if (st !== 'drive') left = st;
+    worstByWobble.set(c.wobbleMm, Math.max(worstByWobble.get(c.wobbleMm) ?? 0, Math.abs(o.offset) / MM));
+    if (Math.abs(o.offset) / MM > worstMm) {
+      worstMm = Math.abs(o.offset) / MM;
+      worstWhat = c.what;
+    }
+  }
+  slides++;
+  check(left === 'drive', `a sideways slide (${c.what}) went to ${left}`);
+  const [xEnd] = c.points[c.points.length - 1];
+  check(Math.abs(o.takeSteerPx() - (xEnd - X0)) < EPS, `a sideways slide (${c.what}) steered all its travel`);
+}
+// Inside the exit band: a slide neither enters a state nor lets go of one held 1 mm past its enter.
+check(
+  worstMm < ONE_THUMB_SWIPE_MM.enter + 1 - ONE_THUMB_SWIPE_MM.exit,
+  `the worst sideways slide's throttle residue ${worstMm.toFixed(2)} mm would let go of a held state`,
+);
+console.log(
+  `one thumb: enter ${ONE_THUMB_SWIPE_MM.enter} mm, lateral discount ${LATERAL_DISCOUNT}; ${slides} wobbly ${SLIDE_MM} mm slides, worst throttle residue ${worstMm.toFixed(2)} mm (${worstWhat}); by wobble ${[...worstByWobble].map(([a, w]) => `${a} mm: ${w.toFixed(2)}`).join(', ')}`,
+);
+
+/** A straight stroke from (x0, y0) by (dx, dy) mm, in 1 px events along it. */
+function stroke(o: OneThumb, id: string, x0: number, y0: number, dxMm: number, dyMm: number): ThrottleState {
+  const n = Math.ceil(Math.hypot(dxMm, dyMm) * MM);
+  let st = o.state;
+  for (let i = 1; i <= n; i++) st = o.move(id, x0 + (dxMm * MM * i) / n, y0 + (dyMm * MM * i) / n);
+  return st;
+}
+/** A clear stroke: past the enter with a thumb's margin. */
+const CLEAR_MM = ONE_THUMB_SWIPE_MM.enter + 1;
+/** A steep diagonal: a little sideways on the way up still counts as up. */
+const STEEP_SIDEWAYS_MM = 3;
+
+for (const [dy, want] of [
+  [-CLEAR_MM, 'boost'],
+  [CLEAR_MM, 'brake'],
+] as const) {
+  const o = newThumb();
+  o.down('a', X0, Y);
+  expectState(stroke(o, 'a', X0, Y, 0, dy), want, `a straight ${CLEAR_MM} mm stroke`);
+  o.up('a');
+  o.down('a', X0, Y);
+  expectState(stroke(o, 'a', X0, Y, STEEP_SIDEWAYS_MM, dy + Math.sign(dy) * LATERAL_DISCOUNT * STEEP_SIDEWAYS_MM), want, 'a steep diagonal stroke');
+  check(Math.abs(o.takeSteerPx() - STEEP_SIDEWAYS_MM * MM) < EPS, 'a steep diagonal steers its sideways part');
+}
+{
+  const o = newThumb();
+  o.down('a', X0, Y);
+  expectState(stroke(o, 'a', X0, Y, 0, ONE_THUMB_SWIPE_MM.enter - 0.5), 'drive', 'a stroke just short of the one-thumb enter');
+}
+
+// Steering carries on through a held brake or boost: the slides (wobble and all) start from the
+// held state, and it holds while every px of the sideways travel steers.
+for (const [dy, held] of [
+  [CLEAR_MM, 'brake'],
+  [-CLEAR_MM, 'boost'],
+] as const) {
+  let drops = 0;
+  for (const c of wobblySlides(X0, Y + dy * MM)) {
+    const o = newThumb();
+    o.down('a', X0, Y);
+    stroke(o, 'a', X0, Y, 0, dy);
+    o.takeSteerPx();
+    for (const [x, y] of c.points) if (o.move('a', x, y) !== held) drops++;
+    const [xEnd] = c.points[c.points.length - 1];
+    check(Math.abs(o.takeSteerPx() - (xEnd - X0)) < EPS, `steering while in ${held} (${c.what}) steered all its travel`);
+  }
+  check(drops === 0, `steering while in ${held} let go of it ${drops} times`);
+}
+
+// Lifting drives on and steers nothing; touching again anchors a new neutral.
+{
+  const o = newThumb();
+  o.down('a', X0, Y);
+  stroke(o, 'a', X0, Y, 0, CLEAR_MM);
+  o.takeSteerPx();
+  expectState(o.up('a'), 'drive', 'lifting from brake');
+  check(!o.touching && o.takeSteerPx() === 0, 'a lift steers nothing');
+  expectState(o.move('a', X0 + 50, Y - 50), 'drive', 'moves after a lift do nothing');
+  check(o.takeSteerPx() === 0, 'moves after a lift steer nothing');
+  o.down('b', X0 + 120, Y + 80);
+  check(o.offset === 0 && o.state === 'drive', 'a new touch-down is neutral');
+  expectState(stroke(o, 'b', X0 + 120, Y + 80, 0, -CLEAR_MM), 'boost', 'boost from a new neutral');
+}
+
+// A second finger waits: it neither steers nor throttles, and takes over cleanly when the first
+// lifts, with a fresh neutral where it is and no steering jump.
+{
+  const o = newThumb();
+  o.down('a', X0, Y);
+  stroke(o, 'a', X0, Y, 0, -CLEAR_MM);
+  o.takeSteerPx();
+  const bx = 900;
+  const by = 300;
+  o.down('b', bx, by);
+  expectState(o.state, 'boost', 'a second finger landing leaves the boost');
+  stroke(o, 'b', bx, by, 20, 20);
+  check(o.takeSteerPx() === 0, 'a waiting finger steers nothing');
+  expectState(o.state, 'boost', 'a waiting finger throttles nothing');
+  expectState(o.up('a'), 'drive', 'the driver lifting hands over in drive');
+  check(o.driver?.id === 'b' && o.offset === 0, 'the second finger takes over at a fresh neutral');
+  const bx2 = bx + 20 * MM;
+  const by2 = by + 20 * MM;
+  check(o.takeSteerPx() === 0, 'the takeover steers nothing by itself');
+  stroke(o, 'b', bx2, by2, 5, 0);
+  check(Math.abs(o.takeSteerPx() - 5 * MM) < EPS, 'the second finger steers from where it is');
+  expectState(stroke(o, 'b', bx2 + 5 * MM, by2, 0, CLEAR_MM), 'brake', 'the second finger brakes');
+  // A finger whose lift never arrived lands again: it starts over in drive, not stuck.
+  o.down('b', bx, by);
+  check(o.driver?.id === 'b' && o.state === 'drive' && o.offset === 0, 'a re-landing finger starts over');
+  o.release();
+  check(!o.touching && o.state === 'drive', 'release lets every finger go');
+}
 if (failures > 0) {
   console.error(`${failures} throttle check(s) failed`);
   process.exit(1);

@@ -1,5 +1,6 @@
-// Player input: touch controls drawn over the race (the throttle pad or boost and brake buttons,
-// steering by the chosen mode), DeviceOrientation tilt, and the keyboard for desktop testing.
+// Player input: touch controls drawn over the race (two thumbs: the throttle pad or boost and
+// brake buttons, steering by the chosen mode; or one thumb doing both), DeviceOrientation tilt,
+// and the keyboard for desktop testing.
 // Everything registers on touch-down, and every finger is tracked on its own so steer + boost
 // work at once.
 import './race.css';
@@ -7,11 +8,13 @@ import type { PlayerInput } from '../core/types.ts';
 import type { InputSource, Settings } from '../game/types.ts';
 import { BOOST_EMPTY } from './hud.ts';
 import { h } from './kit.ts';
+import { createOneThumbControl } from './oneThumbControl.ts';
 import { createThrottlePad } from './throttlePad.ts';
 
 /**
- * Slide steering: metres the craft's lateral target moves per CSS pixel of finger travel at
- * sensitivity 1. A ~120 px thumb sweep crosses a ~50 m road, so the craft sits under the thumb.
+ * Slide steering (and one thumb's sideways travel): metres the craft's lateral target moves per
+ * CSS pixel of finger travel at sensitivity 1. A ~120 px thumb sweep crosses a ~50 m road, so
+ * the craft sits under the thumb.
  */
 const SLIDE_METRES_PER_PX = 50 / 120;
 /** Trail dots behind the slide indicator, and how long each fades. */
@@ -83,13 +86,16 @@ function holdButton(id: string, cls: string, label: string, aria: string): { el:
   };
 }
 
-export function createInput(root: HTMLElement, settings: Pick<Settings, 'steering' | 'sensitivity' | 'throttle'>): InputSource {
+export function createInput(root: HTMLElement, settings: Pick<Settings, 'layout' | 'steering' | 'sensitivity' | 'throttle'>): InputSource {
+  const oneThumb = settings.layout === 'oneThumb';
   const layer = h('div', 'race-ui touch');
-  layer.dataset.mode = settings.steering;
+  layer.dataset.mode = oneThumb ? settings.layout : settings.steering;
   if (!hasTouch()) layer.classList.add('no-touch');
   root.append(layer);
 
   const pad = createThrottlePad();
+  // The minimap is drawn after the controls, so it is looked up at each touch-down.
+  const thumb = createOneThumbControl(() => root.querySelector('.minimap')?.getBoundingClientRect() ?? null);
   const boost = holdButton('race_boost_button', 'tc-boost', 'BOOST', 'Boost');
   const brake = holdButton('race_brake_button', 'tc-brake', 'BRAKE', 'Air brake');
   const left = holdButton('race_left_button', 'tc-left', '◀', 'Steer left');
@@ -188,10 +194,14 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
   zone.addEventListener('pointercancel', pointerEnd);
   zone.addEventListener('lostpointercapture', pointerEnd);
 
-  if (settings.steering === 'drag') layer.append(zone);
-  if (settings.steering === 'buttons') layer.append(h('div', 'tc-steer', left.el, right.el));
-  if (settings.throttle === 'swipe') layer.append(pad.el);
-  else layer.append(h('div', 'tc-pedals', brake.el, boost.el));
+  if (oneThumb) layer.append(thumb.el);
+  else {
+    if (settings.steering === 'drag') layer.append(zone);
+    if (settings.steering === 'buttons') layer.append(h('div', 'tc-steer', left.el, right.el));
+    if (settings.throttle === 'swipe') layer.append(pad.el);
+    else layer.append(h('div', 'tc-pedals', brake.el, boost.el));
+  }
+  const tilt = !oneThumb && settings.steering === 'tilt';
 
   // Tilt: landscape-aware so "turn the phone like a wheel" means the same in every grip.
   let tiltSteer = 0;
@@ -203,7 +213,7 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
     const mag = Math.max(0, Math.abs(deg) - TILT_DEADZONE_DEG);
     tiltSteer = clamp1((Math.sign(deg) * mag * settings.sensitivity) / TILT_FULL_LOCK_DEG);
   };
-  if (settings.steering === 'tilt') window.addEventListener('deviceorientation', onOrientation);
+  if (tilt) window.addEventListener('deviceorientation', onOrientation);
 
   // Keyboard.
   const keys = new Set<string>();
@@ -224,6 +234,7 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
   function releaseAll(): void {
     keys.clear();
     pad.release();
+    thumb.release();
     boost.release();
     brake.release();
     left.release();
@@ -258,17 +269,19 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'steerin
       const target = (anyKey(KEYS_RIGHT) || right.held() ? 1 : 0) - (anyKey(KEYS_LEFT) || left.held() ? 1 : 0);
       const step = dt / DIGITAL_STEER_RAMP_S;
       digital = target > digital ? Math.min(target, digital + step) : Math.max(target, digital - step);
-      const taken = nudge;
+      const taken = nudge + thumb.takeSteerPx() * metresPerPx;
       nudge = 0;
+      const throttle = oneThumb ? thumb.state() : pad.state();
       return {
-        steer: clamp1((settings.steering === 'tilt' ? tiltSteer : 0) + digital),
+        steer: clamp1((tilt ? tiltSteer : 0) + digital),
         nudge: taken,
-        boost: pad.state() === 'boost' || boost.held() || anyKey(KEYS_BOOST),
-        brake: pad.state() === 'brake' || brake.held() || anyKey(KEYS_BRAKE),
+        boost: throttle === 'boost' || boost.held() || anyKey(KEYS_BOOST),
+        brake: throttle === 'brake' || brake.held() || anyKey(KEYS_BRAKE),
       };
     },
     showTank(fill: number): void {
       pad.showTankEmpty(fill <= BOOST_EMPTY);
+      thumb.showTankEmpty(fill <= BOOST_EMPTY);
     },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);
