@@ -1,25 +1,12 @@
 // The one-thumb control on screen: one finger anywhere steers and throttles (oneThumb.ts). The
-// pause and time-trial restart buttons stand above this layer, so a touch there is theirs. The
-// throttle gauge (throttleGauge.ts) travels beside the finger, on the side its thumb is not.
-import { createThrottleGauge } from './throttleGauge.ts';
+// pause and time-trial restart buttons stand above this layer, so a touch there is theirs. Its
+// gauge (thumbGauge.ts) is a glass pad centred where the finger landed, showing both axes.
+import { stateTick } from './throttleGauge.ts';
+import { createThumbGauge, type ThumbView } from './thumbGauge.ts';
 import { ONE_THUMB_SWIPE_MM, OneThumb } from './oneThumb.ts';
 import { DESK_PX_PER_MM, TOUCH_PX_PER_MM, swipeThresholds, type ThrottleState } from './throttleSwipe.ts';
+import { fitPad, padSize, trail, type Box, type PadSize } from './thumbPad.ts';
 import { h } from './kit.ts';
-
-/**
- * The gauge's centre stands this far beside the finger, as the throttle pad's does: a thumb
- * covers the glass below it and toward its own hand, so 48 px off to the far side stays in view.
- */
-const GAUGE_SIDE_PX = 48;
-/**
- * Half the gauge's width with its labels: the lit BOOST label (16 px, 0.12em tracking) is about
- * 60 px wide, far wider than the 12 px bar.
- */
-const GAUGE_HALF_SPAN_PX = 30;
-/** The labels stand above and below the bar: 6 px gap plus a 16 px line. */
-const GAUGE_LABEL_PX = 22;
-/** Room kept between the gauge and the minimap, so the two never read as one. */
-const MINIMAP_CLEARANCE_PX = 8;
 
 export interface OneThumbControl {
   el: HTMLElement;
@@ -30,63 +17,98 @@ export interface OneThumbControl {
   release(): void;
 }
 
-/** `minimap` finds the minimap's box (or null with none on screen), read at each touch-down. */
-export function createOneThumbControl(minimap: () => DOMRect | null): OneThumbControl {
+/**
+ * `keepClear` finds the boxes the gauge stays clear of (the minimap, the speed and bars), read at
+ * each touch-down since the HUD is laid out after the controls.
+ */
+export function createOneThumbControl(keepClear: () => readonly DOMRect[]): OneThumbControl {
   const zone = h('div', 'ot-zone');
   zone.id = 'race_onethumb_zone';
   zone.setAttribute('role', 'application');
   zone.setAttribute('aria-label', 'One-thumb controls: slide sideways to steer, up to boost, down to air-brake, centre or lift to drive');
-  const g = createThrottleGauge();
-  g.el.classList.add('tp-gauge--follow');
-  zone.append(g.el);
+  const gauge = createThumbGauge();
+  zone.append(gauge.el);
 
   /** Touches and pointers report in different densities; the latest touch-down picks which. */
   let pxPerMm = TOUCH_PX_PER_MM;
   const thumb = new OneThumb(() => swipeThresholds(ONE_THUMB_SWIPE_MM, pxPerMm, window.innerHeight));
+  // Laid out now, while the race loads, so the first touch-down does not draw the layers. Each
+  // new finger lays it out again, which costs nothing unless a rotation changed the screen.
+  let pad = padSize(thumb.thresholds);
+  gauge.size(pad, thumb.thresholds);
 
-  // Cached per new driving finger, so moves never read layout.
+  // Cached per new driving finger, so moves never read layout. All in the zone's own px.
   let drivenBy: string | null = null;
   let zoneBox = new DOMRect();
-  let mapBox: DOMRect | null = null;
-  /** -1: the gauge stands left of the finger, 1: right. */
-  let side = -1;
+  let screen: Box = { left: 0, top: 0, right: 0, bottom: 0 };
+  let clear: Box[] = [];
+  /** -1: the hand is to the finger's right, so the free side is left; 1: the other way. */
+  let away: -1 | 1 = -1;
+  /** The pad's centre, and the finger, as last placed: a lift draws them once more, in drive. */
+  let padX = 0;
+  let padY = 0;
+  let fingerX = 0;
+  let fingerY = 0;
+  let shown: ThrottleState = 'drive';
+  let frame = 0;
 
-  function placeGauge(x: number, y: number): void {
-    const reach = thumb.thresholds.reach;
-    let cx = x + side * GAUGE_SIDE_PX;
-    if (cx - GAUGE_HALF_SPAN_PX < 0 || cx + GAUGE_HALF_SPAN_PX > zoneBox.width) cx = x - side * GAUGE_SIDE_PX;
-    const cy = y - thumb.offset;
-    if (mapBox) {
-      const overlapsY = cy + reach + GAUGE_LABEL_PX > mapBox.top - MINIMAP_CLEARANCE_PX && cy - reach - GAUGE_LABEL_PX < mapBox.bottom + MINIMAP_CLEARANCE_PX;
-      // The minimap stands at the right edge, so the way clear of it is to its left.
-      if (overlapsY && cx + GAUGE_HALF_SPAN_PX > mapBox.left - MINIMAP_CLEARANCE_PX) cx = mapBox.left - MINIMAP_CLEARANCE_PX - GAUGE_HALF_SPAN_PX;
-    }
-    g.el.style.transform = `translate3d(${cx}px, ${cy}px, 0)`;
+  function paint(): void {
+    frame = 0;
+    // No cut comes nearer neutral than the throttle's enter, so the drive band shows whole.
+    const fit = fitPad(box(padX, padY, pad), screen, clear, { x: padX, y: padY }, thumb.thresholds.enter);
+    const view: ThumbView = {
+      state: thumb.driver ? thumb.state : 'drive',
+      dx: fingerX - padX,
+      dy: fingerY - padY,
+      box: relative(fit, padX, padY),
+      away,
+      roomAbove: fingerY - screen.top,
+    };
+    gauge.place(padX, padY);
+    gauge.draw(view);
+  }
+  function schedule(): void {
+    if (!frame) frame = requestAnimationFrame(paint);
+  }
+  function show(state: ThrottleState): void {
+    if (state === shown) return;
+    shown = state;
+    stateTick();
+    zone.setAttribute('aria-valuetext', state);
   }
 
   function render(): void {
     const f = thumb.driver;
     if (!f) {
-      drivenBy = null;
-      zone.classList.remove('is-active');
-      g.placeThumb(0);
-      g.show('drive');
+      if (drivenBy !== null) {
+        drivenBy = null;
+        zone.classList.remove('is-active');
+        schedule();
+      }
+      show('drive');
       return;
     }
     if (f.id !== drivenBy) {
       drivenBy = f.id;
       const r = zone.getBoundingClientRect();
       zoneBox = r;
-      const m = minimap();
-      mapBox = m && m.width > 0 ? new DOMRect(m.left - r.left, m.top - r.top, m.width, m.height) : null;
+      screen = { left: 0, top: 0, right: r.width, bottom: r.height };
+      clear = keepClear()
+        .filter((b) => b.width > 0 && b.height > 0)
+        .map((b) => ({ left: b.left - r.left, top: b.top - r.top, right: b.right - r.left, bottom: b.bottom - r.top }));
       // A finger in the right half is most likely a right thumb, its hand below and to the right.
-      side = f.x - r.left > r.width / 2 ? -1 : 1;
-      g.size(thumb.thresholds);
+      away = f.x - r.left > r.width / 2 ? -1 : 1;
+      pad = padSize(thumb.thresholds);
+      gauge.size(pad, thumb.thresholds);
+      padX = f.x - r.left;
       zone.classList.add('is-active');
     }
-    placeGauge(f.x - zoneBox.left, f.y - zoneBox.top);
-    g.placeThumb(thumb.offset);
-    if (g.show(thumb.state)) zone.setAttribute('aria-valuetext', thumb.state);
+    fingerX = f.x - zoneBox.left;
+    fingerY = f.y - zoneBox.top;
+    padX = trail(padX, fingerX, pad.steer);
+    padY = fingerY - thumb.offset;
+    show(thumb.state);
+    schedule();
   }
 
   // Fingers through touch events, as the slide steering does (input.ts): iOS holds a touch's
@@ -144,10 +166,20 @@ export function createOneThumbControl(minimap: () => DOMRect | null): OneThumbCo
     el: zone,
     state: () => thumb.state,
     takeSteerPx: () => thumb.takeSteerPx(),
-    showTankEmpty: g.showTankEmpty,
+    showTankEmpty(empty) {
+      if (gauge.showTankEmpty(empty) && thumb.driver) schedule();
+    },
     release(): void {
       thumb.release();
       render();
     },
   };
+}
+
+/** The whole pad about its centre, in the zone's px. */
+function box(x: number, y: number, p: PadSize): Box {
+  return { left: x - p.halfW, top: y - p.halfH, right: x + p.halfW, bottom: y + p.halfH };
+}
+function relative(b: Box, x: number, y: number): Box {
+  return { left: b.left - x, top: b.top - y, right: b.right - x, bottom: b.bottom - y };
 }

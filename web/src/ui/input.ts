@@ -94,8 +94,9 @@ export function createInput(root: HTMLElement, settings: Pick<Settings, 'layout'
   root.append(layer);
 
   const pad = createThrottlePad();
-  // The minimap is drawn after the controls, so it is looked up at each touch-down.
-  const thumb = createOneThumbControl(() => root.querySelector('.minimap')?.getBoundingClientRect() ?? null);
+  // The HUD is drawn after the controls, so what the gauge keeps clear of is looked up at each
+  // touch-down: the minimap, the speed and the tank and hull bars.
+  const thumb = createOneThumbControl(() => [...root.querySelectorAll('.minimap, .hud__speed, .hud__bars')].map((el) => el.getBoundingClientRect()));
   const boost = holdButton('race_boost_button', 'tc-boost', 'BOOST', 'Boost');
   const brake = holdButton('race_brake_button', 'tc-brake', 'BRAKE', 'Air brake');
   const left = holdButton('race_left_button', 'tc-left', '◀', 'Steer left');

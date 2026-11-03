@@ -16,6 +16,7 @@ import {
   type ThrottleState,
 } from '../src/ui/throttleSwipe.ts';
 import { LATERAL_DISCOUNT, ONE_THUMB_SWIPE_MM, OneThumb } from '../src/ui/oneThumb.ts';
+import { PAD_CLEARANCE_PX, PAD_MARGIN_MM, PAD_STEER_MM, fitPad, padSize, trail, type Box } from '../src/ui/thumbPad.ts';
 
 declare const process: { exit(code: number): never };
 
@@ -315,6 +316,62 @@ for (const [dy, held] of [
   check(o.driver?.id === 'b' && o.state === 'drive' && o.offset === 0, 'a re-landing finger starts over');
   o.release();
   check(!o.touching && o.state === 'drive', 'release lets every finger go');
+}
+
+// --- The one-thumb gauge's pad (src/ui/thumbPad.ts) -------------------------------------------
+{
+  const p = padSize(ot);
+  check(Math.abs(p.steer - PAD_STEER_MM * MM) < EPS, `the pad shows ${PAD_STEER_MM} mm of steering each way (${p.steer} px)`);
+  check(Math.abs(p.halfH - ot.reach - PAD_MARGIN_MM * MM) < EPS && Math.abs(p.halfW - p.steer - PAD_MARGIN_MM * MM) < EPS, 'the pad is the travel plus its margin');
+  const squat = padSize(swipeThresholds(ONE_THUMB_SWIPE_MM, DESK_PX_PER_MM, SQUAT_H));
+  check(Math.abs(squat.halfW / squat.halfH - p.halfW / p.halfH) < EPS, 'a squat window shrinks the pad in proportion');
+  check(trail(100, 120, 30) === 100 && trail(100, 140, 30) === 110 && trail(100, 50, 30) === 80, 'the pad trails a finger that steers past its travel');
+
+  // An 844 x 390 landscape phone, the speed and bars at the bottom middle, the minimap top right.
+  const screen = { left: 0, top: 0, right: 844, bottom: 390 };
+  const bars = { left: 292, top: 290, right: 552, bottom: 380 };
+  const map = { left: 710, top: 74, right: 830, bottom: 194 };
+  const keep = ot.enter;
+  const padAt = (x: number, y: number) => ({ left: x - p.halfW, top: y - p.halfH, right: x + p.halfW, bottom: y + p.halfH });
+  const clearOf = (a: Box, o: Box) => a.right + PAD_CLEARANCE_PX <= o.left || o.right + PAD_CLEARANCE_PX <= a.left || a.bottom + PAD_CLEARANCE_PX <= o.top || o.bottom + PAD_CLEARANCE_PX <= a.top;
+  const overlapOf = (a: Box, o: Box) => Math.max(0, Math.min(a.right, o.right) - Math.max(a.left, o.left)) * Math.max(0, Math.min(a.bottom, o.bottom) - Math.max(a.top, o.top));
+  const inside = (a: Box, o: Box) => a.left >= o.left && a.top >= o.top && a.right <= o.right && a.bottom <= o.bottom;
+  const onScreen = { left: PAD_CLEARANCE_PX, top: PAD_CLEARANCE_PX, right: screen.right - PAD_CLEARANCE_PX, bottom: screen.bottom - PAD_CLEARANCE_PX };
+  // [x, y, what, whether the HUD can be cleared with neutral's keep whole]
+  const spots: [number, number, string, boolean][] = [
+    [420, 240, 'a thumb low in the middle, above the bars', true],
+    [600, 300, 'a thumb low right, beside the bars', true],
+    [690, 250, 'a thumb below the minimap', true],
+    [640, 120, 'a thumb beside the minimap', true],
+    [20, 370, 'a thumb in the bottom-left corner', true],
+    [560, 250, 'a thumb just above the bars\' corner', false],
+    [700, 215, 'a thumb by the minimap\'s corner', false],
+  ];
+  for (const [x, y, what, clearable] of spots) {
+    const b = fitPad(padAt(x, y), screen, [bars, map], { x, y }, keep);
+    check(inside(b, onScreen), `${what}: the pad stays on screen`);
+    // Each edge stands at least `keep` out from neutral, unless the screen ends first.
+    check(
+      (b.top <= y - keep || b.top === onScreen.top) && (b.bottom >= y + keep || b.bottom === onScreen.bottom) && (b.left <= x - keep || b.left === onScreen.left) && (b.right >= x + keep || b.right === onScreen.right),
+      `${what}: neutral shows (${JSON.stringify(b)})`,
+    );
+    if (clearable) check(clearOf(b, bars) && clearOf(b, map), `${what}: the pad keeps clear of the HUD (${JSON.stringify(b)})`);
+    else {
+      // Too near to clear: cut right back to neutral's keep, so far less of the HUD is covered.
+      const whole = padAt(x, y);
+      const covered = (a: Box) => overlapOf(a, bars) + overlapOf(a, map);
+      check(covered(b) < covered(whole) / 2, `${what}: the pad is cut back off the HUD (${covered(b).toFixed(0)} of ${covered(whole).toFixed(0)} px² left)`);
+    }
+  }
+  // Cut, not moved: a pad with room is the whole pad, and a cut pad keeps its far edges.
+  const free = padAt(200, 150);
+  check(JSON.stringify(fitPad(free, screen, [bars, map], { x: 200, y: 150 }, keep)) === JSON.stringify(free), 'a pad with room is drawn whole');
+  const low = fitPad(padAt(420, 240), screen, [bars, map], { x: 420, y: 240 }, keep);
+  check(low.top === 240 - p.halfH && low.bottom === bars.top - PAD_CLEARANCE_PX, 'a pad over the bars is cut at its bottom, its top where it was');
+  // A centre on the box itself: nothing can clear it, and the pad is left as the screen allows.
+  const on = fitPad(padAt(420, 330), screen, [bars], { x: 420, y: 330 }, keep);
+  check(on.left === 420 - p.halfW && on.right === 420 + p.halfW, 'a pad whose neutral sits on the bars is not cut away');
+  console.log(`one-thumb pad on a phone: ${(2 * p.halfW).toFixed(0)} x ${(2 * p.halfH).toFixed(0)} px`);
 }
 if (failures > 0) {
   console.error(`${failures} throttle check(s) failed`);
